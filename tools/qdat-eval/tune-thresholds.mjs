@@ -125,4 +125,50 @@ const tuned = {
 
 report("TUNED thresholds (fit on tune half, judge by the holdout column)", tuned);
 
+// ---- Iqlab coupling check --------------------------------------------
+// The nasal-hold thresholds are ONE shared constant pair used by the whole
+// NASAL_HOLD_RULE_TYPES family: ghunnah, iqlab, idgham_ghunnah, ikhfa (see
+// src/lib/tajweedAnalysis.js). QDAT labels only ghunnah and ikhfa — it has
+// NO iqlab or idgham recordings (verse 5:109 contains neither). So iqlab
+// can't be validated directly; ikhfa is the closest labeled analog (both are
+// noon-sakinah assimilations carried on a nasal hold — iqlab before ب,
+// ikhfa before the 15 ikhfa letters), whereas ghunnah is the shaddah-noon
+// full nasalization with a different trigger.
+//
+// The concern this section answers: because the threshold is shared, tuning
+// it "to help ghunnah" silently moves iqlab and ikhfa too. So we find the
+// ghunnah-only optimum and show what it does to ikhfa (the iqlab proxy). If
+// chasing ghunnah hurts ikhfa, then a ghunnah-driven tune would regress the
+// iqlab family — which is exactly why the shared pair must be judged jointly,
+// and why leaving it unchanged (below) is the safe call for iqlab.
+function bestSingleRuleNasal(rule) {
+  let best = { fraction: null, spike: null, acc: -1 };
+  for (let frac = 0.1; frac <= 1.0001; frac += 0.025) {
+    for (let spike = 4; spike <= 24.001; spike += 0.5) {
+      const acc = evaluateRule(tuneSet, rule, { nasalHoldCountWordFraction: frac, nasalSpikeMaxDb: spike }).accuracy;
+      if (acc != null && acc > best.acc) best = { fraction: Math.round(frac * 1000) / 1000, spike, acc };
+    }
+  }
+  return best;
+}
+
+console.log("\nIQLAB COUPLING CHECK (ghunnah, iqlab, idgham, ikhfa share ONE threshold pair)");
+console.log("  QDAT has no iqlab/idgham labels — ikhfa is the closest labeled proxy for iqlab.");
+const ghunnahOnly = bestSingleRuleNasal("ghunnah");
+const ghunnahOnlyTh = { nasalHoldCountWordFraction: ghunnahOnly.fraction, nasalSpikeMaxDb: ghunnahOnly.spike };
+const gAtGhunnahOpt = evaluateRule(holdoutSet, "ghunnah", ghunnahOnlyTh);
+const kAtGhunnahOpt = evaluateRule(holdoutSet, "ikhfa", ghunnahOnlyTh);
+const gAtCurrent = evaluateRule(holdoutSet, "ghunnah", TAJWEED_THRESHOLDS);
+const kAtCurrent = evaluateRule(holdoutSet, "ikhfa", TAJWEED_THRESHOLDS);
+console.log(`  if we optimized the shared pair for GHUNNAH ALONE -> ${JSON.stringify(ghunnahOnlyTh)}`);
+console.log(`    ghunnah holdout ${pct(gAtCurrent.accuracy)} -> ${pct(gAtGhunnahOpt.accuracy)}  (baseline ${pct(gAtGhunnahOpt.alwaysPassRate)})`);
+console.log(`    ikhfa   holdout ${pct(kAtCurrent.accuracy)} -> ${pct(kAtGhunnahOpt.accuracy)}  (baseline ${pct(kAtGhunnahOpt.alwaysPassRate)})   <- iqlab rides this`);
+const ikhfaMovesRight =
+  (kAtGhunnahOpt.accuracy ?? 0) >= (kAtCurrent.accuracy ?? 0) &&
+  (kAtGhunnahOpt.accuracy ?? 0) >= (kAtGhunnahOpt.alwaysPassRate ?? 0);
+console.log(
+  `  verdict: chasing ghunnah ${ikhfaMovesRight ? "does NOT hurt" : "would HURT/not help"} ikhfa (the iqlab proxy) -> ` +
+    `${ikhfaMovesRight ? "a ghunnah tune could be safe for iqlab" : "a ghunnah-only tune is NOT safe for iqlab; keep the shared pair as-is"}.`
+);
+
 console.log("\nNote: QDAT does not label Qalqalah, so qalqalahBounceDb cannot be tuned from this dataset.");

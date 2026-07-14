@@ -197,6 +197,15 @@ const NASAL_HOLD_RULE_TYPES = new Set(["ghunnah", "iqlab", "idgham_ghunnah", "ik
 //    51.5%), and grid-searched "improvements" didn't survive the holdout.
 //    Genuinely better Ghunnah/Ikhfa verdicts need spectral features (see
 //    the Phase-2 classifier plan), not different duration cutoffs.
+//  - Iqlab coupling: nasalHoldCountWordFraction/nasalSpikeMaxDb are ONE
+//    shared pair for the whole NASAL_HOLD_RULE_TYPES family (ghunnah, iqlab,
+//    idgham_ghunnah, ikhfa), so any "tune for Ghunnah" moves Iqlab too.
+//    QDAT has no Iqlab labels (verse 5:109 has no Iqlab), so Ikhfa is its
+//    closest labeled analog. Verified (tune-thresholds.mjs, Iqlab coupling
+//    check): the Ghunnah-only optimum {0.1, 11} leaves Ghunnah flat on
+//    holdout (79.9%) AND drops Ikhfa 54.0% -> 53.2% — i.e. chasing Ghunnah
+//    would REGRESS the Iqlab side. That's the concrete reason the shared
+//    pair is judged jointly and left unchanged: it protects Iqlab.
 //  - QDAT has no Qalqalah labels, so qalqalahBounceDb stays hand-picked.
 export const TAJWEED_THRESHOLDS = {
   // dB the window's tail peak must rise above its mean energy to count as

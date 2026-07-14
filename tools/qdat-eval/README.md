@@ -80,6 +80,32 @@ literature, where useful Ghunnah/Ikhfa classification comes from spectral
 (MFCC/mel) features, not durations. That is the concrete case for training
 a small classifier on QDAT (Phase 2) rather than more threshold-fiddling.
 
+### Iqlab coupling (why Ghunnah is not tuned in isolation)
+
+`nasalHoldCountWordFraction` and `nasalSpikeMaxDb` are a **single shared
+pair** used by the whole nasal-hold family — `ghunnah`, `iqlab`,
+`idgham_ghunnah`, `ikhfa` (`NASAL_HOLD_RULE_TYPES` in tajweedAnalysis.js).
+So "tuning Ghunnah's threshold" is physically the same as tuning Iqlab's.
+QDAT has **no Iqlab or Idgham labels** (verse 5:109 contains neither), so
+Iqlab can't be scored directly; **Ikhfa is its closest labeled analog**
+(both are noon-sakinah assimilations on a nasal hold — Iqlab before ب,
+Ikhfa before the 15 Ikhfa letters), whereas Ghunnah is the shaddah-noon
+full nasalization with a different trigger.
+
+The tuner's "Iqlab coupling check" finds the shared pair that maximizes
+**Ghunnah alone**, then reports the effect on **Ikhfa** (the Iqlab proxy):
+
+| Optimize shared pair for… | → thresholds | Ghunnah holdout | Ikhfa holdout (Iqlab rides this) |
+|---|---|---|---|
+| Ghunnah alone | {0.1, 11} | 79.9% (flat, < 81.1% baseline) | 54.0% → **53.2%** (worse) |
+
+So chasing Ghunnah doesn't even help Ghunnah (it can't beat the base rate)
+**and it degrades the Ikhfa/Iqlab side**. That is the concrete, data-backed
+reason the nasal pair is judged jointly and **left unchanged** — doing so is
+what protects Iqlab from a Ghunnah-driven regression. Verified improvement
+"for Iqlab too" is therefore: *no change is the improvement* (any change
+available here is net-negative for the Iqlab family).
+
 ## Honesty notes
 
 - QDAT's label distribution is skewed (e.g. ~81% of Ghunnah labels are
@@ -90,4 +116,10 @@ a small classifier on QDAT (Phase 2) rather than more threshold-fiddling.
 - Recordings the ASR can't align ("unchecked" verdicts) are excluded from
   accuracy but reported as a count — that's a coverage limitation of the
   pipeline, not a win.
+- QDAT covers only one verse (5:109). The tuned Madd factor could reflect
+  that verse's acoustics rather than generalizing; treat it as bounded,
+  single-source validation, not proof of broad accuracy.
+- Iqlab and Idgham are **not** in QDAT and are only reasoned about through
+  the shared nasal threshold + the Ikhfa proxy above — there is no direct
+  Iqlab measurement anywhere in these numbers.
 - QDAT has no Qalqalah labels; `qalqalahBounceDb` stays hand-picked.
