@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useSubscription } from "@/lib/SubscriptionContext";
 import { describeSubscription } from "@/lib/entitlements";
 import { openBillingPortalUrl } from "@/lib/subscriptionApi";
-import { RecitationLog, MemorizationProgress, DailyStreak, FeedbackReport, exportUserData, importUserData } from "@/lib/localDb";
+import { RecitationLog, MemorizationProgress, DailyStreak, FeedbackReport, RecitationPlanState, exportUserData, importUserData } from "@/lib/localDb";
 import { deleteAccount } from "@/lib/localAuth";
 import { ASR_MODEL_OPTIONS, getAsrModelPreference, setAsrModelPreference, isAsrEnabled, setAsrEnabled } from "@/lib/asrEngine";
 import { isPaceMatchEnabled, setPaceMatchEnabled } from "@/lib/paceMatching";
@@ -144,6 +144,9 @@ export default function Settings() {
         MemorizationProgress.deleteMany({ created_by_id: user?.id }),
         DailyStreak.deleteMany({ created_by_id: user?.id }),
         FeedbackReport.deleteMany({ created_by_id: user?.id }),
+        // Every exportable collection must also be deletable — this list
+        // mirrors EXPORTABLE_COLLECTIONS in localDb.js.
+        RecitationPlanState.deleteMany({ created_by_id: user?.id }),
       ]);
       if (user?.id) deleteAccount(user.id);
     } catch (err) {
@@ -538,7 +541,7 @@ export default function Settings() {
                 <AlertDialogHeader>
                   <AlertDialogTitle className="text-white">Delete your account?</AlertDialogTitle>
                   <AlertDialogDescription className="text-slate-400">
-                    This will permanently delete your account, all recitation recordings, memorization progress, and daily streak data. This cannot be undone.
+                    This will permanently delete your account and all locally stored data: recitation scores and feedback, memorization progress, streaks, plans, and feedback reports. (Audio recordings are never stored, so there are none to delete.) This cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -563,6 +566,15 @@ export default function Settings() {
               </AlertDialogContent>
             </AlertDialog>
           </div>
+        </div>
+
+        <div className="flex items-center justify-center gap-4 pt-4 pb-2">
+          <Link to="/privacy" className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2">
+            Privacy Policy
+          </Link>
+          <Link to="/terms" className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2">
+            Terms of Service
+          </Link>
         </div>
       </div>
 

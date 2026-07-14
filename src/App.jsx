@@ -29,6 +29,8 @@ const Hadith = lazy(() => import('@/pages/Hadith'));
 const Donate = lazy(() => import('@/pages/Donate'));
 const About = lazy(() => import('@/pages/About'));
 const Contact = lazy(() => import('@/pages/Contact'));
+const Privacy = lazy(() => import('@/pages/Privacy'));
+const Terms = lazy(() => import('@/pages/Terms'));
 
 // Signed-in layout: pages render above a persistent bottom tab bar. The
 // surah reader opts out (immersive reading/recitation view with its own
@@ -85,6 +87,10 @@ const AuthenticatedApp = () => {
         <Route path="/reset-password" element={<PageTransition><ResetPassword /></PageTransition>} />
         <Route path="/about" element={<PageTransition><About /></PageTransition>} />
         <Route path="/contact" element={<PageTransition><Contact /></PageTransition>} />
+        {/* Legal pages are public on purpose: people must be able to read
+            them BEFORE creating an account or paying. */}
+        <Route path="/privacy" element={<PageTransition><Privacy /></PageTransition>} />
+        <Route path="/terms" element={<PageTransition><Terms /></PageTransition>} />
         <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
           <Route element={<AppShell />}>
             <Route path="/" element={<PageTransition><Home /></PageTransition>} />

@@ -121,6 +121,11 @@ export default function Register() {
             "Create account"
           )}
         </Button>
+        <p className="text-[11px] text-slate-500 text-center">
+          By creating an account you agree to the{" "}
+          <Link to="/terms" className="underline hover:text-slate-300">Terms of Service</Link> and{" "}
+          <Link to="/privacy" className="underline hover:text-slate-300">Privacy Policy</Link>.
+        </p>
       </form>
     </AuthLayout>
   );

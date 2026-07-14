@@ -132,6 +132,11 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
                 >
                   Continue
                 </button>
+                <p className="text-[10px] text-slate-600 text-center">
+                  Renews automatically until cancelled. By subscribing you agree to the{" "}
+                  <a href="/terms" target="_blank" rel="noreferrer" className="underline hover:text-slate-400">Terms</a> and{" "}
+                  <a href="/privacy" target="_blank" rel="noreferrer" className="underline hover:text-slate-400">Privacy Policy</a>.
+                </p>
                 <button onClick={resetAndClose} className="w-full text-xs text-slate-500 hover:text-slate-300">
                   Not now
                 </button>
