@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, Square, ChevronRight, X, Loader2, CheckCircle2, RotateCcw, AlertTriangle, Upload, RefreshCw } from "lucide-react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Mic, Square, ChevronRight, Loader2, CheckCircle2, RotateCcw, AlertTriangle, Upload, RefreshCw } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { analyzeContinuousRecitation, persistRecitationResult, revertRecitationResult, runTajweedAnalysis, decodeUserRecording, assessRecitationConfidence, attachTajweedToLogs, transcribeUserRecording, getLastAsrFailure, describeAsrFailureForUser, describeAsrFailureForLog } from "@/lib/recitationService";
 import { describeAsrGate, isAsrModelWarm, resetAsrWorker } from "@/lib/asrEngine";
 import { getVisualizationEnvelope, TARGET_SAMPLE_RATE } from "@/lib/audioAnalysis";
@@ -421,15 +421,25 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="bg-slate-900 border-slate-700/50 max-w-lg max-h-[85vh] overflow-y-auto p-0">
         <div className="p-6 space-y-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-semibold text-white">Continuous Recitation</h3>
-              <p className="text-sm text-slate-400">{surahName} · {ayahs?.length} Ayahs</p>
-            </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors">
-              <X className="w-4 h-4" />
-            </button>
+          {/* DialogTitle/Description give the dialog its accessible name;
+              the custom X that used to sit here duplicated (and covered)
+              DialogContent's built-in, properly-labelled close button. */}
+          <div>
+            <DialogTitle className="text-xl font-semibold text-white">Continuous Recitation</DialogTitle>
+            <DialogDescription className="text-sm text-slate-400">{surahName} · {ayahs?.length} Ayahs</DialogDescription>
           </div>
+
+          {/* Live region: announces flow transitions and the outcome to
+              screen readers without re-reading the whole result view. */}
+          <p className="sr-only" role="status">
+            {state === "recording"
+              ? "Recording. Use the Next Ayah button as you progress, then Finish and Analyze."
+              : state === "analyzing"
+                ? "Analyzing your recitation…"
+                : state === "result" && results
+                  ? `Analysis complete. Score ${results.score} out of 100 across ${results.recitedCount} ayahs.`
+                  : ""}
+          </p>
 
           {/* No mode="wait"/exit animations: the result view must never
               wait on a previous view's exit animation to mount (a stalled
@@ -444,11 +454,11 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                   </p>
                 </div>
                 {currentAyah && (
-                  <div className="w-full bg-slate-800/50 rounded-xl p-4 border border-slate-700/30" dir="rtl">
+                  <div className="w-full bg-slate-800/50 rounded-xl p-4 border border-slate-700/30" dir="rtl" lang="ar">
                     <p className="text-xl text-white/90 leading-loose text-center" style={{ fontFamily: "'Scheherazade New', serif", lineHeight: "2.5" }}>
                       {currentAyah.arabic}
                     </p>
-                    <p className="text-xs text-slate-500 text-center mt-2">Ayah {currentAyah.number}</p>
+                    <p className="text-xs text-slate-500 text-center mt-2" lang="en">Ayah {currentAyah.number}</p>
                   </div>
                 )}
                 <button onClick={startRecording} aria-label="Start continuous recording" className="w-20 h-20 rounded-full bg-red-500/20 border-2 border-red-500/50 flex items-center justify-center hover:bg-red-500/30 hover:border-red-400 transition-all group">
@@ -475,7 +485,7 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
 
                 <div className="flex items-center gap-2 w-full max-w-[240px]">
                   <div className="h-px flex-1 bg-slate-800" />
-                  <span className="text-[10px] text-slate-600">or</span>
+                  <span className="text-[10px] text-slate-500">or</span>
                   <div className="h-px flex-1 bg-slate-800" />
                 </div>
 
@@ -515,12 +525,15 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                     key={currentAyah.number}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="w-full bg-emerald-500/10 rounded-xl p-4 border border-emerald-500/20" dir="rtl"
+                    className="w-full bg-emerald-500/10 rounded-xl p-4 border border-emerald-500/20" dir="rtl" lang="ar"
                   >
                     <p className="text-2xl text-emerald-200 leading-loose text-center" style={{ fontFamily: "'Scheherazade New', serif", lineHeight: "2.8" }}>
                       {currentAyah.arabic}
                     </p>
-                    <p className="text-xs text-emerald-400/60 text-center mt-2">Reciting Ayah {currentAyah.number} of {ayahs.length}</p>
+                    {/* aria-live so "Next Ayah" progress is announced. */}
+                    <p className="text-xs text-emerald-400/60 text-center mt-2" lang="en" aria-live="polite">
+                      Reciting Ayah {currentAyah.number} of {ayahs.length}
+                    </p>
                   </motion.div>
                 )}
 
@@ -545,13 +558,13 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                   )}
                   <button
                     onClick={stopRecording}
-                    className="px-6 py-3 rounded-xl bg-red-500 text-white font-medium hover:bg-red-400 transition-colors flex items-center justify-center gap-2 text-sm shadow-lg shadow-red-500/20"
+                    className="px-6 py-3 rounded-xl bg-red-500 text-slate-900 font-medium hover:bg-red-400 transition-colors flex items-center justify-center gap-2 text-sm shadow-lg shadow-red-500/20"
                   >
                     <Square className="w-4 h-4" />
                     Finish & Analyze
                   </button>
                 </div>
-                <p className="text-xs text-slate-600 text-center">Recite each verse, tap "Next Ayah" as you go, then finish for real acoustic feedback.</p>
+                <p className="text-xs text-slate-500 text-center">Recite each verse, tap "Next Ayah" as you go, then finish for real acoustic feedback.</p>
               </motion.div>
             )}
 
@@ -559,14 +572,16 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
               <motion.div key="analyzing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-4 py-8">
                 <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
                 <p className="text-sm text-slate-400">Comparing your recitation to {reciterName}...</p>
-                <p className="text-xs text-slate-600">This may take a moment</p>
+                <p className="text-xs text-slate-500">This may take a moment</p>
               </motion.div>
             )}
 
             {state === "error" && (
               <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-4 py-8 text-center">
                 <AlertTriangle className="w-10 h-10 text-orange-400" />
-                <p className="text-sm text-slate-300">{errorMessage}</p>
+                {/* role="alert" so the error is announced immediately by
+                    screen readers, from the same element that shows it. */}
+                <p className="text-sm text-slate-300" role="alert">{errorMessage}</p>
                 <button
                   onClick={resetState}
                   className="px-5 py-2.5 rounded-xl bg-slate-700/50 text-slate-300 font-medium hover:bg-slate-700 transition-colors text-sm"
@@ -599,6 +614,7 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                     <div
                       className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-1 cursor-help"
                       title={confidence.reasons.join("; ")}
+                      aria-label={`Low confidence in this result: ${confidence.reasons.join("; ")}`}
                     >
                       <AlertTriangle className="w-3 h-3" />
                       Low confidence in this result
@@ -617,6 +633,7 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                       placeholder={String(results.recitedCount)}
                       value={overrideCount}
                       onChange={(e) => setOverrideCount(e.target.value)}
+                      aria-label={`Number of ayahs you actually recited, between 1 and ${ayahs?.length || 1}`}
                       className="w-20 text-center bg-slate-900 border border-slate-700 rounded-lg py-1.5 text-white text-sm"
                     />
                     <button

@@ -266,7 +266,7 @@ function ProgressStat({ icon, label, value, color }) {
     <div className={`rounded-2xl border p-4 ${colorMap[color]}`}>
       <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${iconColorMap[color]}`}>{icon}</div>
       <div className="text-2xl font-bold text-white">{value}</div>
-      <div className="text-xs opacity-70">{label}</div>
+      <div className="text-xs">{label}</div>
     </div>
   );
 }

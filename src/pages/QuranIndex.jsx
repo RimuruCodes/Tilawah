@@ -129,7 +129,7 @@ export default function QuranIndex() {
                 onClick={() => setFilter(f.key)}
                 className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
                   filter === f.key
-                    ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20"
+                    ? "bg-emerald-500 text-slate-900 shadow-sm shadow-emerald-500/20"
                     : "bg-slate-800/50 text-slate-400 hover:text-slate-300 border border-slate-700/30"
                 }`}
               >

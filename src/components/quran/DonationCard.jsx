@@ -61,7 +61,7 @@ export default function DonationCard() {
               onClick={() => setAmount(a)}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 amount === a
-                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                  ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
                   : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 border border-slate-700/50'
               }`}
             >
@@ -74,7 +74,7 @@ export default function DonationCard() {
           <button
             onClick={handleStripeDonate}
             disabled={busy}
-            className="w-full py-3 rounded-xl bg-emerald-500 text-white font-semibold flex items-center justify-center gap-2 hover:bg-emerald-400 disabled:opacity-50 transition-colors shadow-lg shadow-emerald-500/20"
+            className="w-full py-3 rounded-xl bg-emerald-500 text-slate-900 font-semibold flex items-center justify-center gap-2 hover:bg-emerald-400 disabled:opacity-50 transition-colors shadow-lg shadow-emerald-500/20"
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : (
               <>

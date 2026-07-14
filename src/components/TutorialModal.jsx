@@ -75,7 +75,7 @@ export default function TutorialModal({ open, onClose, userId }) {
     <Dialog open={open} onOpenChange={finish}>
       <DialogContent className="bg-slate-900 border-slate-700/50 max-w-md p-0 overflow-hidden">
         <div className="p-6 space-y-5">
-          <button onClick={finish} className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors">
+          <button onClick={finish} aria-label="Close tutorial" className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors">
             <X className="w-4 h-4" />
           </button>
 
@@ -149,7 +149,7 @@ export default function TutorialModal({ open, onClose, userId }) {
               )}
               <button
                 onClick={() => (isLast ? finish() : setStep((s) => s + 1))}
-                className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-400 transition-colors flex items-center gap-1"
+                className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-900 text-sm font-medium hover:bg-emerald-400 transition-colors flex items-center gap-1"
               >
                 {isLast ? "Got it" : "Next"}
                 {!isLast && <ArrowRight className="w-3.5 h-3.5" />}

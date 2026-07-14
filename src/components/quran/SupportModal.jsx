@@ -45,6 +45,7 @@ export default function SupportModal({ open, onClose }) {
       <DialogContent className="bg-slate-900 border-slate-700/50 max-w-md p-0 overflow-hidden">
         <button
           onClick={onClose}
+          aria-label="Close"
           className="absolute top-4 right-4 z-10 p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
         >
           <X className="w-4 h-4" />

@@ -172,7 +172,7 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, selec
     <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-4 space-y-3">
       <div className="flex items-center justify-between gap-4">
         <Select value={selectedReciter} onValueChange={onReciterChange}>
-          <SelectTrigger className="flex-1 min-w-0 max-w-56 bg-slate-800/50 border-slate-700 text-sm text-slate-300 h-9">
+          <SelectTrigger aria-label="Choose reciter" className="flex-1 min-w-0 max-w-56 bg-slate-800/50 border-slate-700 text-sm text-slate-300 h-9">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-slate-800 border-slate-700">
@@ -195,6 +195,7 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, selec
         <span className="text-[10px] text-slate-500 font-mono w-10 text-right">{formatTime(progress)}</span>
         <div className="flex-1">
           <Slider
+            label="Seek through the recitation audio"
             value={[progress]}
             max={duration || 1}
             step={0.1}
@@ -217,6 +218,7 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, selec
           </button>
           <div className="w-20">
             <Slider
+              label="Volume"
               value={[isMuted ? 0 : volume]}
               max={100}
               step={1}
@@ -237,7 +239,7 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, selec
             onClick={togglePlay}
             disabled={isLoading}
             aria-label={isPlaying ? "Pause" : "Play"}
-            className="p-3 rounded-xl bg-emerald-500 text-white hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/25 disabled:opacity-50"
+            className="p-3 rounded-xl bg-emerald-500 text-slate-900 hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/25 disabled:opacity-50"
           >
             {isLoading ? (
               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

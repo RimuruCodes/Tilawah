@@ -94,7 +94,7 @@ export default function Hadith() {
                 if (m.key !== "browse") setOpenBook(null);
               }}
               className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${
-                mode === m.key ? "bg-emerald-500 text-white" : "bg-slate-800/50 text-slate-400 border border-slate-700/30"
+                mode === m.key ? "bg-emerald-500 text-slate-900" : "bg-slate-800/50 text-slate-400 border border-slate-700/30"
               }`}
             >
               {m.label}
@@ -146,7 +146,7 @@ export default function Hadith() {
               <button
                 onClick={runSearch}
                 disabled={searching || searchQuery.trim().length < 3}
-                className="px-4 rounded-xl bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-400 disabled:opacity-40 transition-colors"
+                className="px-4 rounded-xl bg-emerald-500 text-slate-900 text-sm font-medium hover:bg-emerald-400 disabled:opacity-40 transition-colors"
               >
                 {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
               </button>
@@ -185,7 +185,7 @@ export default function Hadith() {
                   onClick={() => setDuaCategory(cat.id)}
                   className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
                     duaCategory === cat.id
-                      ? "bg-emerald-500 text-white"
+                      ? "bg-emerald-500 text-slate-900"
                       : "bg-slate-800/50 text-slate-400 border border-slate-700/30"
                   }`}
                 >

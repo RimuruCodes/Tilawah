@@ -16,7 +16,7 @@ export default function TajweedResultsPanel({ tajweedResult, unavailableMessage 
       );
     }
     return (
-      <p className="text-[10px] text-slate-600 text-center">
+      <p className="text-[10px] text-slate-500 text-center">
         Word-level Tajweed detail wasn't available for this attempt.
       </p>
     );
@@ -38,7 +38,7 @@ export default function TajweedResultsPanel({ tajweedResult, unavailableMessage 
       {recognizedText && (
         <div className="bg-slate-800/30 rounded-lg p-3 border border-slate-700/20">
           <p className="text-[10px] text-slate-500 mb-1">What speech recognition heard:</p>
-          <p className="text-sm text-slate-300" dir="rtl" style={{ fontFamily: "'Scheherazade New', serif" }}>{recognizedText}</p>
+          <p className="text-sm text-slate-300" dir="rtl" lang="ar" style={{ fontFamily: "'Scheherazade New', serif" }}>{recognizedText}</p>
         </div>
       )}
 
@@ -93,7 +93,7 @@ export default function TajweedResultsPanel({ tajweedResult, unavailableMessage 
         </div>
       )}
 
-      <p className="text-[10px] text-slate-600 pt-1">
+      <p className="text-[10px] text-slate-500 pt-1">
         Based on a general Arabic speech-recognition model (not Quran-specific) and heuristic timing checks — treat this as approximate guidance, not a formal Tajweed ruling.
       </p>
     </div>

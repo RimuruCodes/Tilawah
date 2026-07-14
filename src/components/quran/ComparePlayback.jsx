@@ -89,7 +89,7 @@ export default function ComparePlayback({ userUrl, referenceUrls, onPlayhead }) 
       <div className="flex items-center gap-2">
         <button
           onClick={() => (playing ? stopAll() : start())}
-          className="p-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-400 transition-colors flex-shrink-0"
+          className="p-2 rounded-lg bg-emerald-500 text-slate-900 hover:bg-emerald-400 transition-colors flex-shrink-0"
           aria-label={playing ? "Stop comparison playback" : "Play your recording alongside the reference"}
         >
           {playing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
@@ -104,6 +104,8 @@ export default function ComparePlayback({ userUrl, referenceUrls, onPlayhead }) 
           <button
             key={side.key}
             onClick={() => toggleFocus(side.key)}
+            aria-pressed={focus === side.key}
+            aria-label={`Make ${side.label.toLowerCase()} the louder one`}
             className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-medium transition-all border ${
               focus === side.key
                 ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"

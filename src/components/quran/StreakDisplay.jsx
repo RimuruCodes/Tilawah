@@ -81,7 +81,9 @@ function StatCard({ icon, label, value, color, delay }) {
         {icon}
       </div>
       <div className="text-2xl font-bold text-white">{value}</div>
-      <div className="text-xs mt-0.5 opacity-70">{label}</div>
+      {/* No opacity-70 here: it dropped the tinted label below WCAG AA on
+          the tile's own /10 background. Full-strength colored text passes. */}
+      <div className="text-xs mt-0.5">{label}</div>
     </motion.div>
   );
 }

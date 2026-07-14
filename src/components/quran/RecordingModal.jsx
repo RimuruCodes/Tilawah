@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Square, Play, Pause, RotateCcw, Send, Loader2, AlertTriangle, Upload } from "lucide-react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { analyzeSingleAyahRecitation, persistRecitationResult, runTajweedAnalysis, decodeUserRecording, assessRecitationConfidence, attachTajweedToLogs, getLastAsrFailure, describeAsrFailureForUser, describeAsrFailureForLog } from "@/lib/recitationService";
 import { getVisualizationEnvelope } from "@/lib/audioAnalysis";
 import { getSupportedRecorderMimeType } from "@/lib/mediaUtils";
@@ -333,12 +333,25 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
       <DialogContent className="bg-slate-900 border-slate-700/50 max-w-lg max-h-[85vh] overflow-y-auto p-0">
         <div className="p-6 space-y-6">
           <div className="text-center space-y-2">
-            <h3 className="text-xl font-semibold text-white">Voice Comparison</h3>
-            <p className="text-sm text-slate-400">{surahName} · Ayah {ayah?.number}</p>
+            {/* DialogTitle/Description (not bare h3/p) so the dialog has an
+                accessible name — screen readers otherwise announce an
+                unnamed dialog. */}
+            <DialogTitle className="text-xl font-semibold text-white">Voice Comparison</DialogTitle>
+            <DialogDescription className="text-sm text-slate-400">{surahName} · Ayah {ayah?.number}</DialogDescription>
           </div>
 
+          {/* Live region: announces analysis progress/outcome to screen
+              readers without re-reading the whole result view. */}
+          <p className="sr-only" role="status" data-testid="a11y-status">
+            {state === "analyzing"
+              ? "Analyzing your recording…"
+              : state === "result" && analysisResult
+                ? `Analysis complete. Score ${analysisResult.score} out of 100.`
+                : ""}
+          </p>
+
           {ayah && (
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/30" dir="rtl">
+            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/30" dir="rtl" lang="ar">
               <p className="text-xl text-white/90 leading-loose text-center" style={{ fontFamily: "'Scheherazade New', serif", lineHeight: "2.5" }}>
                 {ayah.arabic}
               </p>
@@ -374,7 +387,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
 
                 <div className="flex items-center gap-2 w-full max-w-[200px]">
                   <div className="h-px flex-1 bg-slate-800" />
-                  <span className="text-[10px] text-slate-600">or</span>
+                  <span className="text-[10px] text-slate-500">or</span>
                   <div className="h-px flex-1 bg-slate-800" />
                 </div>
 
@@ -445,6 +458,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                 <div className="flex items-center justify-center gap-3">
                   <button
                     onClick={playBack}
+                    aria-label={isPlayingBack ? "Pause playback" : "Play back your recording"}
                     className="p-3 rounded-xl bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-colors"
                   >
                     {isPlayingBack ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
@@ -452,6 +466,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                   <div className="text-sm text-slate-400 font-mono">{formatTime(recordingTime)}</div>
                   <button
                     onClick={resetState}
+                    aria-label="Discard recording and start over"
                     className="p-3 rounded-xl bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-colors"
                   >
                     <RotateCcw className="w-5 h-5" />
@@ -460,7 +475,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
 
                 <button
                   onClick={analyzeRecitation}
-                  className="w-full py-3 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+                  className="w-full py-3 rounded-xl bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
                 >
                   <Send className="w-4 h-4" />
                   Analyze My Recitation
@@ -488,7 +503,9 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                 className="flex flex-col items-center gap-4 py-6 text-center"
               >
                 <AlertTriangle className="w-10 h-10 text-orange-400" />
-                <p className="text-sm text-slate-300">{errorMessage}</p>
+                {/* role="alert" so the error is announced immediately by
+                    screen readers, from the same element that shows it. */}
+                <p className="text-sm text-slate-300" role="alert">{errorMessage}</p>
                 <button
                   onClick={resetState}
                   className="px-5 py-2.5 rounded-xl bg-slate-700/50 text-slate-300 font-medium hover:bg-slate-700 transition-colors text-sm"
@@ -523,6 +540,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                     <div
                       className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-1 cursor-help"
                       title={confidence.reasons.join("; ")}
+                      aria-label={`Low confidence in this result: ${confidence.reasons.join("; ")}`}
                     >
                       <AlertTriangle className="w-3 h-3" />
                       Low confidence in this result

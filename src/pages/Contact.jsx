@@ -151,7 +151,7 @@ export default function Contact() {
                   <button
                     type="submit"
                     disabled={sending}
-                    className="w-full py-3 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full py-3 rounded-xl bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {sending ? (
                       <>

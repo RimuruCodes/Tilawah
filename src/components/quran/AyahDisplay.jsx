@@ -93,6 +93,7 @@ export default function AyahDisplay({
             {hideMode && revealed && (
               <button
                 onClick={() => setRevealed(false)}
+                aria-label="Hide the Arabic text again"
                 className="absolute top-2 left-2 p-1.5 rounded-lg bg-slate-800/80 text-slate-400 hover:text-white transition-colors"
               >
                 <EyeOff className="w-4 h-4" />
@@ -122,6 +123,7 @@ export default function AyahDisplay({
             onClick={() => onRecordClick?.(ayah)}
             className="p-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
             title="Record your recitation"
+            aria-label={`Record your recitation of ayah ${ayah.number}`}
           >
             <Mic className="w-4 h-4" />
           </button>

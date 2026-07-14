@@ -25,7 +25,11 @@ export default function WaveformTimeline({ envelope, ruleMarkers = [], playheadS
 
   return (
     <div className="space-y-2">
+      {/* Hidden from assistive tech: the waveform is a visual affordance,
+          and every rule marker's label/verdict/note is also presented as
+          text in TajweedResultsPanel — screen-reader users lose nothing. */}
       <svg
+        aria-hidden="true"
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         preserveAspectRatio="none"
         className="w-full h-20 rounded-lg bg-slate-900/60 border border-slate-700/30"

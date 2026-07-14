@@ -128,7 +128,7 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
                 </div>
                 <button
                   onClick={() => setStep("email")}
-                  className="w-full py-2.5 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-400 transition-colors text-sm"
+                  className="w-full py-2.5 rounded-xl bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-400 transition-colors text-sm"
                 >
                   Continue
                 </button>
@@ -162,7 +162,7 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
                 <button
                   onClick={handleSendCode}
                   disabled={busy || !email.trim()}
-                  className="w-full py-2.5 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-400 disabled:opacity-50 transition-colors text-sm flex items-center justify-center gap-2"
+                  className="w-full py-2.5 rounded-xl bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-400 disabled:opacity-50 transition-colors text-sm flex items-center justify-center gap-2"
                 >
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send code"}
                 </button>
@@ -184,7 +184,7 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
                 <button
                   onClick={handleVerifyCode}
                   disabled={busy || !code.trim()}
-                  className="w-full py-2.5 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-400 disabled:opacity-50 transition-colors text-sm flex items-center justify-center gap-2"
+                  className="w-full py-2.5 rounded-xl bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-400 disabled:opacity-50 transition-colors text-sm flex items-center justify-center gap-2"
                 >
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Verify & continue"}
                 </button>
@@ -207,7 +207,7 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
                 <button
                   onClick={handleGoToCheckout}
                   disabled={busy}
-                  className="w-full py-3 rounded-xl bg-emerald-500 text-white font-semibold text-sm flex items-center justify-center gap-2 hover:bg-emerald-400 disabled:opacity-50 transition-colors shadow-lg shadow-emerald-500/20"
+                  className="w-full py-3 rounded-xl bg-emerald-500 text-slate-900 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-emerald-400 disabled:opacity-50 transition-colors shadow-lg shadow-emerald-500/20"
                 >
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : (
                     <>

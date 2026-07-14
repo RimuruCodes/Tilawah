@@ -165,6 +165,7 @@ export default function Settings() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
+            aria-label="Go back"
             className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -253,7 +254,7 @@ export default function Settings() {
             ) : (
               <button
                 onClick={() => setUpgradeOpen(true)}
-                className="w-full px-4 py-2.5 rounded-xl bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-400 transition-colors"
+                className="w-full px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-900 text-sm font-medium hover:bg-emerald-400 transition-colors"
               >
                 Upgrade
               </button>
@@ -319,6 +320,7 @@ export default function Settings() {
                   type="checkbox"
                   checked={asrOn}
                   onChange={(e) => { setAsrEnabled(e.target.checked); setAsrOn(e.target.checked); }}
+                  aria-label="Word-level Tajweed (speech recognition)"
                   className="sr-only peer"
                 />
                 <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-4 relative after:top-0.5 after:left-0.5" />
@@ -343,6 +345,7 @@ export default function Settings() {
                   type="checkbox"
                   checked={paceMatch}
                   onChange={(e) => handlePaceMatchChange(e.target.checked)}
+                  aria-label="Pace-matched reciter comparison"
                   className="sr-only peer"
                 />
                 <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-4 relative after:top-0.5 after:left-0.5" />
@@ -367,6 +370,7 @@ export default function Settings() {
                   type="checkbox"
                   checked={ramadanMode}
                   onChange={(e) => { setRamadanModeEnabled(e.target.checked); setRamadanMode(e.target.checked); }}
+                  aria-label="Ramadan mode"
                   className="sr-only peer"
                 />
                 <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-4 relative after:top-0.5 after:left-0.5" />
@@ -496,7 +500,9 @@ export default function Settings() {
               <span className="text-amber-400"> PREVIOUS-SESSION-DIED-MID-ANALYSIS</span> entry (tab was killed/reloaded by the browser) or an
               <span className="text-amber-400"> sw-controllerchange</span> entry (a service worker took over).
             </p>
-            <div className="max-h-64 overflow-y-auto rounded-lg bg-slate-950/60 border border-slate-800 p-2 space-y-1">
+            {/* tabIndex + role so keyboard users can scroll and reach this
+                log region (it holds no focusable children of its own). */}
+            <div tabIndex={0} role="group" aria-label="Lifecycle debug log" className="max-h-64 overflow-y-auto rounded-lg bg-slate-950/60 border border-slate-800 p-2 space-y-1 focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500">
               {getLifecycleEvents().length === 0 && (
                 <p className="text-[11px] text-slate-600">No events recorded yet.</p>
               )}
@@ -532,7 +538,7 @@ export default function Settings() {
             </div>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <button className="px-4 py-2.5 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-400 transition-colors flex items-center gap-2 flex-shrink-0">
+                <button className="px-4 py-2.5 rounded-xl bg-red-500 text-slate-900 text-sm font-medium hover:bg-red-400 transition-colors flex items-center gap-2 flex-shrink-0">
                   <Trash2 className="w-4 h-4" />
                   Delete
                 </button>
@@ -551,7 +557,7 @@ export default function Settings() {
                   <AlertDialogAction
                     onClick={handleDeleteAccount}
                     disabled={deleting}
-                    className="bg-red-500 text-white hover:bg-red-400 border-red-500"
+                    className="bg-red-500 text-slate-900 hover:bg-red-400 border-red-500"
                   >
                     {deleting ? (
                       <>

@@ -293,7 +293,7 @@ export default function SurahReader() {
             <p className="text-slate-400 text-sm px-6">{loadError}</p>
             <button
               onClick={load}
-              className="px-5 py-2 rounded-lg bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-400 transition-colors"
+              className="px-5 py-2 rounded-lg bg-emerald-500 text-slate-900 text-sm font-medium hover:bg-emerald-400 transition-colors"
             >
               Try again
             </button>

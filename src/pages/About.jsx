@@ -64,7 +64,7 @@ export default function About() {
           <div className="flex items-center gap-3 pt-4">
             <Link
               to="/contact"
-              className="px-5 py-2.5 rounded-xl bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-400 transition-colors flex items-center gap-2"
+              className="px-5 py-2.5 rounded-xl bg-emerald-500 text-slate-900 text-sm font-medium hover:bg-emerald-400 transition-colors flex items-center gap-2"
             >
               <Sparkles className="w-4 h-4" />
               Get in Touch
