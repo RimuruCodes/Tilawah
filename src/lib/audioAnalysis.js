@@ -157,6 +157,84 @@ export function buildFeatures(samples, sampleRate) {
   return { energyDb, pitchHz, hopSize, frameCount: frames.length };
 }
 
+// Lightweight, model-free noise reduction: a soft noise gate driven by the
+// device's calibrated noise floor. Frames whose short-time energy sits at or
+// near the measured floor — the gaps around speech, where fan/AC/traffic hum
+// lives — are attenuated; frames clearly above it (actual voice) pass through
+// at UNITY gain, so the speaker's peak and energy are preserved untouched.
+//
+// Deliberately NOT spectral subtraction: calibration gives a single broadband
+// floor (one dB number), not a per-frequency noise spectrum, so there's
+// nothing to subtract spectrally without inventing a profile — and a full FFT
+// denoiser risks musical-noise artifacts on real speech. This is time-domain
+// amplitude gating: no FFT, no model, no second WASM/ONNX runtime (which is
+// exactly the memory hazard we spent this project fixing).
+//
+// Degrades safely, matching the rest of this codebase: returns the samples
+// UNCHANGED when there's no usable `noiseFloorDb` (uncalibrated device), or
+// when the recording's own loudest frame isn't clearly above the floor
+// (all-noise clip, or an unreliable/too-hot floor estimate) — the worst it
+// can do to real voice is nothing.
+export function reduceNoise(samples, sampleRate, { noiseFloorDb } = {}) {
+  if (!Number.isFinite(noiseFloorDb) || samples.length === 0) return samples;
+
+  const { frames, hopSize } = frameSignal(samples, sampleRate);
+  if (frames.length === 0) return samples;
+
+  const frameDb = frames.map((f) => toDb(rms(f)));
+  const maxDb = Math.max(...frameDb);
+  // If the loudest frame isn't clearly above the floor, gating risks eating
+  // real content (or there's simply nothing but noise) — do nothing.
+  const MIN_HEADROOM_DB = 10;
+  if (maxDb - noiseFloorDb < MIN_HEADROOM_DB) return samples;
+
+  // Soft-knee gate, in dB relative to the measured floor:
+  //   - at/below floor+CLOSE_DB  -> attenuate to FLOOR_GAIN (noise)
+  //   - at/above floor+OPEN_DB   -> unity gain (voice, untouched)
+  //   - between                  -> linear ramp
+  // FLOOR_GAIN is not zero: leaving a residual avoids unnatural dead silence
+  // and gate "pumping", and keeps any faint real content that dips near the
+  // floor from vanishing.
+  const CLOSE_DB = 3;
+  const OPEN_DB = 12;
+  const FLOOR_GAIN = 0.12; // ~ -18 dB
+  const closeThresh = noiseFloorDb + CLOSE_DB;
+  const openThresh = noiseFloorDb + OPEN_DB;
+
+  const targetGain = frameDb.map((db) => {
+    if (db >= openThresh) return 1;
+    if (db <= closeThresh) return FLOOR_GAIN;
+    const t = (db - closeThresh) / (openThresh - closeThresh);
+    return FLOOR_GAIN + t * (1 - FLOOR_GAIN);
+  });
+
+  // Temporal smoothing: open fast (don't clip a word's onset), close slow
+  // (don't chop a word's tail or click). One-pole toward the target.
+  const ATTACK = 0.6;
+  const RELEASE = 0.15;
+  const smoothGain = new Array(targetGain.length);
+  let g = targetGain[0];
+  for (let i = 0; i < targetGain.length; i++) {
+    const coeff = targetGain[i] > g ? ATTACK : RELEASE;
+    g += coeff * (targetGain[i] - g);
+    smoothGain[i] = g;
+  }
+
+  // Apply, interpolating each sample's gain linearly between frame centers so
+  // there are no per-frame gain steps (which would themselves be audible).
+  const out = new Float32Array(samples.length);
+  const lastIdx = smoothGain.length - 1;
+  for (let i = 0; i < samples.length; i++) {
+    const fpos = i / hopSize;
+    const i0 = Math.min(Math.floor(fpos), lastIdx);
+    const i1 = Math.min(i0 + 1, lastIdx);
+    const frac = fpos - Math.floor(fpos);
+    const gain = smoothGain[i0] + frac * (smoothGain[i1] - smoothGain[i0]);
+    out[i] = samples[i] * gain;
+  }
+  return out;
+}
+
 // Relative voice-activity detection: anything within `dropDb` of the loudest
 // frame counts as "active speech". This works regardless of absolute mic
 // gain differences between the user's mic and the reference recording.

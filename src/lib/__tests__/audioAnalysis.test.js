@@ -5,6 +5,8 @@ import {
   frameSignal,
   rms,
   energyProfileForWindow,
+  reduceNoise,
+  buildFeatures,
   TARGET_SAMPLE_RATE,
 } from "@/lib/audioAnalysis";
 
@@ -177,5 +179,105 @@ describe("energyProfileForWindow", () => {
     const toneWindow = energyProfileForWindow(signal, TARGET_SAMPLE_RATE, 0.6, 0.9);
     const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
     expect(avg(toneWindow.energyDb)).toBeGreaterThan(avg(silenceWindow.energyDb));
+  });
+});
+
+// ---- Noise reduction (calibration-driven soft noise gate) --------------
+
+// Deterministic pseudo-noise so the tests don't flake. Uniform in [-a, a].
+function makeNoise(nSamples, amplitude, seed = 1) {
+  const out = new Float32Array(nSamples);
+  let s = seed >>> 0;
+  for (let i = 0; i < nSamples; i++) {
+    s = (s * 1664525 + 1013904223) >>> 0; // LCG
+    out[i] = ((s / 0xffffffff) * 2 - 1) * amplitude;
+  }
+  return out;
+}
+
+// [noise-only gap][loud tone + same noise][noise-only gap] — the gaps sit at
+// the noise floor (should be gated down), the tone sits well above it (should
+// be preserved). Returns the signal plus the sample ranges of each region.
+function makeToneInNoise({ sampleRate = TARGET_SAMPLE_RATE, gapSec = 0.5, toneSec = 0.6, freq = 200, toneAmp = 0.3, noiseAmp = 0.02 }) {
+  const gap = Math.round(gapSec * sampleRate);
+  const tone = Math.round(toneSec * sampleRate);
+  const total = gap * 2 + tone;
+  const noise = makeNoise(total, noiseAmp);
+  const out = new Float32Array(total);
+  for (let i = 0; i < total; i++) out[i] = noise[i];
+  for (let i = 0; i < tone; i++) {
+    out[gap + i] += toneAmp * Math.sin((2 * Math.PI * freq * i) / sampleRate);
+  }
+  return { signal: out, gap, tone, total };
+}
+
+// The noise floor the way micCalibration.js derives it: median per-frame
+// energy (dB) of an ambient (noise-only) clip.
+function measureFloorDb(noiseClip) {
+  const { energyDb } = buildFeatures(noiseClip, TARGET_SAMPLE_RATE);
+  const sorted = [...energyDb].filter(Number.isFinite).sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+const rmsOf = (arr, from = 0, to = arr.length) => {
+  let sum = 0;
+  for (let i = from; i < to; i++) sum += arr[i] * arr[i];
+  return Math.sqrt(sum / (to - from));
+};
+const peakOf = (arr, from = 0, to = arr.length) => {
+  let p = 0;
+  for (let i = from; i < to; i++) p = Math.max(p, Math.abs(arr[i]));
+  return p;
+};
+
+describe("reduceNoise (calibration-driven soft noise gate)", () => {
+  it("drops the noise floor in the gaps while preserving the tone's peak and energy", () => {
+    const { signal, gap, tone } = makeToneInNoise({});
+    const noiseFloorDb = measureFloorDb(makeNoise(TARGET_SAMPLE_RATE, 0.02, 7));
+
+    const out = reduceNoise(signal, TARGET_SAMPLE_RATE, { noiseFloorDb });
+
+    // Gap (noise-only) energy must drop substantially. Measure the interior
+    // of the trailing gap, away from the gate's release ramp at the boundary.
+    const gapStart = gap + tone + Math.round(0.15 * TARGET_SAMPLE_RATE);
+    const gapEnd = gap + tone + gap;
+    const gapBefore = rmsOf(signal, gapStart, gapEnd);
+    const gapAfter = rmsOf(out, gapStart, gapEnd);
+    expect(gapAfter).toBeLessThan(gapBefore * 0.5); // at least ~6 dB down
+
+    // Tone (voice) must survive essentially intact: peak and energy over the
+    // interior of the tone region are preserved (gate is at unity gain there).
+    const tStart = gap + Math.round(0.1 * TARGET_SAMPLE_RATE);
+    const tEnd = gap + tone - Math.round(0.1 * TARGET_SAMPLE_RATE);
+    expect(peakOf(out, tStart, tEnd)).toBeGreaterThan(peakOf(signal, tStart, tEnd) * 0.98);
+    const eBefore = rmsOf(signal, tStart, tEnd);
+    const eAfter = rmsOf(out, tStart, tEnd);
+    expect(eAfter).toBeGreaterThan(eBefore * 0.95);
+    expect(eAfter).toBeLessThanOrEqual(eBefore * 1.0001); // never amplifies
+  });
+
+  it("is a no-op on an uncalibrated device (no noiseFloorDb) — returns the same array", () => {
+    const { signal } = makeToneInNoise({});
+    expect(reduceNoise(signal, TARGET_SAMPLE_RATE, {})).toBe(signal);
+    expect(reduceNoise(signal, TARGET_SAMPLE_RATE, { noiseFloorDb: null })).toBe(signal);
+    expect(reduceNoise(signal, TARGET_SAMPLE_RATE, { noiseFloorDb: NaN })).toBe(signal);
+  });
+
+  it("does nothing when the recording is basically all noise (no clear voice above the floor)", () => {
+    // A near-uniform noise clip: the loudest frame isn't 10 dB above the
+    // floor, so the guard must leave it untouched rather than gate speech.
+    const noise = makeNoise(TARGET_SAMPLE_RATE, 0.02, 3);
+    const floorDb = measureFloorDb(noise);
+    const out = reduceNoise(noise, TARGET_SAMPLE_RATE, { noiseFloorDb: floorDb });
+    expect(out).toBe(noise); // same reference — untouched
+  });
+
+  it("never boosts the signal: no output sample exceeds its input magnitude", () => {
+    const { signal } = makeToneInNoise({});
+    const noiseFloorDb = measureFloorDb(makeNoise(TARGET_SAMPLE_RATE, 0.02, 11));
+    const out = reduceNoise(signal, TARGET_SAMPLE_RATE, { noiseFloorDb });
+    for (let i = 0; i < signal.length; i++) {
+      expect(Math.abs(out[i])).toBeLessThanOrEqual(Math.abs(signal[i]) + 1e-9);
+    }
   });
 });

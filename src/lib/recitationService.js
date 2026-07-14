@@ -5,6 +5,7 @@ import {
   compareSamples,
   analyzeRecordingQualityOnly,
   fetchArrayBuffer,
+  reduceNoise,
   TARGET_SAMPLE_RATE,
 } from "@/lib/audioAnalysis";
 import { RecitationLog, DailyStreak } from "@/lib/localDb";
@@ -104,8 +105,17 @@ export async function decodeUserRecording(userBlob) {
   try {
     // Bounded: a hung decode now surfaces the error state (with Try Again)
     // instead of an infinite "analyzing" spinner.
-    const samples = await withTimeout(decodeToMonoSamples(arrayBuffer, TARGET_SAMPLE_RATE), 30_000, "Decoding your recording");
-    recordLifecycleEvent("decode-complete", `${(samples.length / TARGET_SAMPLE_RATE).toFixed(1)}s decoded`);
+    const decoded = await withTimeout(decodeToMonoSamples(arrayBuffer, TARGET_SAMPLE_RATE), 30_000, "Decoding your recording");
+    recordLifecycleEvent("decode-complete", `${(decoded.length / TARGET_SAMPLE_RATE).toFixed(1)}s decoded`);
+    // Lightweight, model-free noise gate BEFORE any analysis — only when this
+    // device has been calibrated (its real noise floor is known). It attenuates
+    // steady background hum in the gaps around speech while leaving actual
+    // voice untouched; on an uncalibrated device reduceNoise is a no-op (it
+    // returns the same array), so the default path is unchanged. See
+    // reduceNoise in audioAnalysis.js for the safety guards.
+    const noiseFloorDb = getStoredCalibration()?.noiseFloorDb ?? null;
+    const samples = noiseFloorDb == null ? decoded : reduceNoise(decoded, TARGET_SAMPLE_RATE, { noiseFloorDb });
+    if (samples !== decoded) recordLifecycleEvent("noise-reduced", `gated to calibrated floor ${noiseFloorDb.toFixed(1)} dBFS`);
     // Held for the whole analysis by design (the Tajweed stage windows into
     // it after ASR) — the ledger makes that retention visible at the ASR
     // memory checkpoints rather than leaving it implied.
