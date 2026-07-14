@@ -1,0 +1,4 @@
+# Cloudflare Pages SPA fallback: client-side routes (/surah/1, /hadith,
+# /settings, ...) must serve the app shell on a direct load/refresh —
+# without this, only "/" works and every deep link 404s.
+/* /index.html 200

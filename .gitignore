@@ -1,0 +1,52 @@
+#env
+.env
+.env.*
+!.env.example
+
+# Logs
+/logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.env
+.vite
+
+# e2e artifacts: generated audio fixtures, shared browser profile, reports
+/e2e/fixtures
+/e2e/.browser-profile
+/test-results
+/playwright-report
+
+# Offline eval tooling (tools/qdat-eval): python venv (~50k files),
+# caches, downloaded datasets, vendored clones, generated features —
+# only the scripts themselves are source.
+/tools/qdat-eval/venv
+/tools/qdat-eval/pip-cache
+/tools/qdat-eval/data
+/tools/qdat-eval/transformersjs
+/tools/qdat-eval/features.json
+__pycache__/
+*.pyc
+
+# Supabase CLI local state
+/supabase/.temp

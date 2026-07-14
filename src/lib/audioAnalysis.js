@@ -1,0 +1,600 @@
+// Real audio analysis for recitation scoring.
+//
+// This module actually decodes and listens to the user's recording. When a
+// reference reciter's audio for the same ayah is available, it decodes that
+// too and compares the two waveforms acoustically:
+//   - energy (loudness/rhythm) envelope
+//   - pitch (intonation) contour, via autocorrelation
+//   - overall duration / pacing
+//   - alignment quality via Dynamic Time Warping (DTW)
+//
+// It is honest about its limits: this is signal-level acoustic similarity,
+// not phoneme-level Tajweed grading (that would require a trained Arabic
+// speech-recognition/forced-alignment model, which isn't something that can
+// run client-side here). When no reference audio can be fetched, it falls
+// back to analyzing the recording's own quality (silence, pauses, clipping)
+// and says so explicitly rather than inventing a comparison score.
+
+export const TARGET_SAMPLE_RATE = 16000;
+const FRAME_MS = 32;
+const HOP_MS = 12;
+const MIN_PITCH_HZ = 70;
+const MAX_PITCH_HZ = 400;
+
+let sharedAudioContext = null;
+function getAudioContext() {
+  if (!sharedAudioContext) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    sharedAudioContext = new Ctx();
+  }
+  return sharedAudioContext;
+}
+
+export async function blobToArrayBuffer(blob) {
+  return await blob.arrayBuffer();
+}
+
+export async function fetchArrayBuffer(url, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal, mode: "cors" });
+    if (!res.ok) throw new Error(`Failed to fetch reference audio (${res.status})`);
+    return await res.arrayBuffer();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Decodes arbitrary audio bytes and resamples to a fixed mono sample rate so
+// the two recordings being compared are on equal footing.
+export async function decodeToMonoSamples(arrayBuffer, targetSampleRate = TARGET_SAMPLE_RATE) {
+  const ctx = getAudioContext();
+  const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+
+  const offline = new OfflineAudioContext(
+    1,
+    Math.ceil(decoded.duration * targetSampleRate),
+    targetSampleRate
+  );
+  const source = offline.createBufferSource();
+  source.buffer = decoded;
+  source.connect(offline.destination);
+  source.start();
+  const rendered = await offline.startRendering();
+  return rendered.getChannelData(0).slice(); // mono Float32Array
+}
+
+export function frameSignal(samples, sampleRate, frameMs = FRAME_MS, hopMs = HOP_MS) {
+  const frameSize = Math.round((frameMs / 1000) * sampleRate);
+  const hopSize = Math.round((hopMs / 1000) * sampleRate);
+  const frames = [];
+  for (let start = 0; start + frameSize <= samples.length; start += hopSize) {
+    frames.push(samples.subarray(start, start + frameSize));
+  }
+  if (frames.length === 0 && samples.length > 0) frames.push(samples);
+  return { frames, hopSize };
+}
+
+export function rms(frame) {
+  let sum = 0;
+  for (let i = 0; i < frame.length; i++) sum += frame[i] * frame[i];
+  return Math.sqrt(sum / frame.length);
+}
+
+function toDb(value) {
+  return 20 * Math.log10(Math.max(value, 1e-8));
+}
+
+// Autocorrelation-based pitch detection (classic approach, e.g. Chris
+// Wilson's pitch detector). Returns 0 when no plausible pitch is found.
+// Voicing gating (deciding whether the frame is loud enough to attempt
+// pitch on at all) lives in buildFeatures, relative to the recording's
+// own peak level — an absolute threshold here misclassified half of a
+// quieter recording's frames as unvoiced.
+function detectPitch(frame, sampleRate) {
+  const size = frame.length;
+
+  let r1 = 0;
+  let r2 = size - 1;
+  const threshold = 0.2;
+  for (let i = 0; i < size / 2; i++) {
+    if (Math.abs(frame[i]) < threshold) { r1 = i; break; }
+  }
+  for (let i = 1; i < size / 2; i++) {
+    if (Math.abs(frame[size - i]) < threshold) { r2 = size - i; break; }
+  }
+  const trimmed = frame.slice(r1, r2);
+  const n = trimmed.length;
+  if (n < 8) return 0;
+
+  const c = new Float32Array(n);
+  for (let lag = 0; lag < n; lag++) {
+    let sum = 0;
+    for (let i = 0; i < n - lag; i++) sum += trimmed[i] * trimmed[i + lag];
+    c[lag] = sum;
+  }
+
+  let d = 0;
+  while (d + 1 < n && c[d] > c[d + 1]) d++;
+
+  let maxVal = -1;
+  let maxPos = -1;
+  for (let i = d; i < n; i++) {
+    if (c[i] > maxVal) { maxVal = c[i]; maxPos = i; }
+  }
+  if (maxPos <= 0) return 0;
+
+  const x1 = c[maxPos - 1] || 0;
+  const x2 = c[maxPos];
+  const x3 = c[maxPos + 1] || 0;
+  const a = (x1 + x3 - 2 * x2) / 2;
+  const b = (x3 - x1) / 2;
+  let refinedPos = maxPos;
+  if (a !== 0) refinedPos = maxPos - b / (2 * a);
+
+  const freq = sampleRate / refinedPos;
+  if (freq < MIN_PITCH_HZ || freq > MAX_PITCH_HZ) return 0;
+  return freq;
+}
+
+// Builds per-frame energy (dB) and pitch (Hz) sequences for a mono signal.
+// Pitch is only attempted on frames that pass a voicing gate relative to
+// the recording's own peak level (same pattern as detectActivity), with an
+// absolute floor so a near-silent recording doesn't count as fully voiced.
+export function buildFeatures(samples, sampleRate) {
+  const { frames, hopSize } = frameSignal(samples, sampleRate);
+  const energyDb = new Array(frames.length);
+  const pitchHz = new Array(frames.length);
+  for (let i = 0; i < frames.length; i++) {
+    energyDb[i] = toDb(rms(frames[i]));
+  }
+  const maxDb = Math.max(...energyDb, -100);
+  const voicedGateDb = Math.max(maxDb - 30, -60);
+  for (let i = 0; i < frames.length; i++) {
+    pitchHz[i] = energyDb[i] > voicedGateDb ? detectPitch(frames[i], sampleRate) : 0;
+  }
+  return { energyDb, pitchHz, hopSize, frameCount: frames.length };
+}
+
+// Relative voice-activity detection: anything within `dropDb` of the loudest
+// frame counts as "active speech". This works regardless of absolute mic
+// gain differences between the user's mic and the reference recording.
+//
+// If a calibrated noise floor is supplied (see micCalibration.js), the
+// threshold also can't drop below noiseFloorDb + a small margin — this
+// prevents a noisy/quiet mic's background hiss from being misread as
+// speech, which the purely-relative threshold alone can't always catch.
+function detectActivity(energyDb, dropDb = 32, noiseFloorDb = null) {
+  const maxDb = Math.max(...energyDb, -100);
+  let threshold = maxDb - dropDb;
+  if (noiseFloorDb != null) {
+    threshold = Math.max(threshold, noiseFloorDb + 6);
+  }
+  return energyDb.map((db) => db > threshold);
+}
+
+function trimToActive(active) {
+  let start = active.findIndex(Boolean);
+  let end = active.length - 1 - [...active].reverse().findIndex(Boolean);
+  if (start === -1) return { start: 0, end: -1 }; // fully silent
+  return { start, end };
+}
+
+function countPauses(active, start, end, hopMs, minPauseMs = 280) {
+  const minPauseFrames = Math.max(1, Math.round(minPauseMs / hopMs));
+  let pauses = 0;
+  let silentRun = 0;
+  for (let i = start; i <= end; i++) {
+    if (!active[i]) {
+      silentRun++;
+    } else {
+      if (silentRun >= minPauseFrames) pauses++;
+      silentRun = 0;
+    }
+  }
+  return pauses;
+}
+
+function zScore(arr) {
+  const valid = arr.filter((v) => Number.isFinite(v));
+  if (valid.length === 0) return arr.map(() => 0);
+  const mean = valid.reduce((a, b) => a + b, 0) / valid.length;
+  const variance = valid.reduce((a, b) => a + (b - mean) ** 2, 0) / valid.length;
+  const std = Math.sqrt(variance) || 1;
+  return arr.map((v) => (Number.isFinite(v) ? (v - mean) / std : 0));
+}
+
+function hzToSemitone(hz) {
+  return hz > 0 ? 12 * Math.log2(hz / 110) : null; // relative to A2, arbitrary anchor
+}
+
+// Bounded Dynamic Time Warping: aligns two feature sequences (arrays of
+// numbers) and returns the warping path plus normalized alignment cost.
+// Sequences are pre-downsampled by the caller to keep this O(n*m) bounded.
+function dtwAlign(seqA, seqB) {
+  const n = seqA.length;
+  const m = seqB.length;
+  if (n === 0 || m === 0) return { path: [], normalizedCost: 3 };
+
+  const INF = Infinity;
+  const cost = Array.from({ length: n + 1 }, () => new Float64Array(m + 1).fill(INF));
+  cost[0][0] = 0;
+
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      const d = Math.abs(seqA[i - 1] - seqB[j - 1]);
+      const best = Math.min(cost[i - 1][j], cost[i][j - 1], cost[i - 1][j - 1]);
+      cost[i][j] = d + best;
+    }
+  }
+
+  const path = [];
+  let i = n;
+  let j = m;
+  while (i > 0 && j > 0) {
+    path.push([i - 1, j - 1]);
+    const diag = cost[i - 1][j - 1];
+    const up = cost[i - 1][j];
+    const left = cost[i][j - 1];
+    if (diag <= up && diag <= left) { i--; j--; }
+    else if (up < left) { i--; }
+    else { j--; }
+  }
+  path.reverse();
+
+  const normalizedCost = cost[n][m] / path.length;
+  return { path, normalizedCost };
+}
+
+function downsample(arr, targetLen) {
+  if (arr.length <= targetLen) return arr;
+  const out = new Array(targetLen);
+  const bucket = arr.length / targetLen;
+  for (let i = 0; i < targetLen; i++) {
+    const start = Math.floor(i * bucket);
+    const end = Math.max(start + 1, Math.floor((i + 1) * bucket));
+    let sum = 0;
+    let count = 0;
+    for (let k = start; k < end && k < arr.length; k++) {
+      sum += arr[k];
+      count++;
+    }
+    out[i] = count ? sum / count : 0;
+  }
+  return out;
+}
+
+// Short median filter over voiced frames only. Removes isolated octave
+// errors (the autocorrelation detector occasionally locks onto a harmonic,
+// e.g. 266 Hz in the middle of a stable 133 Hz run) without smearing real
+// contour movement. Unvoiced frames (0) are left untouched.
+function medianFilterPitch(pitchHz, radius = 2) {
+  const out = pitchHz.slice();
+  for (let i = 0; i < pitchHz.length; i++) {
+    if (pitchHz[i] <= 0) continue;
+    const window = [];
+    for (let k = Math.max(0, i - radius); k <= Math.min(pitchHz.length - 1, i + radius); k++) {
+      if (pitchHz[k] > 0) window.push(pitchHz[k]);
+    }
+    window.sort((a, b) => a - b);
+    out[i] = window[Math.floor(window.length / 2)];
+  }
+  return out;
+}
+
+// Voiced-aware downsampling for pitch tracks. The generic downsample()
+// arithmetic-averages every value in a bucket — but pitch tracks use 0 Hz
+// to mean "unvoiced", so averaging [148, 0] manufactured impossible values
+// like 74 Hz that then poisoned the pitch correlation (this was the cause
+// of near-zero pitch scores on real voice). Instead: median of the voiced
+// frames per bucket, or null when under half the bucket is voiced.
+function downsamplePitchVoiced(pitchHz, targetLen) {
+  if (pitchHz.length <= targetLen) return pitchHz.map((v) => (v > 0 ? v : null));
+  const out = new Array(targetLen);
+  const bucket = pitchHz.length / targetLen;
+  for (let i = 0; i < targetLen; i++) {
+    const start = Math.floor(i * bucket);
+    const end = Math.max(start + 1, Math.floor((i + 1) * bucket));
+    const voiced = [];
+    let total = 0;
+    for (let k = start; k < end && k < pitchHz.length; k++) {
+      total++;
+      if (pitchHz[k] > 0) voiced.push(pitchHz[k]);
+    }
+    if (voiced.length === 0 || voiced.length < total / 2) {
+      out[i] = null;
+      continue;
+    }
+    voiced.sort((a, b) => a - b);
+    out[i] = voiced[Math.floor(voiced.length / 2)];
+  }
+  return out;
+}
+
+function pearson(a, b) {
+  const n = Math.min(a.length, b.length);
+  if (n < 3) return 0;
+  let meanA = 0, meanB = 0;
+  for (let i = 0; i < n; i++) { meanA += a[i]; meanB += b[i]; }
+  meanA /= n; meanB /= n;
+  let num = 0, denA = 0, denB = 0;
+  for (let i = 0; i < n; i++) {
+    const da = a[i] - meanA;
+    const db = b[i] - meanB;
+    num += da * db;
+    denA += da * da;
+    denB += db * db;
+  }
+  const den = Math.sqrt(denA * denB);
+  return den === 0 ? 0 : num / den;
+}
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+function buildFeedback({ overall, durationRatio, alignmentScore, energyScore, pitchScore, pauseCount, referenceAvailable }) {
+  const notes = [];
+
+  if (!referenceAvailable) {
+    notes.push(
+      "The reference reciter's audio couldn't be loaded for direct comparison, so this score reflects your recording's own clarity, pacing, and pauses only."
+    );
+  }
+
+  if (durationRatio != null) {
+    if (durationRatio > 1.18) {
+      notes.push(`You recited about ${Math.round((durationRatio - 1) * 100)}% slower than the reference — check you're not over-elongating or hesitating.`);
+    } else if (durationRatio < 0.82) {
+      notes.push(`You recited about ${Math.round((1 - durationRatio) * 100)}% faster than the reference — slow down so elongations (madd) get their full length.`);
+    } else {
+      notes.push("Your overall pacing was close to the reference reciter's.");
+    }
+  }
+
+  if (pauseCount > 3) {
+    notes.push(`Detected ${pauseCount} noticeable pauses — try reciting the verse more continuously.`);
+  }
+
+  if (alignmentScore != null) {
+    if (alignmentScore < 45) notes.push("The rhythm/structure of your recitation diverged significantly from the reference — try listening once more, then recording.");
+    else if (alignmentScore >= 80) notes.push("Your rhythm closely tracked the reference recitation.");
+  }
+
+  if (pitchScore != null) {
+    if (pitchScore < 45) notes.push("Your intonation (pitch rise/fall) didn't closely match the reference — pay attention to how the reciter's voice moves up and down.");
+    else if (pitchScore >= 80) notes.push("Your intonation contour matched the reference well.");
+  }
+
+  if (energyScore != null) {
+    if (energyScore < 45) notes.push("Where you emphasized/stressed syllables differed from the reference reciter.");
+  }
+
+  if (overall >= 90) notes.unshift("Excellent — a very close acoustic match to the reference recitation.");
+  else if (overall >= 75) notes.unshift("Good recitation — solid match with some room to refine timing and pitch.");
+  else if (overall >= 50) notes.unshift("Recognizable, but there's a clear gap versus the reference — more practice will help.");
+  else notes.unshift("This attempt diverged substantially from the reference recitation.");
+
+  return notes;
+}
+
+function analyzeSingle(samples, sampleRate, noiseFloorDb = null) {
+  const { energyDb, pitchHz, hopSize } = buildFeatures(samples, sampleRate);
+  const hopMs = (hopSize / sampleRate) * 1000;
+  const active = detectActivity(energyDb, 32, noiseFloorDb);
+  const { start, end } = trimToActive(active);
+  const isSilent = start > end;
+  const pauseCount = isSilent ? 0 : countPauses(active, start, end, hopMs);
+  const durationSec = samples.length / sampleRate;
+  const activeDurationSec = isSilent ? 0 : ((end - start + 1) * hopSize) / sampleRate;
+  return { energyDb, pitchHz, hopMs, active, start, end, isSilent, pauseCount, durationSec, activeDurationSec };
+}
+
+// Compares two already-decoded mono sample arrays (same sample rate).
+// This is the core comparison engine, used both for single-ayah recording
+// and for continuous (multi-ayah) recitation, where the reference samples
+// are several ayahs concatenated together.
+export function compareSamples(userSamples, refSamples, sampleRate = TARGET_SAMPLE_RATE, { userNoiseFloorDb = null } = {}) {
+  const user = analyzeSingle(userSamples, sampleRate, userNoiseFloorDb);
+  const ref = analyzeSingle(refSamples, sampleRate);
+
+  if (user.isSilent || user.durationSec < 0.35) {
+    return {
+      score: 0,
+      referenceAvailable: true,
+      userDuration: user.durationSec,
+      referenceDuration: ref.durationSec,
+      pauseCount: 0,
+      feedback: ["No speech was detected in your recording — make sure your microphone is working and try again."],
+    };
+  }
+
+  // Trim both to their active (voiced) region before comparing shape.
+  const userEnergy = user.energyDb.slice(user.start, user.end + 1);
+  const userPitch = user.pitchHz.slice(user.start, user.end + 1);
+  const refEnergy = ref.energyDb.slice(ref.start, ref.end + 1);
+  const refPitch = ref.pitchHz.slice(ref.start, ref.end + 1);
+
+  const targetLen = clamp(Math.min(userEnergy.length, refEnergy.length), 20, 220);
+  const userEnergyDs = downsample(zScore(userEnergy), targetLen);
+  const refEnergyDs = downsample(zScore(refEnergy), targetLen);
+
+  const { path, normalizedCost } = dtwAlign(userEnergyDs, refEnergyDs);
+  const alignmentScore = clamp(100 * Math.exp(-normalizedCost / 1.4), 0, 100);
+
+  // Use the DTW path to align pitch contours (in semitones) before
+  // correlating them, so tempo differences don't wreck the comparison.
+  // Pitch goes through its own voiced-aware downsampling (median of voiced
+  // frames, null for mostly-unvoiced buckets) — the generic averaging
+  // downsample() blends unvoiced 0s into the contour and wrecks it.
+  const userSemitone = downsamplePitchVoiced(medianFilterPitch(userPitch), targetLen).map((v) =>
+    v == null ? null : hzToSemitone(v)
+  );
+  const refSemitone = downsamplePitchVoiced(medianFilterPitch(refPitch), targetLen).map((v) =>
+    v == null ? null : hzToSemitone(v)
+  );
+  const pairedUserPitch = [];
+  const pairedRefPitch = [];
+  for (const [i, j] of path) {
+    const u = userSemitone[i];
+    const r = refSemitone[j];
+    if (u != null && r != null) {
+      pairedUserPitch.push(u);
+      pairedRefPitch.push(r);
+    }
+  }
+  // A pitch-contour correlation is only meaningful with enough actual
+  // voiced audio on both sides — counting DTW pairs alone is not enough,
+  // because the path repeats indices when one series is much shorter
+  // (e.g. a recording that is mostly silence), letting a fraction of a
+  // second of voice masquerade as a measured score. Require ~0.5s of
+  // voiced frames (12ms hop) each; otherwise report pitch as unavailable.
+  const MIN_VOICED_FRAMES = 40;
+  const userVoicedFrames = userPitch.filter((v) => v > 0).length;
+  const refVoicedFrames = refPitch.filter((v) => v > 0).length;
+  const pitchCorr =
+    userVoicedFrames >= MIN_VOICED_FRAMES && refVoicedFrames >= MIN_VOICED_FRAMES && pairedUserPitch.length >= 6
+      ? pearson(pairedUserPitch, pairedRefPitch)
+      : null;
+  const pitchScore = pitchCorr == null ? null : clamp(Math.max(pitchCorr, 0) * 100, 0, 100);
+
+  const pairedUserEnergy = path.map(([i]) => userEnergyDs[i]);
+  const pairedRefEnergy = path.map(([, j]) => refEnergyDs[j]);
+  const energyCorr = pearson(pairedUserEnergy, pairedRefEnergy);
+  const energyScore = clamp(Math.max(energyCorr, 0) * 100, 0, 100);
+
+  const durationRatio = user.activeDurationSec / Math.max(ref.activeDurationSec, 0.05);
+  const durationScore = clamp(100 * (1 - Math.abs(durationRatio - 1) / 0.6), 0, 100);
+
+  const components = [
+    { score: durationScore, weight: 0.2 },
+    { score: alignmentScore, weight: 0.3 },
+    { score: energyScore, weight: 0.25 },
+    { score: pitchScore, weight: pitchScore == null ? 0 : 0.25 },
+  ];
+  const totalWeight = components.reduce((s, c) => s + (c.score == null ? 0 : c.weight), 0) || 1;
+  const overall = Math.round(
+    components.reduce((s, c) => s + (c.score == null ? 0 : c.score * c.weight), 0) / totalWeight
+  );
+
+  const feedback = buildFeedback({
+    overall,
+    durationRatio,
+    alignmentScore,
+    energyScore,
+    pitchScore,
+    pauseCount: user.pauseCount,
+    referenceAvailable: true,
+  });
+
+  return {
+    score: clamp(overall, 0, 100),
+    referenceAvailable: true,
+    userDuration: Math.round(user.durationSec * 10) / 10,
+    referenceDuration: Math.round(ref.durationSec * 10) / 10,
+    durationRatio: Math.round(durationRatio * 100) / 100,
+    alignmentScore: Math.round(alignmentScore),
+    energyScore: Math.round(energyScore),
+    pitchScore: pitchScore == null ? null : Math.round(pitchScore),
+    pauseCount: user.pauseCount,
+    feedback,
+  };
+}
+
+// Convenience wrapper: decodes two raw audio byte buffers, then compares
+// them. Used when comparing a single recorded ayah against its single
+// reference-reciter audio file.
+export async function compareRecitation(userArrayBuffer, referenceArrayBuffer) {
+  const [userSamples, refSamples] = await Promise.all([
+    decodeToMonoSamples(userArrayBuffer),
+    decodeToMonoSamples(referenceArrayBuffer),
+  ]);
+  return compareSamples(userSamples, refSamples, TARGET_SAMPLE_RATE);
+}
+
+// Extracts a per-frame energy (dB) slice for an arbitrary [startSec, endSec]
+// time window, used by the Tajweed heuristics to look at a specific word's
+// audio rather than the whole recording.
+export function energyProfileForWindow(samples, sampleRate, startSec, endSec) {
+  const { frames, hopSize } = frameSignal(samples, sampleRate);
+  const hopSec = hopSize / sampleRate;
+  const startFrame = Math.max(0, Math.floor(startSec / hopSec));
+  const endFrame = Math.min(frames.length - 1, Math.ceil(endSec / hopSec));
+  const energyDb = [];
+  for (let i = startFrame; i <= endFrame; i++) {
+    if (frames[i]) energyDb.push(toDb(rms(frames[i])));
+  }
+  return { energyDb, hopSec };
+}
+
+// Produces a coarse, normalized (0..1) amplitude envelope over the full
+// raw recording, suitable for drawing a simple waveform/timeline in the
+// UI. Uses the same frame/hop timing as the rest of the analysis so
+// on-screen positions line up with Tajweed rule timestamps.
+export function getVisualizationEnvelope(samples, sampleRate = TARGET_SAMPLE_RATE, maxPoints = 150) {
+  const { energyDb, hopSize } = buildFeatures(samples, sampleRate);
+  const hopSec = hopSize / sampleRate;
+  const durationSec = samples.length / sampleRate;
+
+  if (energyDb.length === 0) {
+    return { points: [], hopSec, durationSec, pointDurationSec: durationSec };
+  }
+
+  const floorDb = Math.min(...energyDb);
+  const ceilDb = Math.max(...energyDb);
+  const range = Math.max(ceilDb - floorDb, 1e-6);
+  const normalized = energyDb.map((db) => clamp((db - floorDb) / range, 0, 1));
+  const points = downsample(normalized, Math.min(maxPoints, normalized.length));
+  const pointDurationSec = durationSec / points.length;
+
+  return { points, hopSec, durationSec, pointDurationSec };
+}
+
+// Fallback when no reference audio could be loaded (offline, CORS, etc).
+// Scores recording *quality* honestly — it does not pretend to know how
+// accurate the recitation was versus a reference.
+export function analyzeRecordingQualityOnly(samples, sampleRate = TARGET_SAMPLE_RATE, noiseFloorDb = null) {
+  const a = analyzeSingle(samples, sampleRate, noiseFloorDb);
+
+  if (a.isSilent || a.durationSec < 0.35) {
+    return {
+      score: 0,
+      referenceAvailable: false,
+      userDuration: a.durationSec,
+      pauseCount: 0,
+      feedback: ["No speech was detected in your recording — make sure your microphone is working and try again."],
+    };
+  }
+
+  const voicedFrames = a.active.slice(a.start, a.end + 1).filter(Boolean).length;
+  const totalFrames = a.end - a.start + 1;
+  const voicedRatio = voicedFrames / Math.max(totalFrames, 1);
+
+  const pitchValues = a.pitchHz.slice(a.start, a.end + 1).filter((p) => p > 0).map(hzToSemitone);
+  let pitchStabilityScore = 60;
+  if (pitchValues.length >= 6) {
+    const mean = pitchValues.reduce((s, v) => s + v, 0) / pitchValues.length;
+    const variance = pitchValues.reduce((s, v) => s + (v - mean) ** 2, 0) / pitchValues.length;
+    const std = Math.sqrt(variance);
+    pitchStabilityScore = clamp(100 - std * 12, 20, 100);
+  }
+
+  const pauseScore = clamp(100 - a.pauseCount * 12, 20, 100);
+  const voicedScore = clamp(voicedRatio * 130, 0, 100);
+
+  const overall = Math.round(0.4 * voicedScore + 0.3 * pauseScore + 0.3 * pitchStabilityScore);
+
+  const feedback = [
+    "No matching reference reciter audio was available, so this reflects the clarity and steadiness of your recording rather than a comparison to a reciter.",
+  ];
+  if (a.pauseCount > 3) feedback.push(`Detected ${a.pauseCount} noticeable pauses in your recitation.`);
+  if (voicedRatio < 0.5) feedback.push("A large portion of the recording had little detectable speech — try recording in a quieter environment, closer to the mic.");
+  if (pitchStabilityScore < 50) feedback.push("Your pitch varied quite a bit — steady, controlled intonation will help your recitation flow.");
+
+  return {
+    score: clamp(overall, 0, 100),
+    referenceAvailable: false,
+    userDuration: Math.round(a.durationSec * 10) / 10,
+    pauseCount: a.pauseCount,
+    feedback,
+  };
+}

@@ -1,0 +1,48 @@
+# Remote project configuration applied with `npx supabase config push`.
+#
+# IMPORTANT: `config push` writes CLI DEFAULTS for any field not listed
+# here (verified: an early push tried to flip MFA settings we never asked
+# about). Every managed field below is pinned, either to the value we want
+# or to what the dashboard already had.
+project_id = "hfmyyjotththoziatilb"
+
+[auth]
+# Where the sign-in email's links/redirects land: the app itself.
+site_url = "http://localhost:5173"
+additional_redirect_urls = []
+
+[auth.mfa.totp]
+# Pinned to the dashboard's existing values (config push would otherwise
+# silently disable these).
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+max_frequency = "1m0s"
+# 6-digit code (the app's UpgradeModal asks for exactly 6).
+otp_length = 6
+otp_expiry = 3600
+
+# Custom SMTP via Brevo — required to (a) send auth email reliably and
+# (b) unlock email-template customization (the free-tier built-in provider
+# forbids both). Credentials verified against smtp-relay.brevo.com before
+# this was pushed. The password is read from the environment (never stored
+# in this committed file) — see the push command in the README.
+[auth.email.smtp]
+enabled = true
+host = "smtp-relay.brevo.com"
+port = 587
+user = "b1ca38001@smtp-brevo.com"
+pass = "env(SMTP_PASSWORD)"
+admin_email = "alaminoyeyemi64@gmail.com"
+sender_name = "Tilawah"
+
+# signInWithOtp sends the "magic link" template; with SMTP enabled we can
+# now replace it with the 6-digit code email (supabase/templates/magic_link.html
+# contains {{ .Token }}, no link).
+[auth.email.template.magic_link]
+subject = "Your Tilawah sign-in code"
+content_path = "./supabase/templates/magic_link.html"
