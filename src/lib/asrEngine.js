@@ -5,15 +5,6 @@ import { describeMemoryCheckpoint } from "@/lib/memoryLedger";
 
 const MODEL_PREF_KEY = "qc_asr_model_pref"; // "fast" | "accurate"
 
-// TEMP DIAGNOSTIC (mobile OOM investigation, 2026-07): force the tiny
-// model for EVERY device, bypassing preference and device detection. If
-// the tab kill stops with this on, the crash is conclusively model-size
-// driven; if it persists, the bottleneck is elsewhere (wasm runtime
-// baseline, decode buffers). Only affects which model the worker loads —
-// getAsrModelPreference (and the Settings UI) stay truthful, and the
-// asr-load-start lifecycle event names the actually-loaded model.
-const FORCE_FAST_MODEL_DIAGNOSTIC = true;
-
 // Keep ids in sync with ASR_MODELS in src/workers/asrWorker.js (see the
 // comment there for why the accurate slot is currently generic whisper-base
 // rather than a Quran fine-tune).
@@ -114,7 +105,6 @@ export function setAsrModelPreference(pref) {
 }
 
 function currentModelId() {
-  if (FORCE_FAST_MODEL_DIAGNOSTIC) return ASR_MODEL_OPTIONS.fast.id;
   return ASR_MODEL_OPTIONS[getAsrModelPreference()].id;
 }
 
@@ -203,7 +193,7 @@ export function ensureAsrModelLoaded(onProgress) {
   const modelId = currentModelId();
   // Fine-grained OOM checkpoints: the lifecycle log persists across a tab
   // kill, so whichever of these is the LAST entry pinpoints the crash line.
-  recordLifecycleEvent("asr-load-start", `${modelId} (pref=${getAsrModelPreference()}${FORCE_FAST_MODEL_DIAGNOSTIC ? ", FORCED fast" : ""})`);
+  recordLifecycleEvent("asr-load-start", `${modelId} (pref=${getAsrModelPreference()})`);
   let sawFirstProgress = false;
   let sawDownloadComplete = false;
   const trackedProgress = (pct) => {
