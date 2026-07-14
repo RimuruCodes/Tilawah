@@ -8,8 +8,9 @@ project_id = "hfmyyjotththoziatilb"
 
 [auth]
 # Where the sign-in email's links/redirects land: the app itself.
-site_url = "http://localhost:5173"
-additional_redirect_urls = []
+site_url = "https://tilawah-7ox.pages.dev"
+# Local dev stays allowed for auth flows without touching production config.
+additional_redirect_urls = ["http://localhost:5173"]
 
 [auth.mfa.totp]
 # Pinned to the dashboard's existing values (config push would otherwise
