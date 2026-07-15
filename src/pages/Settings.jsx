@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, User, Trash2, LogOut, Loader2, Mail, AlertTriangle, Download, Upload, Mic2, CheckCircle2, Sparkles, MessageCircle } from "lucide-react";
+import { ArrowLeft, User, Trash2, LogOut, Loader2, AlertTriangle, Download, Upload, Mic2, CheckCircle2, Sparkles, MessageCircle } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { useSubscription } from "@/lib/SubscriptionContext";
 import { describeSubscription } from "@/lib/entitlements";
@@ -17,6 +17,7 @@ import { getLifecycleEvents, clearLifecycleEvents } from "@/lib/lifecycleDebug";
 import { getStoredCalibration } from "@/lib/micCalibration";
 import CalibrationModal from "@/components/CalibrationModal";
 import UpgradeModal from "@/components/quran/UpgradeModal";
+import RestoreSubscriptionModal from "@/components/quran/RestoreSubscriptionModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,6 +47,7 @@ export default function Settings() {
   // Bumped to re-render the temporary lifecycle-debug log after clearing it.
   const [, setLifecycleLogCleared] = useState(0);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
   const [portalBusy, setPortalBusy] = useState(false);
   const [portalError, setPortalError] = useState("");
   const [checkoutNote, setCheckoutNote] = useState("");
@@ -193,15 +195,14 @@ export default function Settings() {
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
               <span className="text-lg font-bold text-emerald-400">
-                {user?.email?.[0]?.toUpperCase() || "?"}
+                {user?.full_name?.[0]?.toUpperCase() || "?"}
               </span>
             </div>
             <div>
-              <p className="text-sm font-medium text-white">{user?.full_name || "Quran Companion User"}</p>
-              <p className="text-xs text-slate-500 flex items-center gap-1">
-                <Mail className="w-3 h-3" />
-                {user?.email || "—"}
-              </p>
+              <p className="text-sm font-medium text-white">{user?.full_name || "Reciter"}</p>
+              {/* No email is shown: the app stores only a one-way hash of it,
+                  never a readable copy (see localAuth.js). */}
+              <p className="text-xs text-slate-500">Local account on this device</p>
             </div>
           </div>
         </motion.div>
@@ -259,12 +260,20 @@ export default function Settings() {
                 Questions about your subscription? Contact us
               </Link>
             ) : (
-              <button
-                onClick={() => setUpgradeOpen(true)}
-                className="w-full px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-900 text-sm font-medium hover:bg-emerald-400 transition-colors"
-              >
-                Upgrade
-              </button>
+              <>
+                <button
+                  onClick={() => setUpgradeOpen(true)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-900 text-sm font-medium hover:bg-emerald-400 transition-colors"
+                >
+                  Upgrade
+                </button>
+                <button
+                  onClick={() => setRestoreOpen(true)}
+                  className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  Already subscribed on another device? Restore purchase
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -621,6 +630,7 @@ export default function Settings() {
       </div>
 
       <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} featureLabel="the full experience" />
+      <RestoreSubscriptionModal open={restoreOpen} onClose={() => setRestoreOpen(false)} />
     </div>
   );
 }

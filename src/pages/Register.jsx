@@ -4,11 +4,12 @@ import { register } from "@/lib/localAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UserPlus, Mail, Lock, Loader2 } from "lucide-react";
+import { UserPlus, Mail, Lock, Loader2, User } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 
 export default function Register() {
   const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
@@ -27,7 +28,7 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      await register({ email, password });
+      await register({ email, password, display_name: displayName });
       window.location.href = "/";
     } catch (err) {
       setError(err.message || "Registration failed");
@@ -78,6 +79,24 @@ export default function Register() {
               required
             />
           </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="displayName">Display name (optional)</Label>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            <Input
+              id="displayName"
+              type="text"
+              autoComplete="nickname"
+              placeholder="How should we greet you?"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="pl-10 h-12"
+            />
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Shown in the app instead of your email. Defaults to "Reciter" if left blank.
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="password">Password</Label>

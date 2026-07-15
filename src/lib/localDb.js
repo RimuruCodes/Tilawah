@@ -119,7 +119,10 @@ export function exportUserData() {
   EXPORTABLE_COLLECTIONS.forEach((c) => { data[c] = readAll(c); });
   return {
     exportedAt: new Date().toISOString(),
-    user: user ? { email: user.email, full_name: user.full_name } : null,
+    // Only the display name is included — the app never holds a readable
+    // copy of the email (localAuth.js stores a one-way hash), so a backup
+    // file can't leak one either.
+    user: user ? { full_name: user.full_name } : null,
     data,
   };
 }

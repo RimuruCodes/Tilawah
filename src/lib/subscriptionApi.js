@@ -9,9 +9,43 @@
 // subscription state — the client only reads it. (Cash App remains only
 // for voluntary donations — see src/lib/payments.js.)
 import { supabase } from "@/lib/supabaseClient";
+import {
+  clearSubscriberOwner,
+  getSubscriberOwner,
+  setSubscriberOwner,
+  shouldSignOutSubscriber,
+} from "@/lib/subscriberIdentity";
 
 function requireBackend() {
   if (!supabase) throw new Error("Subscriptions aren't available in this build.");
+}
+
+// Records that the Supabase subscriber session now belongs to this local
+// account — called right after a successful OTP verify (subscribing or
+// restoring). See src/lib/subscriberIdentity.js for why this linkage
+// exists.
+export function claimSubscriberSession(localUserId) {
+  setSubscriberOwner(localUserId);
+}
+
+// Reconciles the Supabase subscriber session against the currently
+// signed-in local account, signing it out if it doesn't belong to them.
+// Safe to call with a null id (logged-out state) and safe when the backend
+// isn't configured (no-op). See shouldSignOutSubscriber for the rules.
+export async function reconcileSubscriberSession(currentLocalId) {
+  if (!supabase) return;
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const signOut = shouldSignOutSubscriber({
+    hasSubscriberSession: !!session,
+    ownerLocalId: getSubscriberOwner(),
+    currentLocalId: currentLocalId ?? null,
+  });
+  if (signOut) {
+    await supabase.auth.signOut();
+    clearSubscriberOwner();
+  }
 }
 
 // Step 1 of proving email ownership: Supabase emails a 6-digit code
@@ -51,6 +85,7 @@ export async function getSubscriptionStatus() {
 }
 
 export async function subscriberSignOut() {
+  clearSubscriberOwner();
   if (!supabase) return;
   await supabase.auth.signOut();
 }

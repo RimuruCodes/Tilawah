@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { supabase, isSubscriptionBackendConfigured } from "@/lib/supabaseClient";
 import { getSubscriptionStatus } from "@/lib/subscriptionApi";
-import { isOwnerEmail, OWNER_SUBSCRIPTION } from "@/lib/entitlements";
+import { isOwnerEmailHash, OWNER_SUBSCRIPTION } from "@/lib/entitlements";
 import { useAuth } from "@/lib/AuthContext";
 
 const SubscriptionContext = createContext();
@@ -55,7 +55,7 @@ export const SubscriptionProvider = ({ children }) => {
   // Derived at render time (not stored) so it tracks local login/logout:
   // the moment the owner's account signs in, `user` updates and every
   // consumer re-renders with the comped subscription.
-  const isOwner = isOwnerEmail(user?.email);
+  const isOwner = isOwnerEmailHash(user?.emailHash);
   const effectiveSubscription = isOwner ? OWNER_SUBSCRIPTION : subscription;
 
   return (

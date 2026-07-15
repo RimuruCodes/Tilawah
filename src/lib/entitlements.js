@@ -17,6 +17,19 @@ export function isOwnerEmail(email) {
   return typeof email === "string" && OWNER_EMAILS.has(email.trim().toLowerCase());
 }
 
+// The local account no longer stores a plaintext email — only a one-way
+// SHA-256 hash (see src/lib/localAuth.js hashEmail). Owner comp therefore
+// matches on the hash. These MUST correspond to OWNER_EMAILS above:
+//   node -e "crypto.createHash('sha256').update('EMAIL').digest('hex')"
+// (an e2e guard in e2e/fixtures.js re-derives and asserts this match).
+const OWNER_EMAIL_HASHES = new Set([
+  "a3e61f545e3decd4fe0524ee015973b4adca78597ad07ded87480354dd694c26", // alaminoyeyemi64@gmail.com
+]);
+
+export function isOwnerEmailHash(emailHash) {
+  return typeof emailHash === "string" && OWNER_EMAIL_HASHES.has(emailHash.toLowerCase());
+}
+
 // Shaped like a real subscription row so isSubscriptionActive,
 // canAccessFeature and describeSubscription all treat it uniformly.
 export const OWNER_SUBSCRIPTION = Object.freeze({ status: "active", plan: "owner" });

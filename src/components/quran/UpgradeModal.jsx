@@ -2,8 +2,10 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Loader2, AlertTriangle, CheckCircle2, Mail, ExternalLink } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { requestLoginCode, verifyLoginCode, startCheckout } from "@/lib/subscriptionApi";
+import { requestLoginCode, verifyLoginCode, startCheckout, claimSubscriberSession } from "@/lib/subscriptionApi";
 import { useSubscription } from "@/lib/SubscriptionContext";
+import { useAuth } from "@/lib/AuthContext";
+import { hashEmail } from "@/lib/localAuth";
 import { isSubscriptionActive } from "@/lib/entitlements";
 import { SUBSCRIPTION_PLANS } from "@/lib/payments";
 
@@ -20,6 +22,7 @@ import { SUBSCRIPTION_PLANS } from "@/lib/payments";
 // re-reads entitlement state on load.
 export default function UpgradeModal({ open, onClose, featureLabel }) {
   const { refreshSubscription } = useSubscription();
+  const { user } = useAuth();
   const [step, setStep] = useState("plan"); // plan, email, code, pay, restored, error
   const [plan, setPlan] = useState("yearly");
   const [email, setEmail] = useState("");
@@ -43,6 +46,15 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
     setBusy(true);
     setErrorMessage("");
     try {
+      // Subscribing links a paid identity to the account you're signed in
+      // as, so the email MUST match this local account. Enforced by hash
+      // (the app never stores the plaintext address to compare against).
+      // A returning subscriber on a new device uses "Restore purchase"
+      // instead — that flow is deliberately independent of the local email.
+      if (user?.emailHash && (await hashEmail(email.trim())) !== user.emailHash) {
+        setErrorMessage("Use the email you registered this account with. Already subscribed on another device? Use “Restore purchase” in Settings.");
+        return;
+      }
       await requestLoginCode(email.trim());
       setStep("code");
     } catch (err) {
@@ -58,6 +70,8 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
     setErrorMessage("");
     try {
       await verifyLoginCode(email.trim(), code.trim());
+      // The Supabase session now belongs to this local account.
+      claimSubscriberSession(user?.id);
       const subscription = await refreshSubscription();
       if (isSubscriptionActive(subscription)) {
         // Already subscribed (e.g. verifying on a second device) — nothing

@@ -8,8 +8,9 @@
 // so "recording with the microphone" plays that file instead of live audio.
 import { test as base, chromium, expect } from "@playwright/test";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { isOwnerEmail } from "../src/lib/entitlements.js";
+import { isOwnerEmail, isOwnerEmailHash } from "../src/lib/entitlements.js";
 import { fixturePath } from "./generate-audio.js";
 
 // Browsers are installed inside node_modules (see README) — keep runtime
@@ -26,9 +27,20 @@ export const BASE_URL = "http://localhost:5173";
 // paywalled "Recite All" flow run without any subscription backend. The
 // assertion fails the whole suite loudly if the owner email ever changes.
 export const E2E_EMAIL = "alaminoyeyemi64@gmail.com";
+// The local account stores only a one-way hash of the email now (see
+// src/lib/localAuth.js hashEmail), so the seeded owner account below carries
+// the hash, not the address. Derive it the same way the app does.
+export const E2E_EMAIL_HASH = createHash("sha256").update(E2E_EMAIL.trim().toLowerCase()).digest("hex");
 if (!isOwnerEmail(E2E_EMAIL)) {
   throw new Error(
     `e2e login email "${E2E_EMAIL}" is no longer an owner email — update E2E_EMAIL in e2e/fixtures.js to match OWNER_EMAILS in src/lib/entitlements.js`
+  );
+}
+// The owner comp now matches on the hash — guard that entitlements' hash set
+// still corresponds to E2E_EMAIL, or the paywalled flows would silently lock.
+if (!isOwnerEmailHash(E2E_EMAIL_HASH)) {
+  throw new Error(
+    `e2e owner hash for "${E2E_EMAIL}" isn't in OWNER_EMAIL_HASHES — update src/lib/entitlements.js`
   );
 }
 
@@ -55,10 +67,10 @@ export const test = base.extend({
       // local session (owner account) and the small/fast ASR model so the
       // first-run download is as light as possible.
       await context.addInitScript(
-        ([email]) => {
+        ([emailHash]) => {
           const user = {
             id: "e2e-owner",
-            email,
+            emailHash,
             full_name: "E2E Owner",
             role: "user",
             created_date: new Date().toISOString(),
@@ -67,7 +79,7 @@ export const test = base.extend({
           localStorage.setItem("qc_session", JSON.stringify({ userId: user.id, token: "e2e" }));
           localStorage.setItem("qc_asr_model_pref", "fast");
         },
-        [E2E_EMAIL]
+        [E2E_EMAIL_HASH]
       );
       await use(context);
       await context.close();

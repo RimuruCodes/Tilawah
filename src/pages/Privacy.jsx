@@ -71,7 +71,7 @@ export default function Privacy() {
             we have no server for it:
           </p>
           <ul className="list-disc pl-5 space-y-1">
-            <li>Your local account: email, display name, and a hashed password (used only to unlock the app on this device).</li>
+            <li>Your local account: a one-way hash of your email (never a readable copy), a display name you choose, and a hashed password — used only to unlock the app on this device.</li>
             <li>Recitation scores and text feedback, including which verses you practiced.</li>
             <li>Streaks, memorization progress, recitation-plan progress, and any "this result seems off" reports you file (text only).</li>
             <li>Preferences: microphone calibration, speech-recognition settings, display options, and a technical diagnostic log.</li>
@@ -147,6 +147,12 @@ export default function Privacy() {
             The local password protects the app's screens, not the underlying storage. Server-side
             data is protected by Supabase's and Stripe's security controls plus row-level access
             rules.
+          </p>
+          <p>
+            Your email is stored locally only as a one-way hash, so the app never keeps a readable
+            copy of your email — this hides it from casual inspection of local storage, but is not
+            strong protection against someone with full access to your device (a known address can
+            be checked against the hash).
           </p>
         </Section>
 

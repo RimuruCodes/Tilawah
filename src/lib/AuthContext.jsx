@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import * as localAuth from '@/lib/localAuth';
+import { reconcileSubscriberSession, subscriberSignOut } from '@/lib/subscriptionApi';
 
 const AuthContext = createContext();
 
@@ -12,6 +13,15 @@ export const AuthProvider = ({ children }) => {
   const checkUserAuth = useCallback(async () => {
     setIsLoadingAuth(true);
     const current = localAuth.getCurrentUser();
+    // Reconcile the Supabase subscriber identity against whoever is signed
+    // in locally on THIS load, so a lingering subscription session can't
+    // leak paid features across a logout or an account switch. Never let a
+    // reconcile failure (offline, etc.) block rendering the app.
+    try {
+      await reconcileSubscriberSession(current?.id ?? null);
+    } catch {
+      /* non-fatal: entitlement checks fail closed to the free tier */
+    }
     setUser(current);
     setIsAuthenticated(!!current);
     setIsLoadingAuth(false);
@@ -22,8 +32,16 @@ export const AuthProvider = ({ children }) => {
     checkUserAuth();
   }, [checkUserAuth]);
 
-  const logout = () => {
+  const logout = async () => {
     localAuth.logout();
+    // Logging out of the app also drops the Supabase subscriber session —
+    // otherwise it would outlive the local logout and attach to whoever
+    // signs in next on this device.
+    try {
+      await subscriberSignOut();
+    } catch {
+      /* best-effort; the reconcile on next load is the backstop */
+    }
     setUser(null);
     setIsAuthenticated(false);
     window.location.href = '/login';

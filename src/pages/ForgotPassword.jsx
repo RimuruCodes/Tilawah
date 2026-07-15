@@ -5,11 +5,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mail, ArrowLeft, Loader2, AlertTriangle } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
+import { hashEmail } from "@/lib/localAuth";
 
-function findLocalUserByEmail(email) {
+// Matches by the one-way email hash (with a legacy plaintext fallback) so
+// account existence is confirmed WITHOUT the app ever holding — or echoing
+// back — a readable copy of the address.
+async function findLocalUserByEmail(email) {
   try {
+    const normalized = email.trim().toLowerCase();
+    const emailHash = await hashEmail(normalized);
     const users = JSON.parse(localStorage.getItem("qc_users") || "[]");
-    return users.find((u) => u.email === email.trim().toLowerCase());
+    return (
+      users.find((u) => u.emailHash === emailHash) ||
+      users.find((u) => u.email === normalized) ||
+      null
+    );
   } catch {
     return null;
   }
@@ -19,28 +29,30 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [checked, setChecked] = useState(false);
-  const [found, setFound] = useState(false);
+  // Holds the matched account so deletion can target it by id without
+  // re-deriving anything from the (never-displayed) email.
+  const [foundUser, setFoundUser] = useState(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [done, setDone] = useState(false);
+  const found = !!foundUser;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const user = findLocalUserByEmail(email);
-    setFound(!!user);
+    const user = await findLocalUserByEmail(email);
+    setFoundUser(user);
     setChecked(true);
     setLoading(false);
   };
 
   const handleDeleteAndRestart = () => {
-    const users = JSON.parse(localStorage.getItem("qc_users") || "[]");
-    const target = findLocalUserByEmail(email);
-    if (target) {
-      const remaining = users.filter((u) => u.id !== target.id);
+    if (foundUser) {
+      const users = JSON.parse(localStorage.getItem("qc_users") || "[]");
+      const remaining = users.filter((u) => u.id !== foundUser.id);
       localStorage.setItem("qc_users", JSON.stringify(remaining));
       // Also clear that account's stored recitation/progress data.
       Object.keys(localStorage)
-        .filter((k) => k.startsWith(`qc_data_${target.id}_`))
+        .filter((k) => k.startsWith(`qc_data_${foundUser.id}_`))
         .forEach((k) => localStorage.removeItem(k));
     }
     setDone(true);
@@ -111,8 +123,8 @@ export default function ForgotPassword() {
       ) : !confirmingDelete ? (
         <div className="space-y-4">
           <p className="text-sm text-foreground text-center">
-            Found a local account for {email}. There's no way to recover the password — only to
-            remove it and start over.
+            Found a local account on this device for that email. There's no way to recover the
+            password — only to remove it and start over.
           </p>
           <Button
             variant="destructive"
