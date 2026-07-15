@@ -8,6 +8,7 @@ import { ArrowLeft, Eye, EyeOff, Languages, Loader2, BookOpen, ChevronLeft, Chev
 import { SURAHS, RECITERS, fetchSurahText } from "@/lib/quranData";
 import { findTajweedRules } from "@/lib/tajweedRules";
 import AyahDisplay from "@/components/quran/AyahDisplay";
+import EmptyState from "@/components/EmptyState";
 import AudioPlayer from "@/components/quran/AudioPlayer";
 import SupportModal from "@/components/quran/SupportModal";
 import UpgradeModal from "@/components/quran/UpgradeModal";
@@ -332,9 +333,12 @@ export default function SurahReader() {
               </div>
             ))}
             {practiceRuleFilter && visibleAyahs.length === 0 && (
-              <div className="text-center py-12 bg-slate-900/30 rounded-2xl border border-slate-700/20">
-                <p className="text-slate-500 text-sm">No ayahs with {PRACTICE_RULES.find(r => r.key === practiceRuleFilter)?.label} found in this surah</p>
-              </div>
+              <EmptyState
+                title={`No ${PRACTICE_RULES.find(r => r.key === practiceRuleFilter)?.label} here`}
+                message="This surah has no ayahs with that Tajweed rule. Try another rule, or show every ayah."
+                actionLabel="Show all ayahs"
+                onAction={() => setPracticeRuleFilter(null)}
+              />
             )}
           </div>
         )}

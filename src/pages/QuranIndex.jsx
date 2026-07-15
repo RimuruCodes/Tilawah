@@ -5,6 +5,7 @@ import { Search, BookOpen, Loader2 } from "lucide-react";
 import { MemorizationProgress } from "@/lib/localDb";
 import { SURAHS, MILESTONES } from "@/lib/quranData";
 import SurahCard from "@/components/quran/SurahCard";
+import EmptyState from "@/components/EmptyState";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 
 // The Quran tab: browse/search all 114 surahs. Moved out of Home when the
@@ -149,10 +150,25 @@ export default function QuranIndex() {
         </div>
 
         {filteredSurahs.length === 0 && (
-          <div className="text-center py-20">
-            <BookOpen className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-            <p className="text-slate-500">No surahs match your search</p>
-          </div>
+          search.trim() ? (
+            <EmptyState
+              icon={Search}
+              title="No surahs match your search"
+              message="Try a surah name, its number, or a different spelling."
+              actionLabel="Clear search"
+              onAction={() => setSearch("")}
+            />
+          ) : filter === "memorized" ? (
+            <EmptyState
+              icon={BookOpen}
+              title="Nothing in progress yet"
+              message="Open any surah and mark verses as learning or memorized — they'll gather here so you can track what you're working on."
+              actionLabel="Browse all surahs"
+              onAction={() => setFilter("all")}
+            />
+          ) : (
+            <EmptyState icon={BookOpen} title="No surahs to show" message="Try changing the filter." />
+          )
         )}
       </div>
     </div>

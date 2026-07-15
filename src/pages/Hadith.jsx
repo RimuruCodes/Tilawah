@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { ScrollText, Search, ChevronRight, ArrowLeft, Loader2, AlertTriangle, Download } from "lucide-react";
 import { HADITH_COLLECTIONS, getBooks, getBookHadiths, searchCollection, isCollectionLoadedForSearch } from "@/lib/hadithData";
+import EmptyState from "@/components/EmptyState";
 import { DUAS, DUA_CATEGORIES } from "@/lib/duasData";
 
 // Hadith browser: Sahih al-Bukhari and Sahih Muslim only — see the
@@ -161,16 +162,22 @@ export default function Hadith() {
               <p className="text-xs text-slate-500 text-center py-4">Downloading {collection.name} for search...</p>
             )}
             {searchResults && (
-              <div className="space-y-3">
-                <p className="text-xs text-slate-500">
-                  {searchResults.length === 0
-                    ? "No matches — try different words (search covers the English translation)."
-                    : `${searchResults.length}${searchResults.length >= 50 ? "+" : ""} match${searchResults.length === 1 ? "" : "es"}`}
-                </p>
-                {searchResults.map((h) => (
-                  <HadithCard key={`${collectionId}-${h.number}`} hadith={h} collectionName={collection.name} />
-                ))}
-              </div>
+              searchResults.length === 0 ? (
+                <EmptyState
+                  icon={Search}
+                  title="No matches"
+                  message="Try different words — search looks through the English translation."
+                />
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-500">
+                    {`${searchResults.length}${searchResults.length >= 50 ? "+" : ""} match${searchResults.length === 1 ? "" : "es"}`}
+                  </p>
+                  {searchResults.map((h) => (
+                    <HadithCard key={`${collectionId}-${h.number}`} hadith={h} collectionName={collection.name} />
+                  ))}
+                </div>
+              )
             )}
           </div>
         )}
@@ -246,7 +253,9 @@ export default function Hadith() {
                   <ChevronRight className="w-4 h-4 text-slate-600 flex-shrink-0" />
                 </button>
               ))}
-              {filteredBooks.length === 0 && <p className="text-center text-sm text-slate-500 py-8">No books match.</p>}
+              {filteredBooks.length === 0 && (
+                <EmptyState icon={Search} title="No books match" message="Try a different book name." />
+              )}
             </div>
           </div>
         )}
@@ -271,7 +280,7 @@ export default function Hadith() {
                   <HadithCard key={h.number} hadith={h} collectionName={collection.name} />
                 ))}
                 {entries.length === 0 && (
-                  <p className="text-center text-sm text-slate-500 py-8">This book has no displayable entries.</p>
+                  <EmptyState title="Nothing to show here" message="This book has no displayable entries yet." />
                 )}
               </div>
             )}

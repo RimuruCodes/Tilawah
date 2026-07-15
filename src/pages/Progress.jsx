@@ -7,6 +7,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { MILESTONES } from "@/lib/quranData";
 import WeeklyHeatmap from "@/components/quran/WeeklyHeatmap";
 import UpgradeModal from "@/components/quran/UpgradeModal";
+import EmptyState from "@/components/EmptyState";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useSubscription } from "@/lib/SubscriptionContext";
 import { canAccessFeature, GATED_FEATURES } from "@/lib/entitlements";
@@ -204,11 +205,13 @@ export default function Progress() {
         <div className="space-y-3">
           <h2 className="text-lg font-semibold text-white">Recent Recitations</h2>
           {logs.length === 0 ? (
-            <div className="text-center py-12 bg-slate-900/30 rounded-2xl border border-slate-700/20">
-              <Mic className="w-10 h-10 text-slate-700 mx-auto mb-3" />
-              <p className="text-slate-500 text-sm">No recitations yet</p>
-              <p className="text-slate-600 text-xs mt-1">Start by recording a verse from any surah</p>
-            </div>
+            <EmptyState
+              icon={Mic}
+              title="No recitations yet"
+              message="Record your first verse and your scores, streaks, and Tajweed trends will start filling in here."
+              actionLabel="Browse surahs"
+              actionTo="/quran"
+            />
           ) : (
             <div className="space-y-2">
               {logs.map(log => (
