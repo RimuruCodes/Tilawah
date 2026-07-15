@@ -10,6 +10,8 @@ import { getAudioUrl } from "@/lib/quranData";
 import { getSupportedRecorderMimeType } from "@/lib/mediaUtils";
 import { runMicCheck } from "@/lib/micCheck";
 import { setLifecyclePhase, recordLifecycleEvent } from "@/lib/lifecycleDebug";
+import CelebrationOverlay, { celebrationFor } from "@/components/quran/CelebrationOverlay";
+import { hapticTap, hapticSuccess } from "@/lib/haptics";
 import TajweedResultsPanel from "@/components/quran/TajweedResultsPanel";
 import WaveformTimeline from "@/components/quran/WaveformTimeline";
 import ComparePlayback from "@/components/quran/ComparePlayback";
@@ -28,6 +30,7 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
   const [tajweedPending, setTajweedPending] = useState(false);
   const [escalating, setEscalating] = useState(false);
   const [escalationNote, setEscalationNote] = useState(null);
+  const [celebration, setCelebration] = useState(null);
   const [envelope, setEnvelope] = useState(null);
   const [modelProgress, setModelProgress] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -82,6 +85,7 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
     setTajweedPending(false);
     setEscalating(false);
     setEscalationNote(null);
+    setCelebration(null);
     setEnvelope(null);
     setModelProgress(null);
     setErrorMessage("");
@@ -249,6 +253,14 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
       lastElapsedRef.current = actualDurationSeconds;
       lastPersistRef.current = persisted;
       onRecitationSaved?.();
+      // A continuous run only celebrates a streak milestone (personal-best
+      // is single-ayah — see persistRecitationResult). Fires once here, not
+      // on the recalc/escalation re-persist below.
+      const moment = celebrationFor(persisted);
+      if (moment) {
+        hapticSuccess();
+        setCelebration(moment);
+      }
     } catch (err) {
       // Saving failed but the analysis itself is fine — still show it.
       console.error("Couldn't save the recitation attempt:", err);
@@ -385,6 +397,7 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
 
   const stopRecording = async () => {
     if (timerRef.current) clearInterval(timerRef.current);
+    hapticTap(); // subtle confirmation the recording stopped (no-op where unsupported)
 
     const recorder = mediaRecorderRef.current;
     const stream = streamRef.current;
@@ -485,6 +498,12 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="bg-slate-900 border-slate-700/50 max-w-lg max-h-[85vh] overflow-y-auto p-0">
+        <CelebrationOverlay
+          show={!!celebration}
+          title={celebration?.title}
+          subtitle={celebration?.subtitle}
+          onDone={() => setCelebration(null)}
+        />
         <div className="p-6 space-y-5">
           {/* DialogTitle/Description give the dialog its accessible name;
               the custom X that used to sit here duplicated (and covered)

@@ -18,7 +18,8 @@ export default function AyahDisplay({
   showTranslation,
   onRecordClick,
   hideMode,
-  lastScore
+  lastScore,
+  arabicScale = 1
 }) {
   const [revealed, setRevealed] = useState(!hideMode);
 
@@ -82,8 +83,8 @@ export default function AyahDisplay({
                   initial={{ opacity: 0, filter: "blur(8px)" }}
                   animate={{ opacity: 1, filter: "blur(0px)" }}
                   transition={{ duration: 0.5 }}
-                  className={`font-arabic text-2xl md:text-3xl leading-loose text-right tracking-wide transition-colors duration-300 ${isHighlighted ? 'text-emerald-300' : 'text-white/90'}`}
-                  style={{ fontFamily: "'Scheherazade New', 'Amiri', serif", lineHeight: "2.8" }}
+                  className={`font-arabic leading-loose text-right tracking-wide transition-colors duration-300 ${isHighlighted ? 'text-emerald-300' : 'text-white/90'}`}
+                  style={{ fontFamily: "'Scheherazade New', 'Amiri', serif", lineHeight: "2.8", fontSize: `${(1.75 * arabicScale).toFixed(3)}rem` }}
                 >
                   {ayah.arabic}
                 </motion.p>

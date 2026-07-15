@@ -16,6 +16,8 @@ import { getStoredCalibration } from "@/lib/micCalibration";
 import { pickBestAyahCount, pickAyahCountFromTranscript } from "@/lib/ayahWindowMatching";
 import { recordLifecycleEvent } from "@/lib/lifecycleDebug";
 import { trackBuffer, releaseBuffer } from "@/lib/memoryLedger";
+import { computeCurrentStreak } from "@/lib/streaks";
+import { isNewPersonalBest, reachedStreakMilestone } from "@/lib/achievements";
 
 // Rejects if the promise doesn't settle within `ms`. Every await in the
 // analysis pipeline is bounded by this: on low-memory devices (phones
@@ -492,6 +494,18 @@ export async function runTajweedAnalysis({ userSamples, ayahArabicText, onModelP
 export async function persistRecitationResult({ surahNumber, surahName, ayahs, reciterName, result, durationSeconds, tajweedResult }) {
   const tajweedSummary = tajweedResult ? summarizeTajweedChecks(tajweedResult.ruleChecks) : null;
 
+  // Personal-best check (single-ayah only — averaging across a continuous
+  // run muddies "your best of THIS ayah"): the best prior score for this
+  // exact ayah, captured BEFORE we log the new attempt.
+  let priorBest = null;
+  if (ayahs.length === 1) {
+    const prior = await RecitationLog.filter({ surah_number: surahNumber, ayah_number: ayahs[0].number });
+    const priorScores = prior.map((r) => r.accuracy_score).filter((s) => typeof s === "number");
+    if (priorScores.length) priorBest = Math.max(...priorScores);
+  }
+  // Streak as it stands before today's attempt is folded in below.
+  const streakBefore = computeCurrentStreak(await DailyStreak.list());
+
   const logIds = [];
   for (const ayah of ayahs) {
     const log = await RecitationLog.create({
@@ -533,7 +547,24 @@ export async function persistRecitationResult({ surahNumber, surahName, ayahs, r
     });
   }
 
-  return { logIds, date, ayahCount: count, score: result.score, durationSeconds };
+  // Achievements for the caller's celebration moment. Computed here (not in
+  // the UI) so the numbers come straight from the same records we just
+  // wrote. streakAfter re-reads because create/update above may have started
+  // or extended today.
+  const streakAfter = computeCurrentStreak(await DailyStreak.list());
+  const personalBest = isNewPersonalBest(priorBest, result.score);
+  const streakMilestone = reachedStreakMilestone(streakBefore, streakAfter);
+
+  return {
+    logIds,
+    date,
+    ayahCount: count,
+    score: result.score,
+    durationSeconds,
+    personalBest,
+    streakMilestone,
+    currentStreak: streakAfter,
+  };
 }
 
 // Attaches the Tajweed layer to logs that were persisted before the ASR

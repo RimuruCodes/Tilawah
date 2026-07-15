@@ -15,6 +15,8 @@ import ComparePlayback from "@/components/quran/ComparePlayback";
 import { getAudioUrl } from "@/lib/quranData";
 import MetricBadge from "@/components/quran/MetricBadge";
 import ResultFeedback from "@/components/quran/ResultFeedback";
+import CelebrationOverlay, { celebrationFor } from "@/components/quran/CelebrationOverlay";
+import { hapticTap, hapticSuccess } from "@/lib/haptics";
 
 export default function RecordingModal({ open, onClose, ayah, surahName, surahNumber, reciterName, reciterFolder, onRecitationSaved }) {
   const [state, setState] = useState("idle"); // idle, recording, recorded, analyzing, transcribing, result, error
@@ -33,6 +35,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
   const [tajweedPending, setTajweedPending] = useState(false);
   const [escalating, setEscalating] = useState(false);
   const [escalationNote, setEscalationNote] = useState(null);
+  const [celebration, setCelebration] = useState(null);
   const runSeqRef = useRef(0); // invalidates background Tajweed work from a previous run/reset
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -86,6 +89,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
     setConfidence(null);
     setEscalating(false);
     setEscalationNote(null);
+    setCelebration(null);
     chunksRef.current = [];
     if (timerRef.current) clearInterval(timerRef.current);
     if (streamRef.current) {
@@ -183,6 +187,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
       mediaRecorderRef.current.stop();
     }
     if (timerRef.current) clearInterval(timerRef.current);
+    hapticTap(); // subtle confirmation the recording stopped (no-op where unsupported)
   };
 
   const playBack = () => {
@@ -245,6 +250,14 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
         tajweedResult: null,
       });
       onRecitationSaved?.();
+      // Celebrate a personal best or streak milestone — once, on this
+      // first persist (the escalation/recalc re-persists below don't
+      // re-trigger it). No-op haptic where unsupported.
+      const moment = celebrationFor(persisted);
+      if (moment && isCurrentRun()) {
+        hapticSuccess();
+        setCelebration(moment);
+      }
     } catch (err) {
       // Saving failed but the analysis itself is fine — still show it.
       console.error("Couldn't save the recitation attempt:", err);
@@ -396,6 +409,12 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="bg-slate-900 border-slate-700/50 max-w-lg max-h-[85vh] overflow-y-auto p-0">
+        <CelebrationOverlay
+          show={!!celebration}
+          title={celebration?.title}
+          subtitle={celebration?.subtitle}
+          onDone={() => setCelebration(null)}
+        />
         <div className="p-6 space-y-6">
           <div className="text-center space-y-2">
             {/* DialogTitle/Description (not bare h3/p) so the dialog has an

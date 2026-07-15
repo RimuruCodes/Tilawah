@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { defaultShowTranslation } from "@/lib/arabicComfort";
+import { getArabicTextScale } from "@/lib/arabicTextSize";
 import { MemorizationProgress, RecitationLog } from "@/lib/localDb";
 import { motion } from "framer-motion";
 import { ArrowLeft, Eye, EyeOff, Languages, Loader2, BookOpen, ChevronLeft, ChevronRight, Heart, Mic } from "lucide-react";
@@ -41,6 +42,8 @@ export default function SurahReader() {
   // Seeded from the onboarding Arabic-comfort answer (fluent readers start
   // with just the mushaf text); the toggle in the header always wins after.
   const [showTranslation, setShowTranslation] = useState(defaultShowTranslation());
+  // Reader-wide Arabic size (Settings preference, seeded from comfort level).
+  const [arabicScale] = useState(getArabicTextScale());
   const [hideMode, setHideMode] = useState(false);
   const [highlightedAyah, setHighlightedAyah] = useState(null);
   const [selectedReciter, setSelectedReciter] = useState(RECITERS[0].id);
@@ -318,6 +321,7 @@ export default function SurahReader() {
                 <AyahDisplay
                   ayah={ayah}
                   surahNumber={surahNumber}
+                  arabicScale={arabicScale}
                   isHighlighted={highlightedAyah === ayah.number}
                   memorizationStatus={memorizationMap[ayah.number]}
                   lastScore={lastScoreMap[ayah.number]}

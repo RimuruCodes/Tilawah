@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, User, Trash2, LogOut, Loader2, AlertTriangle, Download, Upload, Mic2, CheckCircle2, Sparkles, MessageCircle } from "lucide-react";
+import { ArrowLeft, User, Trash2, LogOut, Loader2, AlertTriangle, Download, Upload, Mic2, CheckCircle2, Sparkles, MessageCircle, BookOpen } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { useSubscription } from "@/lib/SubscriptionContext";
 import { describeSubscription } from "@/lib/entitlements";
@@ -13,6 +13,7 @@ import { ESCALATION_BUDGETS, getEscalationBudgetId, setEscalationBudgetId } from
 import { isPaceMatchEnabled, setPaceMatchEnabled } from "@/lib/paceMatching";
 import { isRamadanModeEnabled, setRamadanModeEnabled } from "@/lib/hijri";
 import { ARABIC_COMFORT_LEVELS, getArabicComfort, setArabicComfort } from "@/lib/arabicComfort";
+import { ARABIC_TEXT_SIZES, getArabicTextSize, setArabicTextSize } from "@/lib/arabicTextSize";
 import { getLifecycleEvents, clearLifecycleEvents } from "@/lib/lifecycleDebug";
 import { getStoredCalibration } from "@/lib/micCalibration";
 import CalibrationModal from "@/components/CalibrationModal";
@@ -41,6 +42,7 @@ export default function Settings() {
   const [asrOn, setAsrOn] = useState(isAsrEnabled());
   const [ramadanMode, setRamadanMode] = useState(isRamadanModeEnabled());
   const [comfortLevel, setComfortLevel] = useState(getArabicComfort());
+  const [arabicTextSize, setArabicTextSizeState] = useState(getArabicTextSize());
   const [calibration, setCalibration] = useState(getStoredCalibration());
   const [calibrationOpen, setCalibrationOpen] = useState(false);
   const [importMessage, setImportMessage] = useState("");
@@ -450,6 +452,41 @@ export default function Settings() {
             <p className="text-xs text-slate-500">
               Sets friendlier defaults (like whether translation starts visible in the reader).
               Never locks anything — every toggle still works as usual.
+            </p>
+          </div>
+
+          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-slate-400">
+              <BookOpen className="w-4 h-4" />
+              <h3 className="text-sm font-medium text-white">Arabic text size</h3>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {ARABIC_TEXT_SIZES.map((size) => (
+                <button
+                  key={size.id}
+                  onClick={() => { setArabicTextSize(size.id); setArabicTextSizeState(size.id); }}
+                  className={`py-2 rounded-xl text-xs font-medium transition-all border ${
+                    arabicTextSize === size.id
+                      ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                      : "bg-slate-800/40 border-slate-700/30 text-slate-400 hover:border-slate-600/40"
+                  }`}
+                >
+                  {size.label}
+                </button>
+              ))}
+            </div>
+            <p
+              dir="rtl"
+              className="text-center text-emerald-300/80 leading-loose"
+              style={{
+                fontFamily: "'Scheherazade New', 'Amiri', serif",
+                fontSize: `${(1.75 * (ARABIC_TEXT_SIZES.find((s) => s.id === arabicTextSize)?.scale || 1)).toFixed(3)}rem`,
+              }}
+            >
+              بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+            </p>
+            <p className="text-xs text-slate-500">
+              Sizes the Arabic script in the reader. Starts from your reading-comfort level.
             </p>
           </div>
 
