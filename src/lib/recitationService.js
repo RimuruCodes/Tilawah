@@ -18,6 +18,13 @@ import { recordLifecycleEvent } from "@/lib/lifecycleDebug";
 import { trackBuffer, releaseBuffer } from "@/lib/memoryLedger";
 import { computeCurrentStreak } from "@/lib/streaks";
 import { isNewPersonalBest, reachedStreakMilestone } from "@/lib/achievements";
+import {
+  ASR_LOAD_CEILING_MS,
+  inferenceCeilingMs,
+  deadlineDelayForProgress,
+  isSuspensionGap,
+  stallReasonCode,
+} from "@/lib/asrWatchdog";
 
 // Rejects if the promise doesn't settle within `ms`. Every await in the
 // analysis pipeline is bounded by this: on low-memory devices (phones
@@ -330,6 +337,8 @@ export function describeAsrFailureForUser(failure) {
   switch (failure?.code) {
     case "backgrounded-during-inference":
       return "Word-level analysis was interrupted because the app went to the background. Keep Tilawah in the foreground while it processes, then try again.";
+    case "suspended-during-inference":
+      return "Word-level analysis was paused, likely because the device was throttling background work (this can happen in Low Power Mode or on very low battery). Your score is saved — plug in or turn off Low Power Mode, then try again.";
     case "timed-out":
       return "Speech recognition took too long on this device and was stopped so your result wouldn't hang. Your score isn't affected.";
     case "empty-transcript":
@@ -365,53 +374,96 @@ export function describeAsrFailureForLog(failure) {
 // ayah-count detection AND Tajweed analysis — transcription runs once.
 export async function transcribeUserRecording(userSamples, onModelProgress, modelIdOverride) {
   lastAsrFailure = null; // fresh run, fresh verdict
-  // Backgrounding is the most common *user-fixable* cause of a stall:
-  // hidden tabs get their timers throttled and (on iOS) their JS frozen
-  // outright, so the worker never finishes within the watchdog ceiling.
-  // Distinguishing that from a genuine stall makes the fallback message
-  // actionable instead of generic.
-  let wentHidden = false;
-  const onVisibilityChange = () => {
-    if (document.visibilityState === "hidden") wentHidden = true;
-  };
-  if (typeof document !== "undefined") {
-    document.addEventListener("visibilitychange", onVisibilityChange);
-  }
+  // Backgrounding / power throttling is the most common *user-fixable* cause
+  // of a stall: hidden or Low-Power-throttled tabs get their timers frozen
+  // and (on iOS) their JS suspended outright, so the worker never finishes —
+  // AND the timer-based watchdog below can't fire while it's frozen. We
+  // therefore (a) give inference-session creation its own short ceiling,
+  // (b) re-check the deadline the moment the page becomes visible again, and
+  // (c) treat a large gap between watchdog ticks as evidence of suspension.
+  let cleanup = () => {};
   try {
     const audioSec = userSamples.length / TARGET_SAMPLE_RATE;
-    const ceilingMs = Math.min(Math.max(audioSec * 10, 180), 360) * 1000;
-    let deadline = Date.now() + ceilingMs;
+    const infCeilingMs = inferenceCeilingMs(audioSec);
+    let deadline = Date.now() + infCeilingMs;
     let settled = false;
+    let wentHidden = false;
+    let wasSuspended = false;
+    let lastTick = Date.now();
+
+    recordLifecycleEvent(
+      "asr-watchdog-armed",
+      `session-creation ${Math.round(ASR_LOAD_CEILING_MS / 1000)}s / inference ${Math.round(infCeilingMs / 1000)}s ceilings for ${audioSec.toFixed(0)}s of audio`
+    );
 
     const work = (async () => {
       await ensureAsrModelLoaded((pct) => {
-        deadline = Date.now() + ceilingMs;
+        // While downloading, keep the generous network-tolerant budget; the
+        // instant download completes (100%) the next step is session
+        // creation (the iOS-fragile spot) — hold it to the short ceiling.
+        deadline = Date.now() + deadlineDelayForProgress(pct, audioSec);
         onModelProgress?.(pct);
       }, modelIdOverride);
-      deadline = Date.now() + ceilingMs;
+      deadline = Date.now() + infCeilingMs; // model resident; inference next (no progress events)
       return await transcribeAudio(userSamples, undefined, modelIdOverride);
     })().finally(() => { settled = true; });
 
     const STALLED = Symbol("stalled");
-    const watchdog = new Promise((resolve) => {
-      const interval = setInterval(() => {
-        if (settled) { clearInterval(interval); return; }
-        if (Date.now() > deadline) { clearInterval(interval); resolve(STALLED); }
-      }, 2000);
-    });
+    let resolveWatchdog;
+    const watchdog = new Promise((resolve) => { resolveWatchdog = resolve; });
+
+    // Shared by the interval AND the visibility-resume handler, so a stall
+    // is caught even when the interval was frozen while the tab was
+    // suspended (the interval alone can't detect the very condition it
+    // exists for).
+    const checkDeadline = (source) => {
+      if (settled) return;
+      const now = Date.now();
+      const gap = now - lastTick;
+      lastTick = now;
+      if (isSuspensionGap(gap)) {
+        wasSuspended = true;
+        recordLifecycleEvent(
+          "asr-suspended-gap",
+          `~${Math.round(gap / 1000)}s gap before watchdog ${source} — the tab was frozen (backgrounding / Low Power Mode)`
+        );
+      }
+      if (now > deadline) resolveWatchdog(STALLED);
+    };
+
+    const interval = setInterval(() => checkDeadline("tick"), 2000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        wentHidden = true;
+      } else {
+        recordLifecycleEvent("asr-resumed", "page visible again — re-checking the ASR stall deadline now");
+        checkDeadline("resume");
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
+    cleanup = () => {
+      clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
 
     const outcome = await Promise.race([work, watchdog]);
     if (outcome === STALLED) {
-      setAsrFailure(
-        wentHidden ? "backgrounded-during-inference" : "timed-out",
-        `no completion within the ${Math.round(ceilingMs / 1000)}s ceiling for ${audioSec.toFixed(0)}s of audio`
-      );
-      console.error(
-        `ASR transcription stalled (no completion within ${Math.round(ceilingMs / 1000)}s) — continuing without it and resetting the ASR worker.`
-      );
+      const code = stallReasonCode({ wentHidden, wasSuspended });
+      const cause =
+        code === "backgrounded-during-inference"
+          ? "the page went to the background during the run — "
+          : code === "suspended-during-inference"
+            ? "the tab was frozen/throttled during the run (Low Power Mode or very low battery) — "
+            : "";
+      setAsrFailure(code, `${cause}no completion within the ceiling for ${audioSec.toFixed(0)}s of audio`);
+      console.error(`ASR transcription stalled (${code}) — continuing without it and resetting the ASR worker.`);
       recordLifecycleEvent(
         "asr-stalled",
-        `${wentHidden ? "the page went to the background during the run — " : ""}no completion within the ${Math.round(ceilingMs / 1000)}s ceiling for ${audioSec.toFixed(0)}s of audio — worker reset, continuing without a transcript`
+        `${cause}worker reset, continuing without a transcript (${code})`
       );
       // The abandoned work promise will reject once the worker is reset —
       // absorb it so it can't surface as an unhandled rejection.
@@ -426,9 +478,7 @@ export async function transcribeUserRecording(userSamples, onModelProgress, mode
     recordLifecycleEvent("asr-unavailable", describeError(err));
     return null;
   } finally {
-    if (typeof document !== "undefined") {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    }
+    cleanup();
   }
 }
 
