@@ -186,11 +186,13 @@ export function resetAsrWorker(reason = "Speech-recognition worker was reset aft
 
 // Downloads/caches the ASR model (a few dozen to ~150MB, cached by the
 // browser after first use). Safe to call repeatedly; resolves immediately
-// once already loaded. Uses whichever model is currently preferred.
-export function ensureAsrModelLoaded(onProgress) {
+// once already loaded. Uses whichever model is currently preferred, unless
+// `modelIdOverride` is given (the confidence-seeking escalation forces the
+// accurate model after releasing the worker — see escalateAnalysis).
+export function ensureAsrModelLoaded(onProgress, modelIdOverride) {
   const w = getWorker();
   const id = nextId++;
-  const modelId = currentModelId();
+  const modelId = modelIdOverride || currentModelId();
   // Fine-grained OOM checkpoints: the lifecycle log persists across a tab
   // kill, so whichever of these is the LAST entry pinpoints the crash line.
   recordLifecycleEvent("asr-load-start", `${modelId} (pref=${getAsrModelPreference()})`);
@@ -232,9 +234,10 @@ export function ensureAsrModelLoaded(onProgress) {
 
 // Transcribes mono Float32Array audio (16kHz) and returns Whisper's result:
 // { text, chunks: [{ text, timestamp: [start, end] }, ...] }
-export function transcribeAudio(monoSamples16k, onProgress) {
+export function transcribeAudio(monoSamples16k, onProgress, modelIdOverride) {
   const w = getWorker();
   const id = nextId++;
+  const modelId = modelIdOverride || currentModelId();
   recordLifecycleEvent(
     "asr-inference-start",
     `${(monoSamples16k.length / 16000).toFixed(1)}s of audio; ${describeMemoryCheckpoint()}`
@@ -253,6 +256,6 @@ export function transcribeAudio(monoSamples16k, onProgress) {
     });
     // Transfer the underlying buffer to avoid copying large arrays.
     const audio = Float32Array.from(monoSamples16k);
-    w.postMessage({ id, type: "transcribe", modelId: currentModelId(), audio }, [audio.buffer]);
+    w.postMessage({ id, type: "transcribe", modelId, audio, allowWebGpu: !isIosWebKit() }, [audio.buffer]);
   });
 }

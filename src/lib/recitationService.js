@@ -9,7 +9,8 @@ import {
   TARGET_SAMPLE_RATE,
 } from "@/lib/audioAnalysis";
 import { RecitationLog, DailyStreak } from "@/lib/localDb";
-import { ensureAsrModelLoaded, transcribeAudio, resetAsrWorker } from "@/lib/asrEngine";
+import { ensureAsrModelLoaded, transcribeAudio, resetAsrWorker, getAsrModelPreference, ASR_MODEL_OPTIONS, isIosWebKit } from "@/lib/asrEngine";
+import { planEscalations, budgetAllows } from "@/lib/escalation";
 import { analyzeTajweedFromTranscription, summarizeTajweedChecks } from "@/lib/tajweedAnalysis";
 import { getStoredCalibration } from "@/lib/micCalibration";
 import { pickBestAyahCount, pickAyahCountFromTranscript } from "@/lib/ayahWindowMatching";
@@ -360,7 +361,7 @@ export function describeAsrFailureForLog(failure) {
 // pushed forward by every model-download progress event so a slow
 // connection isn't mistaken for a stall. The single result is shared by
 // ayah-count detection AND Tajweed analysis — transcription runs once.
-export async function transcribeUserRecording(userSamples, onModelProgress) {
+export async function transcribeUserRecording(userSamples, onModelProgress, modelIdOverride) {
   lastAsrFailure = null; // fresh run, fresh verdict
   // Backgrounding is the most common *user-fixable* cause of a stall:
   // hidden tabs get their timers throttled and (on iOS) their JS frozen
@@ -384,9 +385,9 @@ export async function transcribeUserRecording(userSamples, onModelProgress) {
       await ensureAsrModelLoaded((pct) => {
         deadline = Date.now() + ceilingMs;
         onModelProgress?.(pct);
-      });
+      }, modelIdOverride);
       deadline = Date.now() + ceilingMs;
-      return await transcribeAudio(userSamples);
+      return await transcribeAudio(userSamples, undefined, modelIdOverride);
     })().finally(() => { settled = true; });
 
     const STALLED = Symbol("stalled");
@@ -610,4 +611,188 @@ export function assessRecitationConfidence({ dspResult, tajweedResult }) {
   }
 
   return { isLow: reasons.length > 0, reasons };
+}
+
+// ---- Bounded confidence-seeking escalation ----------------------------
+// Runs AFTER the initial result is already shown and persisted (like the
+// background Tajweed stage), so it never delays the score. Governed by a
+// user-set time budget that caps TOTAL extra time; each escalation upgrades
+// the METHOD behind a signal a better method could legitimately change —
+// never a search for a different score on the same audio. See
+// src/lib/escalation.js for the pure decision logic and the never-escalate
+// guarantees (pitch/loudness/rhythm/pause are structurally excluded).
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Re-fetch reference audio (bounded backoff) and re-score against it, turning
+// a recording-quality-only result into a real comparison. Returns an improved
+// dspResult or null.
+async function escalateReferenceRetry({ mode, userSamples, reciterFolder, surahNumber, ayahs, resolvedCount, deadline }) {
+  const userNoiseFloorDb = getStoredCalibration()?.noiseFloorDb ?? null;
+  for (let attempt = 0; attempt < 2 && Date.now() < deadline; attempt++) {
+    if (attempt > 0) await sleep(Math.min(1500 * attempt, deadline - Date.now()));
+    let refSamples;
+    if (mode === "single") {
+      refSamples = await fetchAyahSamples(reciterFolder, surahNumber, ayahs[0].number);
+    } else {
+      const window = ayahs.slice(0, resolvedCount).map((a) => a.number);
+      const per = await fetchAyahWindow(reciterFolder, surahNumber, window);
+      const gap = new Float32Array(Math.round(TARGET_SAMPLE_RATE * CONTINUOUS_GAP_SEC));
+      refSamples = joinAyahSamples(per, gap);
+    }
+    if (refSamples) {
+      const rescored = compareSamples(userSamples, refSamples, TARGET_SAMPLE_RATE, { userNoiseFloorDb });
+      return rescored;
+    }
+  }
+  return null;
+}
+
+// Re-transcribe with the accurate model, then re-run Tajweed. MEMORY-CRITICAL:
+// the first model's worker is fully released (resetAsrWorker — the exact
+// cleanup from the Recalculate OOM fix) BEFORE the second is loaded, so the
+// two models are never resident at once. Returns an improved tajweedResult
+// (higher word confidence) or null.
+async function escalateAsrUpgrade({ userSamples, ayahArabicText, priorTajweed, onModelProgress, isCurrentRun }) {
+  // Release the fast model's worker + wasm heap first — never load a second
+  // model alongside the first (that pattern caused the earlier intermittent
+  // OOM). This also cancels any lingering inference.
+  resetAsrWorker("Speech-recognition worker released to load the more accurate model for a confidence re-check");
+  if (!isCurrentRun()) return null;
+
+  const upgraded = await transcribeUserRecording(userSamples, onModelProgress, ASR_MODEL_OPTIONS.accurate.id);
+  if (!upgraded || !isCurrentRun()) return null;
+
+  const newTajweed = await runTajweedAnalysis({ userSamples, ayahArabicText, asrResult: upgraded });
+  const prior = priorTajweed?.overallWordConfidence ?? -1;
+  const next = newTajweed?.overallWordConfidence ?? -1;
+  // Keep it ONLY if it actually read the audio more confidently — otherwise
+  // the original stands (never swap for an equal-or-worse re-read).
+  return newTajweed && next > prior ? newTajweed : null;
+}
+
+// Re-determine the continuous ayah count more thoroughly using the ASR
+// transcript (words actually recognized) instead of duration alone, with a
+// wider search margin, then re-score against that count. Returns an improved
+// dspResult or null. No ASR model work — reuses an existing transcript.
+async function escalateAyahRefine({ userSamples, reciterFolder, surahNumber, ayahs, allAyahTexts, taggedCount, asrResult, priorResult }) {
+  if (!asrResult?.text || !allAyahTexts) return null;
+  const WIDER_MARGIN = 10;
+  const pick = pickAyahCountFromTranscript({
+    transcriptText: asrResult.text,
+    ayahTexts: allAyahTexts,
+    taggedCount,
+    searchMargin: WIDER_MARGIN,
+  });
+  if (!pick.reliable || pick.resolvedCount === priorResult.resolvedAyahCount) return null;
+
+  const window = ayahs.slice(0, pick.resolvedCount).map((a) => a.number);
+  const per = await fetchAyahWindow(reciterFolder, surahNumber, window);
+  const gap = new Float32Array(Math.round(TARGET_SAMPLE_RATE * CONTINUOUS_GAP_SEC));
+  const refSamples = joinAyahSamples(per, gap);
+  const userNoiseFloorDb = getStoredCalibration()?.noiseFloorDb ?? null;
+  const rescored = refSamples
+    ? compareSamples(userSamples, refSamples, TARGET_SAMPLE_RATE, { userNoiseFloorDb })
+    : null;
+  if (!rescored) return null;
+  return {
+    ...rescored,
+    resolvedAyahCount: pick.resolvedCount,
+    taggedAyahCount: taggedCount,
+    ayahCountCorrected: pick.corrected,
+    countMethod: "transcript",
+  };
+}
+
+// Orchestrates the plan from src/lib/escalation.js within the time budget.
+// Returns { improved, dspResult, tajweedResult } — the callers swap in the
+// improved pieces only when `improved` is true. Every step re-checks the
+// remaining budget and the run token first, and falls back to the best result
+// already obtained if time runs out (graceful degradation).
+export async function escalateAnalysis({
+  mode,
+  budgetMs,
+  userSamples,
+  dspResult,
+  tajweedResult,
+  asrResult = null,
+  reciterFolder,
+  surahNumber,
+  ayahs,
+  ayahArabicText,
+  allAyahTexts = null,
+  taggedCount = null,
+  onModelProgress,
+  isCurrentRun = () => true,
+}) {
+  if (!(budgetMs > 0) || !isCurrentRun()) return null;
+  const deadline = Date.now() + budgetMs;
+  const remaining = () => deadline - Date.now();
+
+  const plan = planEscalations({
+    reference: { referenceAvailable: dspResult?.referenceAvailable === true, attemptsMade: 1 },
+    asr: {
+      overallWordConfidence: tajweedResult?.overallWordConfidence ?? null,
+      currentModelPref: getAsrModelPreference(),
+      allowHeavyModelLoad: !isIosWebKit(),
+    },
+    ayahCount:
+      mode === "continuous"
+        ? { taggedCount, resolvedCount: dspResult?.resolvedAyahCount, countMethod: dspResult?.countMethod }
+        : null,
+    remainingBudgetMs: remaining(),
+  });
+  if (plan.length === 0) return null;
+
+  recordLifecycleEvent(
+    "escalation-start",
+    `budget=${Math.round(budgetMs / 1000)}s plan=[${plan.map((p) => p.type).join(",")}]`
+  );
+
+  let result = dspResult;
+  let tajweed = tajweedResult;
+  let improved = false;
+
+  for (const step of plan) {
+    if (!isCurrentRun() || !budgetAllows(remaining(), step.estimatedCostMs)) break;
+    try {
+      if (step.type === "referenceRetry") {
+        const rescored = await escalateReferenceRetry({
+          mode, userSamples, reciterFolder, surahNumber, ayahs,
+          resolvedCount: result?.resolvedAyahCount, deadline,
+        });
+        if (rescored?.referenceAvailable) {
+          result = mode === "continuous" ? { ...rescored, resolvedAyahCount: result.resolvedAyahCount, taggedAyahCount: result.taggedAyahCount, ayahCountCorrected: result.ayahCountCorrected, countMethod: result.countMethod } : rescored;
+          improved = true;
+          recordLifecycleEvent("escalation-step", "referenceRetry: reference recovered, re-scored against it");
+        }
+      } else if (step.type === "ayahRefine") {
+        const refined = await escalateAyahRefine({
+          userSamples, reciterFolder, surahNumber, ayahs, allAyahTexts, taggedCount, asrResult, priorResult: result,
+        });
+        if (refined) {
+          result = refined;
+          improved = true;
+          recordLifecycleEvent("escalation-step", `ayahRefine: count ${dspResult?.resolvedAyahCount} -> ${refined.resolvedAyahCount} via transcript`);
+        }
+      } else if (step.type === "asrUpgrade") {
+        const upgradedTajweed = await escalateAsrUpgrade({
+          userSamples, ayahArabicText, priorTajweed: tajweed, onModelProgress, isCurrentRun,
+        });
+        if (upgradedTajweed) {
+          tajweed = upgradedTajweed;
+          improved = true;
+          recordLifecycleEvent(
+            "escalation-step",
+            `asrUpgrade: word confidence ${(tajweedResult?.overallWordConfidence ?? 0).toFixed(2)} -> ${(upgradedTajweed.overallWordConfidence ?? 0).toFixed(2)}`
+          );
+        }
+      }
+    } catch (err) {
+      recordLifecycleEvent("escalation-error", `${step.type}: ${describeError(err)}`);
+    }
+  }
+
+  recordLifecycleEvent("escalation-complete", improved ? "a slower method improved the reading" : "no improvement — original result stands");
+  return { improved, dspResult: result, tajweedResult: tajweed };
 }

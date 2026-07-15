@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Square, Play, Pause, RotateCcw, Send, Loader2, AlertTriangle, Upload } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { analyzeSingleAyahRecitation, persistRecitationResult, runTajweedAnalysis, decodeUserRecording, assessRecitationConfidence, attachTajweedToLogs, getLastAsrFailure, describeAsrFailureForUser, describeAsrFailureForLog } from "@/lib/recitationService";
+import { analyzeSingleAyahRecitation, persistRecitationResult, revertRecitationResult, runTajweedAnalysis, decodeUserRecording, assessRecitationConfidence, attachTajweedToLogs, getLastAsrFailure, describeAsrFailureForUser, describeAsrFailureForLog, escalateAnalysis } from "@/lib/recitationService";
+import { getEscalationBudgetMs, describeEscalationOutcome } from "@/lib/escalation";
 import { getVisualizationEnvelope } from "@/lib/audioAnalysis";
 import { getSupportedRecorderMimeType } from "@/lib/mediaUtils";
 import { runMicCheck } from "@/lib/micCheck";
@@ -30,6 +31,8 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
   const [micChecking, setMicChecking] = useState(false);
   const [confidence, setConfidence] = useState(null);
   const [tajweedPending, setTajweedPending] = useState(false);
+  const [escalating, setEscalating] = useState(false);
+  const [escalationNote, setEscalationNote] = useState(null);
   const runSeqRef = useRef(0); // invalidates background Tajweed work from a previous run/reset
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -81,6 +84,8 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
     setMicCheckResult(null);
     setMicChecking(false);
     setConfidence(null);
+    setEscalating(false);
+    setEscalationNote(null);
     chunksRef.current = [];
     if (timerRef.current) clearInterval(timerRef.current);
     if (streamRef.current) {
@@ -307,6 +312,66 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
       setModelProgress(null);
       setTajweedPending(false);
       setConfidence(assessRecitationConfidence({ dspResult, tajweedResult: tajweed }));
+
+      // Bounded confidence-seeking escalation — runs AFTER the result is
+      // shown, only if the user granted a time budget. Never blocks or
+      // changes the score by "retrying for a better number"; it upgrades the
+      // METHOD behind a weak signal (reference fetch, ASR model) and keeps the
+      // outcome only if it's genuinely more reliable.
+      const budgetMs = getEscalationBudgetMs();
+      if (budgetMs > 0 && isCurrentRun()) {
+        setEscalating(true);
+        let esc = null;
+        try {
+          esc = await escalateAnalysis({
+            mode: "single",
+            budgetMs,
+            userSamples,
+            dspResult,
+            tajweedResult: tajweed,
+            reciterFolder,
+            surahNumber,
+            ayahs: [ayah],
+            ayahArabicText: ayah.arabic,
+            onModelProgress: (pct) => { if (isCurrentRun()) setModelProgress(pct); },
+            isCurrentRun,
+          });
+        } catch (err) {
+          recordLifecycleEvent("escalation-error", `single orchestrator: ${err?.message || err}`);
+        }
+        if (!isCurrentRun()) return;
+        setEscalating(false);
+        setModelProgress(null);
+        if (esc?.improved) {
+          const scoreChanged = esc.dspResult !== dspResult;
+          setAnalysisResult(esc.dspResult);
+          setTajweedResult(esc.tajweedResult);
+          setConfidence(assessRecitationConfidence({ dspResult: esc.dspResult, tajweedResult: esc.tajweedResult }));
+          setEscalationNote(describeEscalationOutcome(true));
+          // Keep the stored attempt honest: a changed score is reverted +
+          // re-persisted (streak math stays correct); a Tajweed-only change
+          // just re-attaches.
+          try {
+            if (scoreChanged && persisted) {
+              await revertRecitationResult(persisted);
+              persisted = await persistRecitationResult({
+                surahNumber, surahName, ayahs: [ayah], reciterName,
+                result: esc.dspResult, durationSeconds: recordingTime, tajweedResult: esc.tajweedResult,
+              });
+              onRecitationSaved?.();
+            } else if (persisted && esc.tajweedResult) {
+              const fb = [
+                ...esc.dspResult.feedback,
+                ...esc.tajweedResult.wordFeedback,
+                ...esc.tajweedResult.ruleChecks.filter((r) => r.verdict === "warn").map((r) => `${r.label}: ${r.note}`),
+              ];
+              await attachTajweedToLogs({ logIds: persisted.logIds, feedback: fb, tajweedResult: esc.tajweedResult });
+            }
+          } catch (err) {
+            console.error("Couldn't update the saved attempt after escalation:", err);
+          }
+        }
+      }
     })();
   };
 
@@ -583,6 +648,20 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                   </div>
                 ) : (
                   <TajweedResultsPanel tajweedResult={tajweedResult} unavailableMessage={tajweedUnavailableMsg} />
+                )}
+
+                {escalating && (
+                  <div className="flex items-center gap-2 bg-slate-800/40 border border-slate-700/30 rounded-xl p-3">
+                    <Loader2 className="w-4 h-4 text-emerald-400 animate-spin flex-shrink-0" />
+                    <p className="text-xs text-slate-400" role="status">
+                      {modelProgress == null
+                        ? "Double-checking for a more reliable reading…"
+                        : `Loading a more accurate model to double-check… ${modelProgress}%`}
+                    </p>
+                  </div>
+                )}
+                {escalationNote && !escalating && (
+                  <p className="text-[11px] text-emerald-400/80 text-center" role="status">{escalationNote}</p>
                 )}
 
                 <ResultFeedback

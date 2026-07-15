@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Square, ChevronRight, Loader2, CheckCircle2, RotateCcw, AlertTriangle, Upload, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { analyzeContinuousRecitation, persistRecitationResult, revertRecitationResult, runTajweedAnalysis, decodeUserRecording, assessRecitationConfidence, attachTajweedToLogs, transcribeUserRecording, getLastAsrFailure, describeAsrFailureForUser, describeAsrFailureForLog } from "@/lib/recitationService";
+import { analyzeContinuousRecitation, persistRecitationResult, revertRecitationResult, runTajweedAnalysis, decodeUserRecording, assessRecitationConfidence, attachTajweedToLogs, transcribeUserRecording, getLastAsrFailure, describeAsrFailureForUser, describeAsrFailureForLog, escalateAnalysis } from "@/lib/recitationService";
+import { getEscalationBudgetMs, describeEscalationOutcome } from "@/lib/escalation";
 import { describeAsrGate, isAsrModelWarm, resetAsrWorker } from "@/lib/asrEngine";
 import { getVisualizationEnvelope, TARGET_SAMPLE_RATE } from "@/lib/audioAnalysis";
 import { getAudioUrl } from "@/lib/quranData";
@@ -25,6 +26,8 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
   const [tajweedResult, setTajweedResult] = useState(null);
   const [tajweedUnavailableMsg, setTajweedUnavailableMsg] = useState(null);
   const [tajweedPending, setTajweedPending] = useState(false);
+  const [escalating, setEscalating] = useState(false);
+  const [escalationNote, setEscalationNote] = useState(null);
   const [envelope, setEnvelope] = useState(null);
   const [modelProgress, setModelProgress] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -77,6 +80,8 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
     setTajweedResult(null);
     setTajweedUnavailableMsg(null);
     setTajweedPending(false);
+    setEscalating(false);
+    setEscalationNote(null);
     setEnvelope(null);
     setModelProgress(null);
     setErrorMessage("");
@@ -315,6 +320,66 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
       setModelProgress(null);
       setTajweedPending(false);
       setConfidence(assessRecitationConfidence({ dspResult: result, tajweedResult: tajweed }));
+
+      // Bounded confidence-seeking escalation (background, after the result is
+      // shown). Skipped entirely on a manual-override re-run — the user has
+      // already told us the count, so second-guessing it would be wrong.
+      const budgetMs = getEscalationBudgetMs();
+      if (budgetMs > 0 && !manualOverride && isCurrentRun()) {
+        setEscalating(true);
+        let esc = null;
+        try {
+          esc = await escalateAnalysis({
+            mode: "continuous",
+            budgetMs,
+            userSamples,
+            dspResult: result,
+            tajweedResult: tajweed,
+            asrResult: lastAsrRef.current,
+            reciterFolder,
+            surahNumber,
+            ayahs,
+            ayahArabicText: recitedAyahs.map((a) => a.arabic).join(" "),
+            allAyahTexts: ayahs.map((a) => a.arabic),
+            taggedCount,
+            onModelProgress: (pct) => { if (isCurrentRun()) setModelProgress(pct); },
+            isCurrentRun,
+          });
+        } catch (err) {
+          recordLifecycleEvent("escalation-error", `continuous orchestrator: ${err?.message || err}`);
+        }
+        if (!isCurrentRun()) return;
+        setEscalating(false);
+        setModelProgress(null);
+        if (esc?.improved) {
+          const scoreChanged = esc.dspResult !== result;
+          const newRecited = ayahs.slice(0, esc.dspResult.resolvedAyahCount || recitedAyahs.length);
+          setResults({ ...esc.dspResult, recitedCount: newRecited.length });
+          setTajweedResult(esc.tajweedResult);
+          setConfidence(assessRecitationConfidence({ dspResult: esc.dspResult, tajweedResult: esc.tajweedResult }));
+          setEscalationNote(describeEscalationOutcome(true));
+          try {
+            if (scoreChanged && persisted) {
+              await revertRecitationResult(persisted);
+              persisted = await persistRecitationResult({
+                surahNumber, surahName, ayahs: newRecited, reciterName,
+                result: esc.dspResult, durationSeconds: actualDurationSeconds, tajweedResult: esc.tajweedResult,
+              });
+              lastPersistRef.current = persisted;
+              onRecitationSaved?.();
+            } else if (persisted && esc.tajweedResult) {
+              const fb = [
+                ...esc.dspResult.feedback,
+                ...esc.tajweedResult.wordFeedback,
+                ...esc.tajweedResult.ruleChecks.filter((r) => r.verdict === "warn").map((r) => `${r.label}: ${r.note}`),
+              ];
+              await attachTajweedToLogs({ logIds: persisted.logIds, feedback: fb, tajweedResult: esc.tajweedResult });
+            }
+          } catch (err) {
+            console.error("Couldn't update the saved attempt after escalation:", err);
+          }
+        }
+      }
     })();
   };
 
@@ -682,6 +747,20 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                   </div>
                 ) : (
                   <TajweedResultsPanel tajweedResult={tajweedResult} unavailableMessage={tajweedUnavailableMsg} />
+                )}
+
+                {escalating && (
+                  <div className="flex items-center gap-2 bg-slate-800/40 border border-slate-700/30 rounded-xl p-3">
+                    <Loader2 className="w-4 h-4 text-emerald-400 animate-spin flex-shrink-0" />
+                    <p className="text-xs text-slate-400" role="status">
+                      {modelProgress == null
+                        ? "Double-checking for a more reliable reading…"
+                        : `Loading a more accurate model to double-check… ${modelProgress}%`}
+                    </p>
+                  </div>
+                )}
+                {escalationNote && !escalating && (
+                  <p className="text-[11px] text-emerald-400/80 text-center" role="status">{escalationNote}</p>
                 )}
 
                 <ResultFeedback

@@ -9,6 +9,7 @@ import { openBillingPortalUrl } from "@/lib/subscriptionApi";
 import { RecitationLog, MemorizationProgress, DailyStreak, FeedbackReport, RecitationPlanState, exportUserData, importUserData } from "@/lib/localDb";
 import { deleteAccount } from "@/lib/localAuth";
 import { ASR_MODEL_OPTIONS, getAsrModelPreference, setAsrModelPreference, isAsrEnabled, setAsrEnabled } from "@/lib/asrEngine";
+import { ESCALATION_BUDGETS, getEscalationBudgetId, setEscalationBudgetId } from "@/lib/escalation";
 import { isPaceMatchEnabled, setPaceMatchEnabled } from "@/lib/paceMatching";
 import { isRamadanModeEnabled, setRamadanModeEnabled } from "@/lib/hijri";
 import { ARABIC_COMFORT_LEVELS, getArabicComfort, setArabicComfort } from "@/lib/arabicComfort";
@@ -34,6 +35,7 @@ export default function Settings() {
   const { subscription, isLoadingSubscription, refreshSubscription } = useSubscription();
   const [deleting, setDeleting] = useState(false);
   const [modelPref, setModelPref] = useState(getAsrModelPreference());
+  const [escalationBudget, setEscalationBudget] = useState(getEscalationBudgetId());
   const [paceMatch, setPaceMatch] = useState(isPaceMatchEnabled());
   const [asrOn, setAsrOn] = useState(isAsrEnabled());
   const [ramadanMode, setRamadanMode] = useState(isRamadanModeEnabled());
@@ -89,6 +91,11 @@ export default function Settings() {
   const handleModelPrefChange = (pref) => {
     setAsrModelPreference(pref);
     setModelPref(pref);
+  };
+
+  const handleEscalationBudgetChange = (id) => {
+    setEscalationBudgetId(id);
+    setEscalationBudget(id);
   };
 
   const handlePaceMatchChange = (on) => {
@@ -304,6 +311,35 @@ export default function Settings() {
                 >
                   <span className="text-sm text-slate-200">{opt.label}</span>
                   {modelPref === key && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-slate-400">
+              <Mic2 className="w-4 h-4" />
+              <h3 className="text-sm font-medium text-white">Extra time for a more reliable reading</h3>
+            </div>
+            <p className="text-xs text-slate-500">
+              After showing your result, the app can optionally spend a little longer improving the parts a second attempt
+              can legitimately help — refetching reference audio, or (on capable devices) re-checking with a more accurate
+              speech model. It never changes your score by "retrying for a better number", and always falls back to the
+              result you already have if time runs out.
+            </p>
+            <div className="space-y-2">
+              {Object.values(ESCALATION_BUDGETS).map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => handleEscalationBudgetChange(opt.id)}
+                  className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-colors ${
+                    escalationBudget === opt.id
+                      ? "bg-emerald-500/10 border-emerald-500/30"
+                      : "bg-slate-800/30 border-slate-700/30 hover:border-slate-600/40"
+                  }`}
+                >
+                  <span className="text-sm text-slate-200">{opt.label}</span>
+                  {escalationBudget === opt.id && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
                 </button>
               ))}
             </div>

@@ -411,11 +411,22 @@ export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, use
     recognizedRatio: expectedWordsOriginal.length ? 1 - missedWords / expectedWordsOriginal.length : null,
   };
 
+  // Mean per-word recognition similarity (missed words count as 0), i.e. how
+  // confidently ASR matched the recitation to the expected words overall.
+  // Drives the "re-transcribe with the better model" escalation decision (see
+  // src/lib/escalation.js) — a low value means the fast model struggled and a
+  // heavier model might read the same audio more reliably. Null when there are
+  // no expected words to score against.
+  const overallWordConfidence = alignments.length
+    ? alignments.reduce((sum, a) => sum + (a.similarity || 0), 0) / alignments.length
+    : null;
+
   return {
     recognizedText: asrResult?.text?.trim() || "",
     wordFeedback,
     ruleChecks,
     glossary,
     alignmentStats,
+    overallWordConfidence,
   };
 }
