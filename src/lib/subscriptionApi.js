@@ -3,11 +3,11 @@
 // entitlement rules stay pure and unit-testable — this file is the part
 // that talks to the network.
 //
-// Subscription payments go through Stripe Checkout (TEST MODE until
-// launch): the `checkout` Edge Function creates the hosted payment page,
-// and the `stripe-webhook` function is the only thing that ever writes
-// subscription state — the client only reads it. (Cash App remains only
-// for voluntary donations — see src/lib/payments.js.)
+// Subscription payments go through Stripe Checkout (LIVE since 2026-07-16
+// — real cards are charged): the `checkout` Edge Function creates the
+// hosted payment page, and the `stripe-webhook` function is the only thing
+// that ever writes subscription state — the client only reads it. (Cash App
+// remains only for voluntary donations — see src/lib/payments.js.)
 import { supabase } from "@/lib/supabaseClient";
 import {
   clearSubscriberOwner,

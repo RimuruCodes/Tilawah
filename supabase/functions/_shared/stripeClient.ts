@@ -4,7 +4,13 @@ import Stripe from "npm:stripe@17";
 // anything but a Stripe TEST key (sk_test_...). Going live is a deliberate
 // code change here — flipped together with swapping in live keys — never an
 // accident of which key happened to be in the environment.
-const ALLOW_LIVE_STRIPE_KEYS = false;
+//
+// LIVE since 2026-07-16: the live secret key, live webhook signing secret,
+// and live price IDs were all set in the Supabase function secrets first;
+// this flag was flipped last, so the lock only ever opened onto a fully
+// live-configured environment. Flip back to false to return to test mode
+// (and swap the secrets back — the flag alone doesn't do it).
+const ALLOW_LIVE_STRIPE_KEYS = true;
 
 // One Stripe client per function invocation (Edge Functions are short-lived
 // isolates, so there's no long-running process to leak connections from).
