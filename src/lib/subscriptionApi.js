@@ -90,6 +90,34 @@ export async function subscriberSignOut() {
   await supabase.auth.signOut();
 }
 
+// Permanently deletes the backend half of an account: cancels any live
+// Stripe subscription and removes the Supabase row + auth user. Free users
+// have no Supabase session and nothing backend-side to delete, so this
+// resolves to { deleted: false } for them rather than erroring.
+//
+// THROWS if the deletion genuinely failed — the caller must NOT wipe the
+// local account in that case, or the person is left still-subscribed, still
+// being billed, and without the account that would tell them so.
+export async function deleteSubscriberAccount() {
+  if (!supabase) return { deleted: false, reason: "no-backend" };
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return { deleted: false, reason: "no-session" };
+
+  const { data, error } = await supabase.functions.invoke("delete-account", { body: {} });
+  if (error) {
+    const detail = await error.context?.json?.().catch(() => null);
+    throw new Error(
+      detail?.error || error.message || "Couldn't delete your subscription data — nothing was changed."
+    );
+  }
+  // The auth user is gone server-side; drop the local session/marker too.
+  await supabase.auth.signOut();
+  clearSubscriberOwner();
+  return { deleted: true, ...data };
+}
+
 // Shared shape for the two Edge Function calls below: both return a URL to
 // send the browser to (Stripe-hosted pages — the app never sees card data).
 async function invokeForUrl(functionName, body) {

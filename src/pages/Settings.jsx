@@ -5,7 +5,7 @@ import { ArrowLeft, User, Trash2, LogOut, Loader2, AlertTriangle, Download, Uplo
 import { useAuth } from "@/lib/AuthContext";
 import { useSubscription } from "@/lib/SubscriptionContext";
 import { describeSubscription } from "@/lib/entitlements";
-import { openBillingPortalUrl } from "@/lib/subscriptionApi";
+import { openBillingPortalUrl, deleteSubscriberAccount } from "@/lib/subscriptionApi";
 import { RecitationLog, MemorizationProgress, DailyStreak, FeedbackReport, RecitationPlanState, exportUserData, importUserData } from "@/lib/localDb";
 import { deleteAccount } from "@/lib/localAuth";
 import { ASR_MODEL_OPTIONS, getAsrModelPreference, setAsrModelPreference, isAsrEnabled, setAsrEnabled } from "@/lib/asrEngine";
@@ -36,6 +36,7 @@ export default function Settings() {
   const { user, logout } = useAuth();
   const { subscription, isLoadingSubscription, refreshSubscription } = useSubscription();
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [modelPref, setModelPref] = useState(getAsrModelPreference());
   const [escalationBudget, setEscalationBudget] = useState(getEscalationBudgetId());
   const [paceMatch, setPaceMatch] = useState(isPaceMatchEnabled());
@@ -149,6 +150,20 @@ export default function Settings() {
 
   const handleDeleteAccount = async () => {
     setDeleting(true);
+    setDeleteError("");
+    // Backend FIRST: cancel the Stripe subscription and remove the Supabase
+    // record before touching local data. If this fails we stop and keep the
+    // local account intact — wiping it here would leave the person still
+    // subscribed, still billed, and without the account that would show it.
+    try {
+      await deleteSubscriberAccount();
+    } catch (err) {
+      setDeleting(false);
+      setDeleteError(
+        `${err.message || "Couldn't delete your subscription data."} Your account was NOT deleted — nothing has changed. Please try again, or contact us if it keeps failing.`
+      );
+      return;
+    }
     try {
       await Promise.all([
         RecitationLog.deleteMany({ created_by_id: user?.id }),
@@ -629,9 +644,14 @@ export default function Settings() {
                 <AlertDialogHeader>
                   <AlertDialogTitle className="text-white">Delete your account?</AlertDialogTitle>
                   <AlertDialogDescription className="text-slate-400">
-                    This will permanently delete your account and all locally stored data: recitation scores and feedback, memorization progress, streaks, plans, and feedback reports. (Audio recordings are never stored, so there are none to delete.) This cannot be undone.
+                    This will permanently delete your account and all locally stored data: recitation scores and feedback, memorization progress, streaks, plans, and feedback reports. (Audio recordings are never stored, so there are none to delete.) If you have a subscription, it will be cancelled and your account record removed from our server too. This cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
+                {deleteError && (
+                  <p role="alert" className="text-xs text-red-400 bg-red-950/30 border border-red-500/20 rounded-lg p-2.5">
+                    {deleteError}
+                  </p>
+                )}
                 <AlertDialogFooter>
                   <AlertDialogCancel className="bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700">
                     Cancel
