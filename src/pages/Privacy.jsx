@@ -258,10 +258,15 @@ export default function Privacy() {
 
         <Section n="14" title="International users">
           <p>
-            Our backend service providers (Supabase, Stripe) may process and store data in regions
-            outside your own country. [DATA PROCESSING REGION / TRANSFER DETAILS — PLACEHOLDER,
-            confirm against Supabase/Stripe's current infrastructure documentation before relying on
-            this section.]
+            Our backend service providers process and store data in the United States. Your
+            subscriber account and subscription record are stored in our Supabase project's US West
+            region (Oregon, <code>us-west-2</code>), and subscription payments are processed by
+            Stripe, a United States-based company. If you access the app from outside the United
+            States, the limited account and subscription information described in this policy will be
+            transferred to and stored in the United States, which may have data-protection laws that
+            differ from those of your own country. By creating a subscription account, you consent to
+            this transfer. Your recitation recordings and practice data are never transmitted at all
+            and remain on your own device regardless of where you are.
           </p>
         </Section>
 

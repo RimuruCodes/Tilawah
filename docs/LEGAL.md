@@ -197,10 +197,16 @@ system is designed to require an adult account holder for payment purposes.
 
 ### 14. International users
 
-Our backend service providers (Supabase, Stripe) may process and store data in
-regions outside your own country. `[DATA PROCESSING REGION / TRANSFER DETAILS —
-PLACEHOLDER, confirm against Supabase/Stripe's current infrastructure
-documentation before relying on this section.]`
+Our backend service providers process and store data in the United States. Your
+subscriber account and subscription record are stored in our Supabase project's
+US West region (Oregon, `us-west-2`), and subscription payments are processed by
+Stripe, a United States-based company. If you access the app from outside the
+United States, the limited account and subscription information described in this
+policy will be transferred to and stored in the United States, which may have
+data-protection laws that differ from those of your own country. By creating a
+subscription account, you consent to this transfer. Your recitation recordings
+and practice data are never transmitted at all and remain on your own device
+regardless of where you are.
 
 ### 15. Changes to this policy
 
@@ -369,10 +375,14 @@ the **contact email** (`alaminoyeyemi64@gmail.com`) are now filled in. **Governi
 law** (Terms §28) is set to the State of Ohio — the Ohio choice is confirmed, though
 the specific clause wording here is a standard draft, not the reviewed §20 text.
 
+Resolved 2026-07-18: the **data processing region** (Privacy §14) is filled in — the
+Supabase project runs in US West (Oregon, `us-west-2`) and Stripe is US-based, so
+data is stored in the United States, with a cross-border transfer/consent clause for
+users outside the US.
+
 | # | Placeholder | Where | Status |
 |---|---|---|---|
-| 1 | **Operator / business name** | Privacy §15; Terms §30 | **Still open.** Who "we" legally are. Stripe requires a real business identity on a live account — depends on whether a business is registered (see below). |
-| 2 | **Data processing region** | Privacy §14 | Still open. Confirm against Supabase/Stripe infrastructure docs. |
+| 1 | **Operator / business name** | Privacy §15; Terms §30 | **Still open — the only remaining placeholder.** Who "we" legally are. Stripe requires a real business identity on a live account — depends on whether a business is registered (see below). |
 
 Once these are filled in and the document has had professional legal review, the
 "Draft notice" banner should be removed from both pages (`src/pages/Privacy.jsx`
