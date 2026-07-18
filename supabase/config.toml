@@ -19,10 +19,33 @@ additional_redirect_urls = ["http://localhost:5173", "https://www.tilawah1.com",
 enroll_enabled = true
 verify_enabled = true
 
+[auth.rate_limit]
+# Supabase's default email cap (30/hour, project-wide) is low enough that a
+# small burst of legitimate sign-ins — or our own testing — trips a 429
+# `over_email_send_rate_limit` and blocks real users. Raised to a value that
+# still fits the Brevo free tier's 300/day. The other rate_limit fields are
+# pinned to the CLI/dashboard defaults so `config push` doesn't silently
+# change them (see the warning at the top of this file).
+email_sent = 60
+sms_sent = 30
+anonymous_users = 30
+token_refresh = 150
+sign_in_sign_ups = 30
+token_verifications = 30
+web3 = 30
+
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
-enable_confirmations = true
+# MUST stay false for the OTP-code flow. With confirmations ON, a brand-new
+# email that signs up via signInWithOtp receives Supabase's *signup
+# confirmation* email — the default LINK template, not the 6-digit code — so
+# first-time subscribers would land on the "enter your code" screen with no
+# code (verified empirically 2026-07-18). The OTP itself is the email
+# verification here (verifyOtp), so a separate confirmation step is redundant
+# and actively breaks new signups. Returning users were unaffected, which is
+# why this hid during testing with an already-existing account.
+enable_confirmations = false
 max_frequency = "1m0s"
 # 6-digit code (the app's UpgradeModal asks for exactly 6).
 otp_length = 6
