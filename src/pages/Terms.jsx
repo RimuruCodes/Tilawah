@@ -11,7 +11,7 @@ import { ArrowLeft, ScrollText } from "lucide-react";
 // invented.
 
 const EFFECTIVE_DATE = "July 16, 2026";
-const SUPPORT_EMAIL = "[CONTACT EMAIL — PLACEHOLDER]";
+const SUPPORT_EMAIL = "alaminoyeyemi64@gmail.com";
 const OPERATOR = "[OPERATOR / BUSINESS NAME — to be filled in]";
 
 function Section({ n, title, children }) {
@@ -103,13 +103,14 @@ export default function Terms() {
           </p>
         </Section>
 
-        <Section n="20" title="Refund policy">
+        <Section n="20" title="Refund Policy and Right of Withdrawal">
           <p>
-            [REFUND POLICY — PLACEHOLDER. This must be a real, specific policy before it can be
-            relied on: the operator must decide and state the terms — for example whether refunds are
-            offered within a set number of days of a charge, how to request one, and how partial
-            periods are treated. Stripe expects a live account to publish a genuine refund and
-            cancellation policy.]
+            All subscription charges are non-refundable, except as required by applicable law. EU/UK
+            Users: By subscribing to Tilawah, you expressly consent to the immediate delivery of the
+            digital content and paid features. You acknowledge and agree that by accessing these
+            features immediately, you lose your statutory 14-day right of withdrawal for the current
+            billing period. If you cancel your subscription, the cancellation will take effect at the
+            end of your current paid term, and no prorated refunds will be issued.
           </p>
         </Section>
 
@@ -187,9 +188,11 @@ export default function Terms() {
 
         <Section n="28" title="Governing law">
           <p>
-            [GOVERNING LAW / JURISDICTION — PLACEHOLDER. The operator must fill in the country/state
-            whose laws govern these terms and where disputes are handled. This section cannot be
-            relied on while it remains unfilled.]
+            These Terms of Service are governed by and construed in accordance with the laws of the
+            State of Ohio, United States, without regard to its conflict-of-laws provisions. You agree
+            that any dispute arising out of or relating to these terms or your use of the app will be
+            subject to the exclusive jurisdiction of the state and federal courts located in the State
+            of Ohio.
           </p>
         </Section>
 

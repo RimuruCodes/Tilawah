@@ -190,7 +190,7 @@ Creating a subscription account requires confirming that you are at least 13 yea
 old; the app blocks account creation for anyone who indicates they are under 13. If
 you are a parent or guardian and believe your child has provided us with personal
 information through the subscription/backend system despite this, please contact us
-at `[SUPPORT-EMAIL — dedicated address to be created]` so we can address it. We
+at `alaminoyeyemi64@gmail.com` so we can address it. We
 encourage parental involvement in any subscription or payment
 activity related to this app, consistent with how the app's own subscription
 system is designed to require an adult account holder for payment purposes.
@@ -209,7 +209,7 @@ material changes, we will make a reasonable effort to note this within the app
 itself. Continued use of the app after an update constitutes acceptance of the
 revised policy. We encourage you to review this page periodically.
 
-Questions or requests: `[SUPPORT-EMAIL — dedicated address to be created]`.
+Questions or requests: `alaminoyeyemi64@gmail.com`.
 
 Operator: `[OPERATOR / BUSINESS NAME — to be filled in]`.
 
@@ -262,13 +262,15 @@ waives any statutory "cooling-off" or withdrawal right (such as the EU/UK 14-day
 right) for the current billing period, to the extent such a right would otherwise
 apply to you.
 
-### 20. Refund policy
+### 20. Refund Policy and Right of Withdrawal
 
-`[REFUND POLICY — PLACEHOLDER. This must be a real, specific policy before it can
-be relied on: the operator must decide and state the terms — for example whether
-refunds are offered within a set number of days of a charge, how to request one,
-and how partial periods are treated. Stripe expects a live account to publish a
-genuine refund and cancellation policy.]`
+All subscription charges are non-refundable, except as required by applicable law.
+EU/UK Users: By subscribing to Tilawah, you expressly consent to the immediate
+delivery of the digital content and paid features. You acknowledge and agree that by
+accessing these features immediately, you lose your statutory 14-day right of
+withdrawal for the current billing period. If you cancel your subscription, the
+cancellation will take effect at the end of your current paid term, and no prorated
+refunds will be issued.
 
 ### 21. Changes to pricing or plans
 
@@ -333,9 +335,11 @@ continue to apply after termination.
 
 ### 28. Governing law
 
-`[GOVERNING LAW / JURISDICTION — PLACEHOLDER. The operator must fill in the
-country/state whose laws govern these terms and where disputes are handled. This
-section cannot be relied on while it remains unfilled.]`
+These Terms of Service are governed by and construed in accordance with the laws of
+the State of Ohio, United States, without regard to its conflict-of-laws provisions.
+You agree that any dispute arising out of or relating to these terms or your use of
+the app will be subject to the exclusive jurisdiction of the state and federal courts
+located in the State of Ohio.
 
 ### 29. Severability and entire agreement
 
@@ -349,7 +353,7 @@ use of the app, and supersede any prior agreements on this subject.
 We may revise these Terms of Service from time to time; continued use of the app
 after a revision takes effect constitutes acceptance of the updated terms. If you
 have questions about these terms or the Privacy Policy, please contact us at
-`[CONTACT EMAIL — PLACEHOLDER]`.
+`alaminoyeyemi64@gmail.com`.
 
 Operator: `[OPERATOR / BUSINESS NAME — to be filled in]`.
 
@@ -358,16 +362,17 @@ Operator: `[OPERATOR / BUSINESS NAME — to be filled in]`.
 ## Outstanding placeholders (operator decisions)
 
 These are **not** oversights — they are business/legal decisions that were
-deliberately left rather than invented. Real cards are being charged while the
-refund policy is blank, which makes the first item urgent.
+deliberately left rather than invented.
 
-| # | Placeholder | Where | Notes |
+Resolved 2026-07-16: the **refund policy** (Terms §20, attorney-provided text) and
+the **contact email** (`alaminoyeyemi64@gmail.com`) are now filled in. **Governing
+law** (Terms §28) is set to the State of Ohio — the Ohio choice is confirmed, though
+the specific clause wording here is a standard draft, not the reviewed §20 text.
+
+| # | Placeholder | Where | Status |
 |---|---|---|---|
-| 1 | **Refund policy** | Terms §20 | **Urgent.** Stripe expects a live account to publish a genuine refund/cancellation policy. |
-| 2 | **Governing law / jurisdiction** | Terms §28 | Country/state whose law governs and where disputes are handled. |
-| 3 | **Contact / support email** | Privacy §13, §15; Terms §30 | A real, monitored address. Privacy §13 (children's privacy) depends on it. |
-| 4 | **Operator / business name** | Privacy §15; Terms §30 | Who "we" legally are. Stripe requires a real business identity on a live account. |
-| 5 | **Data processing region** | Privacy §14 | Confirm against Supabase/Stripe infrastructure docs. |
+| 1 | **Operator / business name** | Privacy §15; Terms §30 | **Still open.** Who "we" legally are. Stripe requires a real business identity on a live account — depends on whether a business is registered (see below). |
+| 2 | **Data processing region** | Privacy §14 | Still open. Confirm against Supabase/Stripe infrastructure docs. |
 
 Once these are filled in and the document has had professional legal review, the
 "Draft notice" banner should be removed from both pages (`src/pages/Privacy.jsx`

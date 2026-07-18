@@ -290,8 +290,9 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
                     className="mt-0.5 w-4 h-4 flex-shrink-0 accent-emerald-500"
                   />
                   <span>
-                    I want immediate access to premium features now, and I understand that by starting
-                    within the 14-day period I give up my right to withdraw for this billing period.
+                    I expressly consent to the immediate delivery of the premium features, and I
+                    acknowledge that by accessing them immediately I lose my statutory 14-day right
+                    of withdrawal for the current billing period.
                   </span>
                 </label>
                 <button

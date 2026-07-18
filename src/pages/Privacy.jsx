@@ -15,7 +15,7 @@ import { ArrowLeft, ShieldCheck } from "lucide-react";
 //    without weakening section 11 to match.
 
 const EFFECTIVE_DATE = "July 16, 2026";
-const SUPPORT_EMAIL = "[SUPPORT-EMAIL — dedicated address to be created]";
+const SUPPORT_EMAIL = "alaminoyeyemi64@gmail.com";
 const OPERATOR = "[OPERATOR / BUSINESS NAME — to be filled in]";
 
 function Section({ n, title, children }) {
