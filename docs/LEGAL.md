@@ -217,7 +217,7 @@ revised policy. We encourage you to review this page periodically.
 
 Questions or requests: `alaminoyeyemi64@gmail.com`.
 
-Operator: `[OPERATOR / BUSINESS NAME — to be filled in]`.
+Operator: Akeem Adekunle (an individual/sole proprietor).
 
 ---
 
@@ -361,7 +361,7 @@ after a revision takes effect constitutes acceptance of the updated terms. If yo
 have questions about these terms or the Privacy Policy, please contact us at
 `alaminoyeyemi64@gmail.com`.
 
-Operator: `[OPERATOR / BUSINESS NAME — to be filled in]`.
+Operator: Akeem Adekunle (an individual/sole proprietor).
 
 ---
 
@@ -380,11 +380,15 @@ Supabase project runs in US West (Oregon, `us-west-2`) and Stripe is US-based, s
 data is stored in the United States, with a cross-border transfer/consent clause for
 users outside the US.
 
-| # | Placeholder | Where | Status |
-|---|---|---|---|
-| 1 | **Operator / business name** | Privacy §15; Terms §30 | **Still open — the only remaining placeholder.** Who "we" legally are. Stripe requires a real business identity on a live account — depends on whether a business is registered (see below). |
+Resolved 2026-07-18: the **operator / business name** (Privacy §15; Terms §30) is
+filled in — **Akeem Adekunle**, operating as an individual / sole proprietor (matching
+the Live Stripe account's "Individual" business type). If a formal business (LLC, etc.)
+is registered later, this name should be updated to the registered entity in both pages.
 
-Once these are filled in and the document has had professional legal review, the
-"Draft notice" banner should be removed from both pages (`src/pages/Privacy.jsx`
-and `src/pages/Terms.jsx`) — it is accurate today and should not be removed before
-then.
+**All content placeholders are now filled.** The only step remaining before the
+"Draft notice" banner comes off is **professional legal review** of the completed
+document.
+
+Once the document has had professional legal review, the "Draft notice" banner should
+be removed from both pages (`src/pages/Privacy.jsx` and `src/pages/Terms.jsx`) — it is
+accurate today and should not be removed before then.

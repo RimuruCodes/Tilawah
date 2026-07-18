@@ -16,7 +16,7 @@ import { ArrowLeft, ShieldCheck } from "lucide-react";
 
 const EFFECTIVE_DATE = "July 16, 2026";
 const SUPPORT_EMAIL = "alaminoyeyemi64@gmail.com";
-const OPERATOR = "[OPERATOR / BUSINESS NAME — to be filled in]";
+const OPERATOR = "Akeem Adekunle";
 
 function Section({ n, title, children }) {
   return (
