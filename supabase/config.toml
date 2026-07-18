@@ -38,7 +38,7 @@ host = "smtp-relay.brevo.com"
 port = 587
 user = "b1ca38001@smtp-brevo.com"
 pass = "env(SMTP_PASSWORD)"
-admin_email = "alaminoyeyemi64@gmail.com"
+admin_email = "no-reply@tilawah1.com"
 sender_name = "Tilawah"
 
 # signInWithOtp sends the "magic link" template; with SMTP enabled we can
