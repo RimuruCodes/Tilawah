@@ -37,6 +37,14 @@ Deno.serve(async (req: Request) => {
         metadata: { supabase_user_id: user.id },
       })).id;
 
+    // Stripe Tax (automatic VAT/sales-tax by customer location) is OFF by
+    // default and must be turned on deliberately: setting automatic_tax on
+    // the session throws unless Stripe Tax is first activated in the Stripe
+    // dashboard (with tax registrations), so enabling it blindly would break
+    // live checkout. Gate it on an env flag so the account holder can flip it
+    // once the dashboard side is configured — see STRIPE_TAX note in the PR.
+    const automaticTax = Deno.env.get("STRIPE_AUTOMATIC_TAX") === "true";
+
     const appBaseUrl = Deno.env.get("APP_BASE_URL") ?? "";
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -47,6 +55,14 @@ Deno.serve(async (req: Request) => {
       cancel_url: `${appBaseUrl}/settings?checkout=cancelled`,
       metadata: { supabase_user_id: user.id, plan },
       subscription_data: { metadata: { supabase_user_id: user.id, plan } },
+      // Tax needs the customer's location; only collected when tax is on.
+      ...(automaticTax
+        ? {
+            automatic_tax: { enabled: true },
+            billing_address_collection: "required",
+            customer_update: { address: "auto" },
+          }
+        : {}),
     });
 
     return new Response(JSON.stringify({ url: session.url }), {

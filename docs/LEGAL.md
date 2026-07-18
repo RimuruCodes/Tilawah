@@ -186,11 +186,12 @@ and keep your browser and operating system updated.
 
 ### 13. Children's privacy
 
-Tilawah does not currently have a specific age-verification or age-gating system.
-If you are a parent or guardian and believe your child has provided us with
-personal information through the subscription/backend system without your consent,
-please contact us at `[SUPPORT-EMAIL — dedicated address to be created]` so we can
-address it. We encourage parental involvement in any subscription or payment
+Creating a subscription account requires confirming that you are at least 13 years
+old; the app blocks account creation for anyone who indicates they are under 13. If
+you are a parent or guardian and believe your child has provided us with personal
+information through the subscription/backend system despite this, please contact us
+at `[SUPPORT-EMAIL — dedicated address to be created]` so we can address it. We
+encourage parental involvement in any subscription or payment
 activity related to this app, consistent with how the app's own subscription
 system is designed to require an adult account holder for payment purposes.
 
@@ -234,23 +235,32 @@ active paid subscription.
 
 ### 18. Eligibility and account responsibility
 
-You are responsible for maintaining the security of your local device and any
-account credentials you create. If you are under the age required to enter into
-binding agreements or hold a payment account in your jurisdiction, any
-subscription purchase must be made and managed by a parent or legal guardian
-acting as the account holder; the app's subscription system is intentionally
-designed to require this. You are responsible for all activity that occurs under
-your account.
+When you create a subscription account, you must confirm that you are at least 13
+years old and actively agree to these Terms of Service and the Privacy Policy before
+the account is created. If you are under the age required to enter into binding
+agreements or hold a payment account in your jurisdiction, any subscription purchase
+must be made and managed by a parent or legal guardian acting as the account holder;
+the app's subscription system is intentionally designed to require this. You are
+responsible for maintaining the security of your local device and any account
+credentials you create, and for all activity that occurs under your account.
 
 ### 19. Subscriptions and billing
 
 Paid subscriptions are billed on a recurring basis (monthly or yearly, as selected
-at signup) through Stripe. Subscriptions automatically renew at the end of each
-billing period unless cancelled beforehand. You can view your current plan and
-renewal date, and cancel your subscription at any time, through Settings, which
-links to Stripe's own account management portal. Cancelling stops future renewals;
-you retain access to paid features through the remainder of the period you have
-already paid for.
+at signup) through Stripe. Before you are sent to payment, the app shows you — at the
+point of purchase — the exact recurring amount, the billing frequency, that the
+subscription automatically renews at that price until you cancel, and how to cancel.
+Subscriptions automatically renew at the end of each billing period unless cancelled
+beforehand. You can view your current plan and renewal date, and cancel your
+subscription at any time, through Settings, which links to Stripe's own account
+management portal. Cancelling stops future renewals; you retain access to paid
+features through the remainder of the period you have already paid for.
+
+Because a subscription grants immediate access to digital features, at checkout you
+confirm that you want that access to begin right away and acknowledge that doing so
+waives any statutory "cooling-off" or withdrawal right (such as the EU/UK 14-day
+right) for the current billing period, to the extent such a right would otherwise
+apply to you.
 
 ### 20. Refund policy
 

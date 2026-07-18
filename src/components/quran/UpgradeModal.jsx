@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { hashEmail } from "@/lib/localAuth";
 import { isSubscriptionActive } from "@/lib/entitlements";
 import { SUBSCRIPTION_PLANS } from "@/lib/payments";
+import { validateSubscriptionSignup, validateCheckoutConsent } from "@/lib/signupValidation";
 
 // The single upgrade flow used everywhere a free user hits a gated
 // feature: pick a plan, prove the email is theirs (a 6-digit code emailed
@@ -26,6 +27,9 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
   const [step, setStep] = useState("plan"); // plan, email, code, pay, restored, error
   const [plan, setPlan] = useState("yearly");
   const [email, setEmail] = useState("");
+  const [birthYear, setBirthYear] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [immediateDeliveryConsent, setImmediateDeliveryConsent] = useState(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -35,6 +39,9 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
   const resetAndClose = () => {
     setStep("plan");
     setEmail("");
+    setBirthYear("");
+    setAgreedToTerms(false);
+    setImmediateDeliveryConsent(false);
     setCode("");
     setBusy(false);
     setErrorMessage("");
@@ -43,6 +50,13 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
 
   const handleSendCode = async () => {
     if (!email.trim()) return;
+    // Age gate (COPPA) + clickwrap acceptance, enforced before the Supabase
+    // account is created (requestLoginCode with shouldCreateUser).
+    const signupError = validateSubscriptionSignup({ birthYear, agreedToTerms });
+    if (signupError) {
+      setErrorMessage(signupError);
+      return;
+    }
     setBusy(true);
     setErrorMessage("");
     try {
@@ -92,6 +106,13 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
   // plan. Same-tab navigation: Stripe sends the user back to /settings
   // when they finish (or cancel), and entitlement state refreshes there.
   const handleGoToCheckout = async () => {
+    // Immediate-delivery / withdrawal-waiver consent must be given before a
+    // checkout session is created (EU/UK 14-day right; applied to everyone).
+    const consentError = validateCheckoutConsent({ immediateDeliveryConsent });
+    if (consentError) {
+      setErrorMessage(consentError);
+      return;
+    }
     setBusy(true);
     setErrorMessage("");
     try {
@@ -170,12 +191,40 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
                     className="w-full bg-transparent text-sm text-white placeholder:text-slate-600 outline-none"
+                    aria-label="Email address"
                   />
                 </div>
+                <div>
+                  <label htmlFor="birth-year" className="text-xs text-slate-500">Birth year</label>
+                  <input
+                    id="birth-year"
+                    type="text"
+                    inputMode="numeric"
+                    value={birthYear}
+                    onChange={(e) => setBirthYear(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    placeholder="e.g. 1998"
+                    className="mt-1 w-full bg-slate-800/50 border border-slate-700/30 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 outline-none"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-600">You must be at least 13 to create an account.</p>
+                </div>
+                <label className="flex items-start gap-2.5 text-xs text-slate-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 flex-shrink-0 accent-emerald-500"
+                  />
+                  <span>
+                    I agree to the{" "}
+                    <a href="/terms" target="_blank" rel="noreferrer" className="underline hover:text-slate-200">Terms of Service</a>{" "}
+                    and{" "}
+                    <a href="/privacy" target="_blank" rel="noreferrer" className="underline hover:text-slate-200">Privacy Policy</a>.
+                  </span>
+                </label>
                 {errorMessage && <p className="text-xs text-orange-400">{errorMessage}</p>}
                 <button
                   onClick={handleSendCode}
-                  disabled={busy || !email.trim()}
+                  disabled={busy || !email.trim() || !birthYear.trim() || !agreedToTerms}
                   className="w-full py-2.5 rounded-xl bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-400 disabled:opacity-50 transition-colors text-sm flex items-center justify-center gap-2"
                 >
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send code"}
@@ -210,17 +259,44 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
 
             {step === "pay" && (
               <motion.div key="pay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
-                <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-3 text-center">
-                  <p className="text-xs text-slate-500">{selectedPlan.label} plan</p>
-                  <p className="text-lg font-semibold text-white">{selectedPlan.price}</p>
+                {/* Conspicuous auto-renewal disclosure at the point of
+                    purchase — the exact recurring charge, that it renews
+                    until cancelled, and how to cancel. */}
+                <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-3.5 space-y-1.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs text-slate-400">{selectedPlan.label} plan</span>
+                    <span className="text-lg font-semibold text-white">{selectedPlan.price}</span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    You'll be charged <span className="text-white font-medium">${selectedPlan.amount.toFixed(2)}</span>{" "}
+                    {plan === "yearly" ? "per year" : "per month"}, and it{" "}
+                    <span className="text-white font-medium">automatically renews</span> at that price each{" "}
+                    {plan === "yearly" ? "year" : "month"} until you cancel.
+                  </p>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Cancel anytime in <span className="text-slate-300">Settings → Manage subscription</span> (Stripe's
+                    billing portal); you keep access until the end of the period you've paid for.
+                  </p>
                 </div>
                 <p className="text-xs text-slate-500">
                   Payment happens on Stripe's secure checkout page — your card details never touch this app.
                   You'll be brought back here when you're done.
                 </p>
+                <label className="flex items-start gap-2.5 text-xs text-slate-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={immediateDeliveryConsent}
+                    onChange={(e) => setImmediateDeliveryConsent(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 flex-shrink-0 accent-emerald-500"
+                  />
+                  <span>
+                    I want immediate access to premium features now, and I understand that by starting
+                    within the 14-day period I give up my right to withdraw for this billing period.
+                  </span>
+                </label>
                 <button
                   onClick={handleGoToCheckout}
-                  disabled={busy}
+                  disabled={busy || !immediateDeliveryConsent}
                   className="w-full py-3 rounded-xl bg-emerald-500 text-slate-900 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-emerald-400 disabled:opacity-50 transition-colors shadow-lg shadow-emerald-500/20"
                 >
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : (

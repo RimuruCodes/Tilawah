@@ -22,6 +22,9 @@ async function register(page, { email, displayName, password }) {
   }
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByLabel("Confirm Password").fill(password);
+  // Clickwrap: the account button stays disabled until Terms/Privacy is accepted.
+  await expect(page.getByRole("button", { name: "Create account" })).toBeDisabled();
+  await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Create account" }).click();
   await page.waitForURL("**/");
   await expect(page).toHaveURL(/\/$/);

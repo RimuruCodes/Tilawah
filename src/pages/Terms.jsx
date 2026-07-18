@@ -72,23 +72,34 @@ export default function Terms() {
 
         <Section n="18" title="Eligibility and account responsibility">
           <p>
-            You are responsible for maintaining the security of your local device and any account
-            credentials you create. If you are under the age required to enter into binding
-            agreements or hold a payment account in your jurisdiction, any subscription purchase must
-            be made and managed by a parent or legal guardian acting as the account holder; the app's
+            When you create a subscription account, you must confirm that you are at least 13 years
+            old and actively agree to these Terms of Service and the Privacy Policy before the
+            account is created. If you are under the age required to enter into binding agreements or
+            hold a payment account in your jurisdiction, any subscription purchase must be made and
+            managed by a parent or legal guardian acting as the account holder; the app's
             subscription system is intentionally designed to require this. You are responsible for
-            all activity that occurs under your account.
+            maintaining the security of your local device and any account credentials you create, and
+            for all activity that occurs under your account.
           </p>
         </Section>
 
         <Section n="19" title="Subscriptions and billing">
           <p>
             Paid subscriptions are billed on a recurring basis (monthly or yearly, as selected at
-            signup) through Stripe. Subscriptions automatically renew at the end of each billing
-            period unless cancelled beforehand. You can view your current plan and renewal date, and
-            cancel your subscription at any time, through Settings, which links to Stripe's own
-            account management portal. Cancelling stops future renewals; you retain access to paid
-            features through the remainder of the period you have already paid for.
+            signup) through Stripe. Before you are sent to payment, the app shows you — at the point
+            of purchase — the exact recurring amount, the billing frequency, that the subscription
+            automatically renews at that price until you cancel, and how to cancel. Subscriptions
+            automatically renew at the end of each billing period unless cancelled beforehand. You
+            can view your current plan and renewal date, and cancel your subscription at any time,
+            through Settings, which links to Stripe's own account management portal. Cancelling stops
+            future renewals; you retain access to paid features through the remainder of the period
+            you have already paid for.
+          </p>
+          <p>
+            Because a subscription grants immediate access to digital features, at checkout you
+            confirm that you want that access to begin right away and acknowledge that doing so waives
+            any statutory "cooling-off" or withdrawal right (such as the EU/UK 14-day right) for the
+            current billing period, to the extent such a right would otherwise apply to you.
           </p>
         </Section>
 

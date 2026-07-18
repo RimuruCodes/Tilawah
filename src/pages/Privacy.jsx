@@ -246,9 +246,10 @@ export default function Privacy() {
 
         <Section n="13" title="Children's privacy">
           <p>
-            Tilawah does not currently have a specific age-verification or age-gating system. If you
-            are a parent or guardian and believe your child has provided us with personal information
-            through the subscription/backend system without your consent, please contact us at{" "}
+            Creating a subscription account requires confirming that you are at least 13 years old;
+            the app blocks account creation for anyone who indicates they are under 13. If you are a
+            parent or guardian and believe your child has provided us with personal information
+            through the subscription/backend system despite this, please contact us at{" "}
             {SUPPORT_EMAIL} so we can address it. We encourage parental involvement in any
             subscription or payment activity related to this app, consistent with how the app's own
             subscription system is designed to require an adult account holder for payment purposes.

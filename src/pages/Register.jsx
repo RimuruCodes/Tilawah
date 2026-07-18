@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { register } from "@/lib/localAuth";
+import { validateLocalRegistration } from "@/lib/signupValidation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,18 +13,16 @@ export default function Register() {
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
+    const validationError = validateLocalRegistration({ password, confirmPassword, agreedToTerms });
+    if (validationError) {
+      setError(validationError);
       return;
     }
     setLoading(true);
@@ -130,7 +129,22 @@ export default function Register() {
             />
           </div>
         </div>
-        <Button type="submit" className="w-full h-12 font-medium" disabled={loading}>
+        <label className="flex items-start gap-2.5 text-[13px] text-muted-foreground cursor-pointer">
+          <input
+            type="checkbox"
+            checked={agreedToTerms}
+            onChange={(e) => setAgreedToTerms(e.target.checked)}
+            className="mt-0.5 w-4 h-4 flex-shrink-0 accent-emerald-500"
+            aria-describedby="terms-desc"
+          />
+          <span id="terms-desc">
+            I agree to the{" "}
+            <Link to="/terms" className="underline text-primary hover:text-slate-300" target="_blank" rel="noreferrer">Terms of Service</Link>{" "}
+            and{" "}
+            <Link to="/privacy" className="underline text-primary hover:text-slate-300" target="_blank" rel="noreferrer">Privacy Policy</Link>.
+          </span>
+        </label>
+        <Button type="submit" className="w-full h-12 font-medium" disabled={loading || !agreedToTerms}>
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -140,11 +154,6 @@ export default function Register() {
             "Create account"
           )}
         </Button>
-        <p className="text-[11px] text-slate-500 text-center">
-          By creating an account you agree to the{" "}
-          <Link to="/terms" className="underline hover:text-slate-300">Terms of Service</Link> and{" "}
-          <Link to="/privacy" className="underline hover:text-slate-300">Privacy Policy</Link>.
-        </p>
       </form>
     </AuthLayout>
   );
