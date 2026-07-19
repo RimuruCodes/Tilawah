@@ -43,14 +43,6 @@ export default function Terms() {
           </div>
         </div>
 
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
-          <p className="text-xs text-amber-400/90 leading-relaxed">
-            <strong>Draft notice:</strong> these terms are written to accurately describe how the app
-            actually works, but they have <strong>not</strong> been reviewed by a lawyer. Because
-            real payments are involved, they should receive professional legal review.
-          </p>
-        </div>
-
         <Section n="16" title="Acceptance of these terms">
           <p>
             In these Terms, "we," "us," and "our" mean Akeem Adekunle, an individual doing business

@@ -47,14 +47,6 @@ export default function Privacy() {
           </div>
         </div>
 
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
-          <p className="text-xs text-amber-400/90 leading-relaxed">
-            <strong>Draft notice:</strong> this document is written to accurately describe how the
-            app actually works, but it has <strong>not</strong> been reviewed by a lawyer. Because
-            real payments are involved, it should receive professional legal review.
-          </p>
-        </div>
-
         <Section n="1" title="Overview">
           <p>
             This Privacy Policy explains what information Tilawah ("the app," "we," "our" — meaning

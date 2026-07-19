@@ -2,10 +2,6 @@
 
 **Effective date: July 16, 2026**
 
-> **Draft notice:** this document is written to accurately describe how the app
-> actually works, but it has **not** been reviewed by a lawyer. Because real
-> payments are involved, it should receive professional legal review.
-
 > **Maintainer note (not part of the published text):** this file mirrors what
 > `src/pages/Privacy.jsx` and `src/pages/Terms.jsx` render. Every factual claim
 > was verified against the code on 2026-07-16. **If the data handling changes,
@@ -396,10 +392,11 @@ filled in — **Akeem Adekunle**, operating as an individual / sole proprietor (
 the Live Stripe account's "Individual" business type). If a formal business (LLC, etc.)
 is registered later, this name should be updated to the registered entity in both pages.
 
-**All content placeholders are now filled.** The only step remaining before the
-"Draft notice" banner comes off is **professional legal review** of the completed
-document.
-
-Once the document has had professional legal review, the "Draft notice" banner should
-be removed from both pages (`src/pages/Privacy.jsx` and `src/pages/Terms.jsx`) — it is
-accurate today and should not be removed before then.
+**All content placeholders are now filled.** The document went through a legal review
+(two passes; recommendations applied — sole-proprietor wording, EU/UK withdrawal,
+COPPA language, Ohio governing-law savings clause). On 2026-07-18 the operator elected
+to remove the "Draft notice" banner from both pages and this document, on the strength
+of that review. Note the review itself was provided as general information and stated
+it is not a substitute for advice from a licensed attorney; a licensed-attorney sign-off
+was not obtained. If the operator later wants that, a licensed attorney should review
+the current version before further reliance.
