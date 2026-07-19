@@ -57,8 +57,9 @@ export default function Privacy() {
 
         <Section n="1" title="Overview">
           <p>
-            This Privacy Policy explains what information Tilawah ("the app," "we," "our") collects,
-            how it's used, and what control you have over it. Tilawah is a Quran recitation practice
+            This Privacy Policy explains what information Tilawah ("the app," "we," "our" — meaning
+            Akeem Adekunle, an individual doing business as Tilawah) collects, how it's used, and what
+            control you have over it. Tilawah is a Quran recitation practice
             app with two tiers of use — a free tier that runs entirely on your own device, and a paid
             subscription tier that involves a real backend account. These two tiers handle your data
             very differently, and this policy describes both honestly and separately rather than
@@ -246,13 +247,16 @@ export default function Privacy() {
 
         <Section n="13" title="Children's privacy">
           <p>
-            Creating a subscription account requires confirming that you are at least 13 years old;
-            the app blocks account creation for anyone who indicates they are under 13. If you are a
-            parent or guardian and believe your child has provided us with personal information
-            through the subscription/backend system despite this, please contact us at{" "}
-            {SUPPORT_EMAIL} so we can address it. We encourage parental involvement in any
-            subscription or payment activity related to this app, consistent with how the app's own
-            subscription system is designed to require an adult account holder for payment purposes.
+            Tilawah is intended for users 13 and older, and we do not knowingly collect personal
+            information from children under 13. Creating a subscription account requires confirming
+            that you are at least 13 years old, and the app blocks account creation for anyone who
+            indicates they are under 13. If we learn that a child under 13 has provided personal
+            information through the subscription/backend system, we will take steps to delete it. If
+            you are a parent or guardian and believe your child has provided us with personal
+            information despite this, please contact us at {SUPPORT_EMAIL} so we can address it. We
+            encourage parental involvement in any subscription or payment activity related to this
+            app, consistent with how the app's own subscription system is designed to require an adult
+            account holder for payment purposes.
           </p>
         </Section>
 

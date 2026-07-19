@@ -26,8 +26,9 @@
 
 ### 1. Overview
 
-This Privacy Policy explains what information Tilawah ("the app," "we," "our")
-collects, how it's used, and what control you have over it. Tilawah is a Quran
+This Privacy Policy explains what information Tilawah ("the app," "we," "our" —
+meaning Akeem Adekunle, an individual doing business as Tilawah) collects, how it's
+used, and what control you have over it. Tilawah is a Quran
 recitation practice app with two tiers of use — a free tier that runs entirely on
 your own device, and a paid subscription tier that involves a real backend
 account. These two tiers handle your data very differently, and this policy
@@ -186,14 +187,17 @@ and keep your browser and operating system updated.
 
 ### 13. Children's privacy
 
-Creating a subscription account requires confirming that you are at least 13 years
-old; the app blocks account creation for anyone who indicates they are under 13. If
-you are a parent or guardian and believe your child has provided us with personal
-information through the subscription/backend system despite this, please contact us
-at `alaminoyeyemi64@gmail.com` so we can address it. We
-encourage parental involvement in any subscription or payment
-activity related to this app, consistent with how the app's own subscription
-system is designed to require an adult account holder for payment purposes.
+Tilawah is intended for users 13 and older, and we do not knowingly collect personal
+information from children under 13. Creating a subscription account requires
+confirming that you are at least 13 years old, and the app blocks account creation
+for anyone who indicates they are under 13. If we learn that a child under 13 has
+provided personal information through the subscription/backend system, we will take
+steps to delete it. If you are a parent or guardian and believe your child has
+provided us with personal information despite this, please contact us at
+`alaminoyeyemi64@gmail.com` so we can address it. We encourage parental involvement
+in any subscription or payment activity related to this app, consistent with how the
+app's own subscription system is designed to require an adult account holder for
+payment purposes.
 
 ### 14. International users
 
@@ -225,10 +229,12 @@ Operator: Akeem Adekunle (an individual/sole proprietor).
 
 ### 16. Acceptance of these terms
 
-By downloading, accessing, or using Tilawah, you agree to these Terms of Service.
-If you do not agree, please do not use the app. If you are using the app on behalf
-of a minor, or are a minor using the app under a parent or guardian's supervision,
-these terms apply to that arrangement as described further below.
+In these Terms, "we," "us," and "our" mean Akeem Adekunle, an individual doing
+business as Tilawah. By downloading, accessing, or using Tilawah, you agree to these
+Terms of Service. If you do not agree, please do not use the app. If you are using
+the app on behalf of a minor, or are a minor using the app under a parent or
+guardian's supervision, these terms apply to that arrangement as described further
+below.
 
 ### 17. What the app is
 
@@ -262,11 +268,11 @@ renewal date in Settings, which also links to Stripe's account portal. You may c
 at any time. Cancellation stops future renewals, but you keep access to paid features
 until the end of the paid period.
 
-Because a subscription grants immediate access to digital features, at checkout you
-confirm that you want that access to begin right away and acknowledge that doing so
-waives any statutory "cooling-off" or withdrawal right (such as the EU/UK 14-day
-right) for the current billing period, to the extent such a right would otherwise
-apply to you.
+If you are an EU or UK consumer and you choose immediate access to paid digital
+features, you expressly request that access begin immediately — which you confirm at
+checkout by checking the immediate-access consent box before payment. You acknowledge
+that once access begins, you lose any statutory right of withdrawal or cancellation
+for the digital content or the current billing period, to the extent that law allows.
 
 ### 20. Refund Policy and Right of Withdrawal
 
@@ -323,11 +329,11 @@ described in section 23.
 
 ### 26. Limitation of liability
 
-To the fullest extent allowed by law, the company is not liable for indirect,
+To the fullest extent permitted by law, we are not liable for any indirect,
 incidental, special, consequential, or punitive damages, or for loss of data. This
-limit applies to any damages or losses arising from or connected to your use of the
-app. For any claim related to your use of the app, the company's total liability is
-capped at the amount you paid the company, if any, in the 12 months before the claim.
+limitation applies to any claim arising out of or relating to your use of the app.
+Our total liability for any claim related to your use of the app will not exceed the
+amount you paid us, if any, in the 12 months before the claim.
 
 ### 27. Termination
 
@@ -346,6 +352,11 @@ the State of Ohio, United States, without regard to its conflict-of-laws provisi
 You agree that any dispute arising out of or relating to these terms or your use of
 the app will be subject to the exclusive jurisdiction of the state and federal courts
 located in the State of Ohio.
+
+Nothing in these Terms limits or waives any consumer-protection or other rights that
+the law of your country or state of residence does not permit to be limited or
+waived. Where such mandatory rights apply, they continue to apply to you regardless
+of the governing-law and jurisdiction choices above.
 
 ### 29. Severability and entire agreement
 

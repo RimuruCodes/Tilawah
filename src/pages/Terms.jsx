@@ -53,10 +53,11 @@ export default function Terms() {
 
         <Section n="16" title="Acceptance of these terms">
           <p>
-            By downloading, accessing, or using Tilawah, you agree to these Terms of Service. If you
-            do not agree, please do not use the app. If you are using the app on behalf of a minor,
-            or are a minor using the app under a parent or guardian's supervision, these terms apply
-            to that arrangement as described further below.
+            In these Terms, "we," "us," and "our" mean Akeem Adekunle, an individual doing business
+            as Tilawah. By downloading, accessing, or using Tilawah, you agree to these Terms of
+            Service. If you do not agree, please do not use the app. If you are using the app on
+            behalf of a minor, or are a minor using the app under a parent or guardian's supervision,
+            these terms apply to that arrangement as described further below.
           </p>
         </Section>
 
@@ -97,10 +98,11 @@ export default function Terms() {
             the paid period.
           </p>
           <p>
-            Because a subscription grants immediate access to digital features, at checkout you
-            confirm that you want that access to begin right away and acknowledge that doing so waives
-            any statutory "cooling-off" or withdrawal right (such as the EU/UK 14-day right) for the
-            current billing period, to the extent such a right would otherwise apply to you.
+            If you are an EU or UK consumer and you choose immediate access to paid digital features,
+            you expressly request that access begin immediately — which you confirm at checkout by
+            checking the immediate-access consent box before payment. You acknowledge that once
+            access begins, you lose any statutory right of withdrawal or cancellation for the digital
+            content or the current billing period, to the extent that law allows.
           </p>
         </Section>
 
@@ -168,11 +170,11 @@ export default function Terms() {
 
         <Section n="26" title="Limitation of liability">
           <p>
-            To the fullest extent allowed by law, the company is not liable for indirect, incidental,
-            special, consequential, or punitive damages, or for loss of data. This limit applies to
-            any damages or losses arising from or connected to your use of the app. For any claim
-            related to your use of the app, the company's total liability is capped at the amount you
-            paid the company, if any, in the 12 months before the claim.
+            To the fullest extent permitted by law, we are not liable for any indirect, incidental,
+            special, consequential, or punitive damages, or for loss of data. This limitation applies
+            to any claim arising out of or relating to your use of the app. Our total liability for
+            any claim related to your use of the app will not exceed the amount you paid us, if any,
+            in the 12 months before the claim.
           </p>
         </Section>
 
@@ -195,6 +197,12 @@ export default function Terms() {
             that any dispute arising out of or relating to these terms or your use of the app will be
             subject to the exclusive jurisdiction of the state and federal courts located in the State
             of Ohio.
+          </p>
+          <p>
+            Nothing in these Terms limits or waives any consumer-protection or other rights that the
+            law of your country or state of residence does not permit to be limited or waived. Where
+            such mandatory rights apply, they continue to apply to you regardless of the governing-law
+            and jurisdiction choices above.
           </p>
         </Section>
 
