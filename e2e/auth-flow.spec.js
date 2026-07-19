@@ -11,6 +11,15 @@
 // across reload, and clean switching between two local accounts.
 import { test, expect } from "@playwright/test";
 
+// SKIPPED as of the cloud-accounts change: login moved from on-device
+// localAuth to Supabase Auth (email + password), so registration/login now
+// require a live backend and no longer write a local `qc_users` record — the
+// exact things these specs asserted. The account + cross-device data sync are
+// verified against the real backend by an integration script instead
+// (scratchpad emailtest/synctest), since a no-backend preview can't exercise
+// server auth. Re-enable with a Supabase-backed fixture if we add one.
+test.describe.skip("local auth flow (retired — see note above)", () => {
+
 // Fresh, empty storage per test (no owner seeding, no service worker).
 test.use({ serviceWorkers: "block", storageState: { cookies: [], origins: [] } });
 
@@ -85,3 +94,5 @@ test("switching local accounts doesn't carry the previous identity over", async 
   await expect(page.getByText(/Assalamu Alaikum, PersonB/)).toBeVisible();
   await expect(page.getByText(/PersonA/)).toHaveCount(0);
 });
+
+}); // end describe.skip("local auth flow (retired)")

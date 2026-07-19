@@ -7,7 +7,14 @@ import { useSubscription } from "@/lib/SubscriptionContext";
 import { describeSubscription } from "@/lib/entitlements";
 import { openBillingPortalUrl, deleteSubscriberAccount } from "@/lib/subscriptionApi";
 import { RecitationLog, MemorizationProgress, DailyStreak, FeedbackReport, RecitationPlanState, exportUserData, importUserData } from "@/lib/localDb";
-import { deleteAccount } from "@/lib/localAuth";
+// Removes every localStorage key for one account's on-device data + its sync
+// marker, after the server-side account has already been deleted.
+function clearLocalUserData(userId) {
+  if (!userId) return;
+  Object.keys(localStorage)
+    .filter((k) => k.startsWith(`qc_data_${userId}_`) || k === `qc_sync_meta_${userId}`)
+    .forEach((k) => localStorage.removeItem(k));
+}
 import { ASR_MODEL_OPTIONS, getAsrModelPreference, setAsrModelPreference, isAsrEnabled, setAsrEnabled } from "@/lib/asrEngine";
 import { ESCALATION_BUDGETS, getEscalationBudgetId, setEscalationBudgetId } from "@/lib/escalation";
 import { isPaceMatchEnabled, setPaceMatchEnabled } from "@/lib/paceMatching";
@@ -174,7 +181,7 @@ export default function Settings() {
         // mirrors EXPORTABLE_COLLECTIONS in localDb.js.
         RecitationPlanState.deleteMany({ created_by_id: user?.id }),
       ]);
-      if (user?.id) deleteAccount(user.id);
+      clearLocalUserData(user?.id);
     } catch (err) {
       // proceed to logout even if deletes fail
     }
@@ -217,9 +224,9 @@ export default function Settings() {
             </div>
             <div>
               <p className="text-sm font-medium text-white">{user?.full_name || "Reciter"}</p>
-              {/* No email is shown: the app stores only a one-way hash of it,
-                  never a readable copy (see localAuth.js). */}
-              <p className="text-xs text-slate-500">Local account on this device</p>
+              <p className="text-xs text-slate-500">
+                {user?.email ? `${user.email} · synced across your devices` : "Synced across your devices"}
+              </p>
             </div>
           </div>
         </motion.div>

@@ -2,17 +2,19 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 
-// Drafted from the ACTUAL data flows in the code (localAuth.js, localDb.js,
-// subscriptionApi.js, the Supabase Edge Functions) — if the data handling
-// changes, this page must change with it. Placeholders in [BRACKETS] need
-// real values before they stop being wrong.
+// Drafted from the ACTUAL data flows in the code (cloudAuth.js, dataSync.js,
+// localDb.js, subscriptionApi.js, the Supabase Edge Functions) — if the data
+// handling changes, this page must change with it.
 //
-// Every factual claim here was checked against the code on 2026-07-16:
+// Key facts, checked against the code:
+//  - accounts are Supabase Auth (email + password); the password is stored
+//    only as a secure hash by Supabase (cloudAuth.js)
+//  - practice data is local-first AND backed up to the user_data table so it
+//    syncs across devices (dataSync.js + migration 0002); voice is NOT synced
 //  - voice never leaves the device (recitationService/asrWorker are local)
-//  - local email is stored only as a SHA-256 hash (localAuth.hashEmail)
-//  - account deletion really does cancel Stripe + delete the Supabase row
-//    (supabase/functions/delete-account) — do not weaken that function
-//    without weakening section 11 to match.
+//  - account deletion cancels Stripe + deletes the Supabase row + auth user,
+//    and user_data cascade-deletes with it (supabase/functions/delete-account,
+//    migration 0002) — do not weaken that without weakening section 11.
 
 const EFFECTIVE_DATE = "July 16, 2026";
 const SUPPORT_EMAIL = "alaminoyeyemi64@gmail.com";
@@ -59,17 +61,21 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section n="2" title="The free tier is local-first, by design">
+        <Section n="2" title="Your account and practice data sync across your devices">
           <p>
-            If you never subscribe, your account, your recitation history, your streaks, your
-            memorization progress, your recitation-plan progress, any "this result seems off"
-            feedback reports you file (text only), a local technical diagnostic log, and every
-            setting you choose are stored only in your browser's local storage, on your own device.
-            Nothing in the free tier is transmitted to us or to any server we operate, because no
-            such server exists for this data. Each browser or device you use creates its own
-            independent local account; there is no cross-device sync for free accounts, and no way
-            for us to see, recover, or restore this data on your behalf, since we never had a copy
-            of it.
+            To use the app you create an account with our backend provider (Supabase), using an
+            email address and a password. Because your account lives on the server, you can sign in
+            on any device and pick up where you left off. Your practice data — your recitation
+            history, your streaks, your memorization progress, your recitation-plan progress, and any
+            "this result seems off" feedback reports you file (text only) — is kept on your device
+            for offline use <strong>and</strong> backed up to your account so it follows you to your
+            other devices.
+          </p>
+          <p>
+            Some things stay on your device only and are never sent to us: your recorded voice (see
+            the next section), a local technical diagnostic log, and app settings/preferences. If you
+            sign out, or use the app without logging in, that unsynced data remains only on the
+            device where it was created.
           </p>
         </Section>
 
@@ -83,54 +89,43 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section n="4" title="How your local account works">
+        <Section n="4" title="How your account works">
           <p>
-            If you create a local account, we do not store your email address in readable form.
-            Instead, your email is converted into a one-way cryptographic hash (SHA-256 of your
-            normalized address) and only that hash is stored — this means the app never keeps a copy
-            of your email that could be read directly from storage. This hides your email from
-            casual inspection but is <strong>not</strong> strong protection against someone who has
-            full access to your unlocked device: the hash must be reproducible in order to look your
-            account up, so someone who already guesses your address can confirm it matches. It is
-            obfuscation, not a guarantee of secrecy.
+            Your account is created and managed by our backend provider, Supabase, using your email
+            address and a password. Your email address is stored so we can identify your account,
+            let you sign in across devices, send you sign-in and password-reset messages, and (if you
+            subscribe) tie your subscription to you. Your password is never stored in readable form —
+            Supabase keeps only a securely hashed version of it, from which the original password
+            cannot be recovered.
           </p>
           <p>
-            Your password is never stored in any form — only a salted PBKDF2-SHA-256 hash (600,000
-            iterations, a current industry-standard setting) is kept, and the original password
-            cannot be derived from it.
-          </p>
-          <p className="text-slate-500">
-            One honest caveat: local accounts created before this hashing was introduced still hold
-            their email (and an older password hash) in the previous format until the next time you
-            log in on that device, at which point both are automatically upgraded and the readable
-            email is deleted.
+            Access to your account and your synced data is protected by your password and by
+            database access rules that let only you (and, for subscriptions, our payment webhook)
+            read your records. As with any account-based service, keep your password private and use
+            a strong one.
           </p>
         </Section>
 
         <Section n="5" title="Display name">
           <p>
             You may choose a display name when you register, shown in the app instead of your email
-            address. If you don't choose one, a generic default is used. This name is stored locally
-            alongside your account and is not derived from your email address.
+            address. If you don't choose one, a generic default is used. This name is stored with
+            your account and is not derived from your email address.
           </p>
         </Section>
 
         <Section n="6" title="What happens if you subscribe">
           <p>
-            Subscribing to Tilawah requires creating a real, verified account with our backend
-            provider (Supabase), using email-based verification. This is a deliberate and necessary
-            trade-off: your entitlement to paid features needs to be checked against a real server so
-            it can follow you across devices and survive you clearing your browser data — something a
-            purely local account cannot do.
+            If you subscribe, your existing account gains a subscription record stored with our
+            backend provider. That record contains your plan, its status, the renewal date, and the
+            Stripe customer and subscription identifiers that link your account to the payment.
+            Access rules ensure only you (and our payment webhook) can read your record.
           </p>
           <p>
-            If you subscribe, your email address (used for account verification) and your
-            subscription record are stored with our backend provider. That record contains your plan,
-            its status, the renewal date, and the Stripe customer and subscription identifiers that
-            link your account to the payment. Access rules ensure only you (and our payment webhook)
-            can read your record. Your recitation data, voice recordings, and practice history remain
-            local to your device even as a subscriber; only your account identity and subscription
-            status are backend-managed.
+            Subscribing does not change how your practice data or voice are handled: your voice
+            recordings are still never uploaded, and your practice data is synced the same way it is
+            for any account (section 2). A subscription only adds the entitlement record described
+            above.
           </p>
         </Section>
 
@@ -161,10 +156,13 @@ export default function Privacy() {
           </p>
           <ul className="list-disc pl-5 space-y-1">
             <li><strong>Stripe</strong> — subscription payments and the billing portal.</li>
-            <li><strong>Supabase</strong> — subscriber account and entitlement storage.</li>
             <li>
-              <strong>Brevo</strong> — email delivery. It transmits the 6-digit sign-in codes we
-              email subscribers, and therefore processes your email address in transit.
+              <strong>Supabase</strong> — your account (email + password), your synced practice
+              data, and subscription/entitlement storage.
+            </li>
+            <li>
+              <strong>Brevo</strong> — email delivery. It transmits the sign-in and password-reset
+              messages we email you, and therefore processes your email address in transit.
             </li>
             <li><strong>Cloudflare</strong> — hosting for the app itself.</li>
             <li>
@@ -190,33 +188,29 @@ export default function Privacy() {
 
         <Section n="10" title="Local storage and how to clear it">
           <p>
-            The app uses your browser's local storage to keep your account, preferences, and practice
-            history on your device. This is not a tracking cookie and is not used to identify you
-            across other websites — it functions purely as this app's own private storage. You can
-            clear this data at any time through your browser's own settings, or through the in-app
-            data export/delete options described below; doing so will permanently remove your local
-            account and history unless you have exported a backup first.
+            The app uses your browser's local storage to keep a working copy of your data,
+            preferences, and sign-in session on your device, so it runs quickly and works offline.
+            This is not a tracking cookie and is not used to identify you across other websites — it
+            functions purely as this app's own private storage. Clearing it through your browser
+            removes the on-device copy; because your practice data is also backed up to your account,
+            signing in again restores it. Preferences and the local diagnostic log, which are not
+            synced, would not be restored.
           </p>
         </Section>
 
         <Section n="11" title="Exporting and deleting your data">
           <p>
-            Settings includes a data export feature that lets you download a copy of your local
-            recitation history, streaks, and progress as a file, and an import feature to restore it
-            later or move it to a new device/browser.
+            Settings includes a data export feature that lets you download a copy of your recitation
+            history, streaks, and progress as a file, and an import feature to restore it later.
           </p>
           <p>
-            Deleting your account permanently removes your local account and all locally stored
-            practice data from the device it's stored on. Because we never held a copy of that data,
-            we cannot recover it for you afterward.
-          </p>
-          <p>
-            If you are a subscriber, deleting your account also{" "}
-            <strong>cancels your Stripe subscription and deletes your account record from our
-            backend provider</strong> — your subscription row and your backend account are removed,
-            not merely marked inactive. If that server-side step fails for any reason, the app stops
-            and tells you rather than deleting your local account, so you are never left still being
-            billed with no account to show for it.
+            Deleting your account permanently deletes your backend account, your synced practice
+            data, and (if you subscribe) <strong>cancels your Stripe subscription and removes your
+            subscription record</strong> — these are removed, not merely marked inactive — and also
+            wipes the copy of your data stored on the device you delete from. If the server-side step
+            fails for any reason, the app stops and tells you rather than continuing, so you are never
+            left still being billed with no account to show for it. Once deletion completes, we cannot
+            recover your data for you afterward.
           </p>
           <p>
             Honest limit: Stripe retains the underlying payment and transaction records for its own
@@ -227,13 +221,13 @@ export default function Privacy() {
 
         <Section n="12" title="Security">
           <p>
-            We take reasonable, genuine measures to protect the data described above — salted
-            password hashing with a strong, current-standard iteration count, hashed rather than
-            plaintext email storage, and reliance on established, security-reviewed third-party
-            providers (Stripe, Supabase) for anything that isn't purely local. That said, no system
-            is perfectly secure, and data stored on your own device is only as secure as that device
-            itself; we encourage you to use a device passcode and keep your browser and operating
-            system updated.
+            We take reasonable, genuine measures to protect the data described above: your password
+            is stored only as a secure hash by our backend provider, access to your account and
+            synced data is restricted by database rules to you alone, and we rely on established,
+            security-reviewed providers (Supabase, Stripe) for account, data, and payment handling.
+            That said, no system is perfectly secure, and data stored on your own device is only as
+            secure as that device itself; we encourage you to use a strong, unique password, a device
+            passcode, and to keep your browser and operating system updated.
           </p>
         </Section>
 

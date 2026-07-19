@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { login } from "@/lib/localAuth";
+import { login } from "@/lib/cloudAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,7 +42,7 @@ export default function Login() {
       }
     >
       <p className="text-xs text-muted-foreground text-center mb-6">
-        This app stores your account and data only on this device — there's no server.
+        Log in to pick up your recitation history and progress on any device.
       </p>
 
       {error && (
