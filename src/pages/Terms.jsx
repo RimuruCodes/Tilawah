@@ -62,11 +62,10 @@ export default function Terms() {
 
         <Section n="17" title="What the app is">
           <p>
-            Tilawah is a Quran recitation practice tool. Free features include the full Quran text
-            and translations, reciter audio playback, single-ayah recitation scoring, the Tajweed
-            checks shown with those results, an authentic-hadith reference section, and local
-            progress tracking. Certain features — specifically continuous ("Recite All") whole-surah
-            recitation practice and the Tajweed Trends charts — require an active paid subscription.
+            Tilawah offers free Quran practice features such as full Quran text and translations,
+            reciter audio playback, single-ayah scoring, Tajweed checks, authentic-hadith references,
+            and local progress tracking. A paid subscription is required for whole-surah "Recite All"
+            practice and Tajweed Trends charts.
           </p>
         </Section>
 
@@ -83,17 +82,19 @@ export default function Terms() {
           </p>
         </Section>
 
-        <Section n="19" title="Subscriptions and billing">
+        <Section n="19" title="Subscriptions and renewals">
           <p>
-            Paid subscriptions are billed on a recurring basis (monthly or yearly, as selected at
-            signup) through Stripe. Before you are sent to payment, the app shows you — at the point
-            of purchase — the exact recurring amount, the billing frequency, that the subscription
-            automatically renews at that price until you cancel, and how to cancel. Subscriptions
-            automatically renew at the end of each billing period unless cancelled beforehand. You
-            can view your current plan and renewal date, and cancel your subscription at any time,
-            through Settings, which links to Stripe's own account management portal. Cancelling stops
-            future renewals; you retain access to paid features through the remainder of the period
-            you have already paid for.
+            If you subscribe, your email and subscription record are stored with the backend
+            provider. The record includes your plan, subscription status, renewal date, Stripe
+            customer ID, and Stripe subscription ID. These identifiers connect your account to
+            payment processing. Only you and the payment webhook can read this record. Your
+            recitation data, voice recordings, and practice history stay on your device. Paid
+            subscriptions are billed through Stripe on a recurring basis. You may choose monthly or
+            yearly billing at signup. Subscriptions renew automatically at the end of each billing
+            period unless you cancel before the renewal date. You can view your plan and renewal date
+            in Settings, which also links to Stripe's account portal. You may cancel at any time.
+            Cancellation stops future renewals, but you keep access to paid features until the end of
+            the paid period.
           </p>
           <p>
             Because a subscription grants immediate access to digital features, at checkout you
@@ -116,10 +117,9 @@ export default function Terms() {
 
         <Section n="21" title="Changes to pricing or plans">
           <p>
-            We may change subscription pricing or the features included in each tier over time. If we
-            do, we will make reasonable efforts to notify existing subscribers before any change
-            takes effect for their next billing cycle. Continuing your subscription after a pricing
-            change takes effect constitutes acceptance of the new pricing.
+            Pricing and included features may change over time. The app will try to notify existing
+            subscribers before changes take effect in the next billing cycle. Continuing the
+            subscription after a price change means you accept the new pricing.
           </p>
         </Section>
 
@@ -168,21 +168,23 @@ export default function Terms() {
 
         <Section n="26" title="Limitation of liability">
           <p>
-            To the maximum extent permitted by applicable law, we shall not be liable for any
-            indirect, incidental, special, consequential, or punitive damages, or any loss of data,
-            arising out of or related to your use of the app. Our total liability for any claim
-            arising from your use of the app shall not exceed the amount you paid us, if any, in the
-            twelve months preceding the claim.
+            To the fullest extent allowed by law, the company is not liable for indirect, incidental,
+            special, consequential, or punitive damages, or for loss of data. This limit applies to
+            any damages or losses arising from or connected to your use of the app. For any claim
+            related to your use of the app, the company's total liability is capped at the amount you
+            paid the company, if any, in the 12 months before the claim.
           </p>
         </Section>
 
         <Section n="27" title="Termination">
           <p>
-            We may suspend or terminate your access to the app if you violate these terms. You may
-            stop using the app and delete your account at any time, as described in the Privacy
-            Policy. Sections of these terms that by their nature should survive termination
-            (including ownership, disclaimers, and limitation of liability) will continue to apply
-            after termination.
+            We may suspend or end your access to the app if you break the terms. You may stop using
+            the app at any time. You may also delete your account at any time, as explained in the
+            Privacy Policy. If you are a subscriber, deleting your account also cancels your Stripe
+            subscription and deletes your backend account record. Your subscription row and backend
+            account are removed completely. They are not only marked inactive. Some parts of the
+            terms still apply after termination. These surviving parts include ownership, disclaimers,
+            and limitation of liability.
           </p>
         </Section>
 
