@@ -1,15 +1,35 @@
-// Lightweight local persistence layer that replaces the Base44 entities SDK.
-// Data is stored per-user in localStorage. No network/server involved —
-// everything lives on this device/browser only.
+// Local-first persistence layer. The working copy of a user's data lives in
+// this browser's localStorage, scoped per account — so the app runs fully
+// offline. When a Supabase account is signed in, this same data is also backed
+// up to the cloud and restored on other devices (see src/lib/dataSync.js),
+// which subscribes to the change notifier below.
 
-import { getCurrentUser } from "@/lib/localAuth";
+import { getActiveUser } from "@/lib/activeUser";
 
 const uid = () =>
   `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 
+// Change notifier: dataSync subscribes to push a cloud backup (debounced)
+// whenever local data is mutated. Kept dead-simple — a set of callbacks.
+const changeListeners = new Set();
+
+export function onLocalDataChange(listener) {
+  changeListeners.add(listener);
+  return () => changeListeners.delete(listener);
+}
+
+function notifyChange() {
+  changeListeners.forEach((fn) => {
+    try {
+      fn();
+    } catch {
+      /* a listener throwing must never break a local write */
+    }
+  });
+}
+
 function storageKey(collection) {
-  const user = getCurrentUser();
-  const scope = user?.id || "anon";
+  const scope = getActiveUser()?.id || "anon";
   return `qc_data_${scope}_${collection}`;
 }
 
@@ -22,8 +42,12 @@ function readAll(collection) {
   }
 }
 
-function writeAll(collection, records) {
+// `silent` skips the change notification — used by the sync layer when it
+// writes data it just pulled FROM the cloud, so restoring doesn't immediately
+// trigger a push back up.
+function writeAll(collection, records, { silent = false } = {}) {
   localStorage.setItem(storageKey(collection), JSON.stringify(records));
+  if (!silent) notifyChange();
 }
 
 function matches(record, query) {
@@ -68,7 +92,7 @@ export function createEntity(collectionName) {
         id: uid(),
         created_date: new Date().toISOString(),
         updated_date: new Date().toISOString(),
-        created_by_id: getCurrentUser()?.id || null,
+        created_by_id: getActiveUser()?.id || null,
         ...data,
       };
       all.push(record);
@@ -114,7 +138,7 @@ const EXPORTABLE_COLLECTIONS = ["recitation_logs", "daily_streaks", "memorizatio
 // object suitable for JSON.stringify + download, so people aren't
 // completely stuck if they clear browser storage or switch browsers.
 export function exportUserData() {
-  const user = getCurrentUser();
+  const user = getActiveUser();
   const data = {};
   EXPORTABLE_COLLECTIONS.forEach((c) => { data[c] = readAll(c); });
   return {
@@ -129,7 +153,9 @@ export function exportUserData() {
 
 // Restores previously-exported data for the current user. Merges by
 // record id (import wins on conflicts) rather than wiping existing data.
-export function importUserData(payload) {
+// `silent` (used by the cloud-sync restore) suppresses the change notifier so
+// pulling from the cloud doesn't immediately schedule a push back up.
+export function importUserData(payload, { silent = false } = {}) {
   if (!payload?.data) throw new Error("This file doesn't look like a valid export.");
   EXPORTABLE_COLLECTIONS.forEach((c) => {
     const incoming = payload.data[c];
@@ -137,6 +163,55 @@ export function importUserData(payload) {
     const existing = readAll(c);
     const byId = new Map(existing.map((r) => [r.id, r]));
     incoming.forEach((rec) => { if (rec?.id) byId.set(rec.id, rec); });
-    writeAll(c, Array.from(byId.values()));
+    writeAll(c, Array.from(byId.values()), { silent });
   });
+}
+
+// Copies another local scope's collections into the current user's scope
+// (non-destructive merge by id). Used once, when an existing on-device account
+// signs into a fresh cloud account on the same device, so their history isn't
+// stranded under the old local user id. Returns true if anything was copied.
+export function importFromLocalScope(scopeId) {
+  if (!scopeId) return false;
+  let copiedAny = false;
+  EXPORTABLE_COLLECTIONS.forEach((c) => {
+    let incoming;
+    try {
+      incoming = JSON.parse(localStorage.getItem(`qc_data_${scopeId}_${c}`) || "[]");
+    } catch {
+      incoming = [];
+    }
+    if (!Array.isArray(incoming) || incoming.length === 0) return;
+    const existing = readAll(c);
+    const byId = new Map(existing.map((r) => [r.id, r]));
+    incoming.forEach((rec) => { if (rec?.id) byId.set(rec.id, rec); });
+    writeAll(c, Array.from(byId.values()), { silent: true });
+    copiedAny = true;
+  });
+  return copiedAny;
+}
+
+// Finds local data scopes on THIS device that aren't the given active user id,
+// ranked by how many records they hold (richest first). Used to locate a
+// pre-cloud on-device account's data to migrate. Returns an array of scope ids.
+export function findLegacyLocalScopes(excludeScopeId) {
+  const counts = new Map();
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    const m = key && key.match(/^qc_data_(.+?)_(recitation_logs|daily_streaks|memorization_progress|feedback_reports|recitation_plans)$/);
+    if (!m) continue;
+    const scope = m[1];
+    if (scope === excludeScopeId || scope === "anon") continue;
+    let n = 0;
+    try {
+      n = (JSON.parse(localStorage.getItem(key) || "[]") || []).length;
+    } catch {
+      n = 0;
+    }
+    counts.set(scope, (counts.get(scope) || 0) + n);
+  }
+  return Array.from(counts.entries())
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([scope]) => scope);
 }

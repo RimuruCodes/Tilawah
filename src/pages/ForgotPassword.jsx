@@ -3,91 +3,57 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, ArrowLeft, Loader2, AlertTriangle } from "lucide-react";
+import { Mail, ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
-import { hashEmail } from "@/lib/localAuth";
-
-// Matches by the one-way email hash (with a legacy plaintext fallback) so
-// account existence is confirmed WITHOUT the app ever holding — or echoing
-// back — a readable copy of the address.
-async function findLocalUserByEmail(email) {
-  try {
-    const normalized = email.trim().toLowerCase();
-    const emailHash = await hashEmail(normalized);
-    const users = JSON.parse(localStorage.getItem("qc_users") || "[]");
-    return (
-      users.find((u) => u.emailHash === emailHash) ||
-      users.find((u) => u.email === normalized) ||
-      null
-    );
-  } catch {
-    return null;
-  }
-}
+import { sendPasswordReset } from "@/lib/cloudAuth";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [checked, setChecked] = useState(false);
-  // Holds the matched account so deletion can target it by id without
-  // re-deriving anything from the (never-displayed) email.
-  const [foundUser, setFoundUser] = useState(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [done, setDone] = useState(false);
-  const found = !!foundUser;
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
     setLoading(true);
-    const user = await findLocalUserByEmail(email);
-    setFoundUser(user);
-    setChecked(true);
-    setLoading(false);
-  };
-
-  const handleDeleteAndRestart = () => {
-    if (foundUser) {
-      const users = JSON.parse(localStorage.getItem("qc_users") || "[]");
-      const remaining = users.filter((u) => u.id !== foundUser.id);
-      localStorage.setItem("qc_users", JSON.stringify(remaining));
-      // Also clear that account's stored recitation/progress data.
-      Object.keys(localStorage)
-        .filter((k) => k.startsWith(`qc_data_${foundUser.id}_`))
-        .forEach((k) => localStorage.removeItem(k));
+    try {
+      const redirectTo = `${window.location.origin}/reset-password`;
+      await sendPasswordReset(email, redirectTo);
+      // Always show the same confirmation, whether or not the address exists,
+      // so this can't be used to probe which emails have accounts.
+      setSent(true);
+    } catch (err) {
+      setError(err.message || "Couldn't send the reset email. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setDone(true);
   };
 
   return (
     <AuthLayout
       icon={Mail}
       title="Reset password"
-      subtitle="This app has no server, so there's no email to send"
+      subtitle="We'll email you a link to set a new password"
       footer={
         <Link to="/login" className="text-primary font-medium hover:underline">
           <ArrowLeft className="w-3 h-3 inline mr-1" />Back to log in
         </Link>
       }
     >
-      {done ? (
+      {sent ? (
         <div className="space-y-4 text-center">
+          <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
           <p className="text-sm text-foreground">
-            That local account and its saved data have been removed from this device.
+            If an account exists for that email, we've sent a password-reset link. Check your inbox
+            (and spam folder) and follow the link to set a new password.
           </p>
-          <Button asChild className="w-full h-12 font-medium">
-            <Link to="/register">Create a new account</Link>
-          </Button>
         </div>
-      ) : !checked ? (
+      ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="p-3 rounded-lg bg-muted text-muted-foreground text-xs flex gap-2">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <span>
-              Your account and password live only in this browser — there's no backend to send a
-              reset link. If you've forgotten your password, the only option is to remove the
-              local account and start fresh (this deletes its saved recitations and progress).
-            </span>
-          </div>
+          {error && (
+            <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="email">Email address</Label>
             <div className="relative">
@@ -109,46 +75,13 @@ export default function ForgotPassword() {
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Checking...
+                Sending...
               </>
             ) : (
-              "Check this device"
+              "Send reset link"
             )}
           </Button>
         </form>
-      ) : !found ? (
-        <p className="text-sm text-foreground text-center">
-          No local account with that email was found on this device.
-        </p>
-      ) : !confirmingDelete ? (
-        <div className="space-y-4">
-          <p className="text-sm text-foreground text-center">
-            Found a local account on this device for that email. There's no way to recover the
-            password — only to remove it and start over.
-          </p>
-          <Button
-            variant="destructive"
-            className="w-full h-12 font-medium"
-            onClick={() => setConfirmingDelete(true)}
-          >
-            Delete account &amp; start over
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <p className="text-sm text-destructive text-center font-medium">
-            This permanently deletes this account's saved recitations and progress on this device.
-            Are you sure?
-          </p>
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1 h-12" onClick={() => setConfirmingDelete(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" className="flex-1 h-12" onClick={handleDeleteAndRestart}>
-              Yes, delete it
-            </Button>
-          </div>
-        </div>
       )}
     </AuthLayout>
   );

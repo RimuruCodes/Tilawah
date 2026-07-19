@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { register } from "@/lib/localAuth";
+import { register } from "@/lib/cloudAuth";
 import { validateLocalRegistration } from "@/lib/signupValidation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,8 +51,8 @@ export default function Register() {
       }
     >
       <p className="text-xs text-muted-foreground text-center mb-6">
-        This app stores your account and data only on this device — there's no server, so this
-        account won't sync across devices.
+        Your account works across devices — log in anywhere and your recitation history and
+        progress come with you.
       </p>
 
       {error && (
