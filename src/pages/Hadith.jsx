@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { ScrollText, Search, ChevronRight, ArrowLeft, Loader2, AlertTriangle, Download } from "lucide-react";
+import { ScrollText, Search, ChevronRight, ArrowLeft, Loader2, AlertTriangle, Download, Sparkles } from "lucide-react";
 import { HADITH_COLLECTIONS, getBooks, getBookHadiths, searchCollection, isCollectionLoadedForSearch } from "@/lib/hadithData";
 import EmptyState from "@/components/EmptyState";
 import { DUAS, DUA_CATEGORIES } from "@/lib/duasData";
+import { HADITH_TOPICS, TOPIC_ENTRIES_PER_BOOK } from "@/lib/hadithTopics";
 
 // Hadith browser: Sahih al-Bukhari and Sahih Muslim only — see the
 // disclaimer block at the bottom of the page for the content policy.
@@ -13,12 +14,15 @@ export default function Hadith() {
   const [entries, setEntries] = useState(null);
   const [loadError, setLoadError] = useState("");
   const [bookFilter, setBookFilter] = useState("");
-  const [mode, setMode] = useState("browse"); // browse | search | duas
+  const [mode, setMode] = useState("browse"); // browse | search | topics | duas
   const [duaCategory, setDuaCategory] = useState("daily");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null);
   const [searching, setSearching] = useState(false);
   const [searchReady, setSearchReady] = useState(false);
+  const [activeTopic, setActiveTopic] = useState(HADITH_TOPICS[0].id);
+  const [topicGroups, setTopicGroups] = useState(null); // [{collectionId, bookNumber, bookName, entries}] | null
+  const [topicLoading, setTopicLoading] = useState(false);
 
   const collection = HADITH_COLLECTIONS.find((c) => c.id === collectionId);
   const books = useMemo(() => getBooks(collectionId), [collectionId]);
@@ -43,6 +47,29 @@ export default function Hadith() {
       .catch((err) => { if (!cancelled) setLoadError(err.message || "Couldn't load this book — check your connection and try again."); });
     return () => { cancelled = true; };
   }, [collectionId, openBook]);
+
+  // Load the books mapped to the active topic (Topics mode) — each is a
+  // real, already-cited Bukhari/Muslim book fetched through the same
+  // getBookHadiths used by Browse mode, just curated by theme.
+  useEffect(() => {
+    if (mode !== "topics") return undefined;
+    let cancelled = false;
+    const topic = HADITH_TOPICS.find((t) => t.id === activeTopic);
+    setTopicGroups(null);
+    setTopicLoading(true);
+    setLoadError("");
+    Promise.all(
+      topic.books.map(async ({ collectionId, bookNumber }) => {
+        const bookName = getBooks(collectionId).find((b) => b.number === bookNumber)?.name || "";
+        const entries = await getBookHadiths(collectionId, bookNumber);
+        return { collectionId, bookNumber, bookName, entries: entries.slice(0, TOPIC_ENTRIES_PER_BOOK) };
+      })
+    )
+      .then((groups) => { if (!cancelled) setTopicGroups(groups); })
+      .catch((err) => { if (!cancelled) setLoadError(err.message || "Couldn't load this topic — check your connection and try again."); })
+      .finally(() => { if (!cancelled) setTopicLoading(false); });
+    return () => { cancelled = true; };
+  }, [mode, activeTopic]);
 
   const switchCollection = (id) => {
     setCollectionId(id);
@@ -85,6 +112,7 @@ export default function Hadith() {
           {[
             { key: "browse", label: "Browse by book" },
             { key: "search", label: "Search" },
+            { key: "topics", label: "Topics" },
             { key: "duas", label: "Duas" },
           ].map((m) => (
             <button
@@ -103,8 +131,8 @@ export default function Hadith() {
           ))}
         </div>
 
-        {/* Collection toggle (hadith modes only) */}
-        {mode !== "duas" && (
+        {/* Collection toggle (browse/search only — Topics spans both collections, Duas has none) */}
+        {mode !== "duas" && mode !== "topics" && (
           <div className="grid grid-cols-2 gap-2">
             {HADITH_COLLECTIONS.map((c) => (
               <button
@@ -174,11 +202,59 @@ export default function Hadith() {
                     {`${searchResults.length}${searchResults.length >= 50 ? "+" : ""} match${searchResults.length === 1 ? "" : "es"}`}
                   </p>
                   {searchResults.map((h) => (
-                    <HadithCard key={`${collectionId}-${h.number}`} hadith={h} collectionName={collection.name} />
+                    <HadithCard key={`${collectionId}-${h.number}`} hadith={h} collectionName={collection.name} accent={collectionId} />
                   ))}
                 </div>
               )
             )}
+          </div>
+        )}
+
+        {/* TOPICS MODE — curated theme pointing at real Bukhari/Muslim books */}
+        {mode === "topics" && (
+          <div className="space-y-4">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {HADITH_TOPICS.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setActiveTopic(t.id)}
+                  className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+                    activeTopic === t.id
+                      ? "bg-emerald-500 text-slate-900"
+                      : "bg-slate-800/50 text-slate-400 border border-slate-700/30"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-start gap-2 bg-emerald-500/5 border border-emerald-500/15 rounded-xl p-3">
+              <Sparkles className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-400">
+                {HADITH_TOPICS.find((t) => t.id === activeTopic)?.description}
+              </p>
+            </div>
+            {topicLoading && (
+              <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
+            )}
+            {!topicLoading && topicGroups && topicGroups.map((group) => (
+              <div key={`${group.collectionId}-${group.bookNumber}`} className="space-y-3">
+                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-1">
+                  {HADITH_COLLECTIONS.find((c) => c.id === group.collectionId)?.name} · {group.bookName}
+                </h3>
+                {group.entries.map((h) => (
+                  <HadithCard
+                    key={`${group.collectionId}-${h.number}`}
+                    hadith={h}
+                    collectionName={HADITH_COLLECTIONS.find((c) => c.id === group.collectionId)?.name}
+                    accent={group.collectionId}
+                  />
+                ))}
+                {group.entries.length === 0 && (
+                  <EmptyState title="Nothing to show here" message="This book has no displayable entries yet." />
+                )}
+              </div>
+            ))}
           </div>
         )}
 
@@ -277,7 +353,7 @@ export default function Hadith() {
             {entries && (
               <div className="space-y-3">
                 {entries.map((h) => (
-                  <HadithCard key={h.number} hadith={h} collectionName={collection.name} />
+                  <HadithCard key={h.number} hadith={h} collectionName={collection.name} accent={collectionId} />
                 ))}
                 {entries.length === 0 && (
                   <EmptyState title="Nothing to show here" message="This book has no displayable entries yet." />
@@ -305,12 +381,20 @@ export default function Hadith() {
   );
 }
 
-function HadithCard({ hadith, collectionName }) {
+// accent differentiates the two collections at a glance (emerald=Bukhari,
+// sky=Muslim) — purely visual grouping, not a claim about relative authenticity.
+const ACCENT_STYLES = {
+  bukhari: { border: "border-l-emerald-500/50", badge: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20" },
+  muslim: { border: "border-l-sky-500/50", badge: "bg-sky-500/10 text-sky-300 border-sky-500/20" },
+};
+
+function HadithCard({ hadith, collectionName, accent }) {
+  const style = ACCENT_STYLES[accent] || ACCENT_STYLES.bukhari;
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl bg-slate-900/50 border border-slate-700/20 p-4 space-y-3"
+      className={`rounded-2xl bg-slate-900/50 border border-slate-700/20 border-l-2 ${style.border} p-4 space-y-3`}
     >
       {hadith.arabic && (
         <p dir="rtl" lang="ar" className="font-arabic text-base leading-loose text-white/90 text-right">
@@ -318,11 +402,13 @@ function HadithCard({ hadith, collectionName }) {
         </p>
       )}
       <p className="text-sm text-slate-300 leading-relaxed">{hadith.english}</p>
-      <p className="text-[11px] text-slate-500">
-        {collectionName} {hadith.number}
-        <span className="text-emerald-400/70"> · Sahih</span>
-        <span className="text-slate-600"> (source collection's grading)</span>
-      </p>
+      <div className="flex items-center gap-2 pt-1">
+        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${style.badge}`}>Sahih</span>
+        <p className="text-[11px] text-slate-500">
+          {collectionName} {hadith.number}
+          <span className="text-slate-600"> · source collection's grading</span>
+        </p>
+      </div>
     </motion.div>
   );
 }

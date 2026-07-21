@@ -38,7 +38,7 @@ export default function TajweedResultsPanel({ tajweedResult, unavailableMessage 
       {recognizedText && (
         <div className="bg-slate-800/30 rounded-lg p-3 border border-slate-700/20">
           <p className="text-[10px] text-slate-500 mb-1">What speech recognition heard:</p>
-          <p className="text-sm text-slate-300" dir="rtl" lang="ar" style={{ fontFamily: "'Scheherazade New', serif" }}>{recognizedText}</p>
+          <p className="text-sm text-slate-300" dir="rtl" lang="ar" style={{ fontFamily: "var(--font-arabic)" }}>{recognizedText}</p>
         </div>
       )}
 

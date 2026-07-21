@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Mic, Waves, ListChecks, ShieldCheck, HardDrive, ArrowRight, ArrowLeft, X, Languages } from "lucide-react";
+import { Mic, Waves, ListChecks, ShieldCheck, HardDrive, ArrowRight, ArrowLeft, X, Languages, Palette } from "lucide-react";
 import { ARABIC_COMFORT_LEVELS, getArabicComfort, setArabicComfort } from "@/lib/arabicComfort";
 
 const SLIDES = [
@@ -35,6 +35,11 @@ const SLIDES = [
     icon: HardDrive,
     title: "Everything stays on your device",
     body: "There's no server. Your account, recordings' results, and progress are stored only in this browser. You can back them up anytime from Settings \u2192 Data if you want a copy.",
+  },
+  {
+    icon: Palette,
+    title: "Make it yours",
+    body: "Pick the Arabic script size and typeface you find easiest to read from Settings → Arabic font/text size. And over in Hadith, the new Topics tab groups authentic narrations by theme — Good Deeds, Prayer, Patience, and more — instead of only classical book order.",
   },
   {
     icon: Languages,

@@ -21,9 +21,11 @@ import { isPaceMatchEnabled, setPaceMatchEnabled } from "@/lib/paceMatching";
 import { isRamadanModeEnabled, setRamadanModeEnabled } from "@/lib/hijri";
 import { ARABIC_COMFORT_LEVELS, getArabicComfort, setArabicComfort } from "@/lib/arabicComfort";
 import { ARABIC_TEXT_SIZES, getArabicTextSize, setArabicTextSize } from "@/lib/arabicTextSize";
+import { ARABIC_FONTS, getArabicFont, setArabicFont } from "@/lib/arabicFont";
 import { getLifecycleEvents, clearLifecycleEvents } from "@/lib/lifecycleDebug";
 import { getStoredCalibration } from "@/lib/micCalibration";
 import CalibrationModal from "@/components/CalibrationModal";
+import { Switch } from "@/components/ui/switch";
 import UpgradeModal from "@/components/quran/UpgradeModal";
 import RestoreSubscriptionModal from "@/components/quran/RestoreSubscriptionModal";
 import {
@@ -51,6 +53,7 @@ export default function Settings() {
   const [ramadanMode, setRamadanMode] = useState(isRamadanModeEnabled());
   const [comfortLevel, setComfortLevel] = useState(getArabicComfort());
   const [arabicTextSize, setArabicTextSizeState] = useState(getArabicTextSize());
+  const [arabicFont, setArabicFontState] = useState(getArabicFont());
   const [calibration, setCalibration] = useState(getStoredCalibration());
   const [calibrationOpen, setCalibrationOpen] = useState(false);
   const [importMessage, setImportMessage] = useState("");
@@ -384,16 +387,12 @@ export default function Settings() {
                 <Mic2 className="w-4 h-4" />
                 <h3 className="text-sm font-medium text-white">Word-level Tajweed (speech recognition)</h3>
               </div>
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={asrOn}
-                  onChange={(e) => { setAsrEnabled(e.target.checked); setAsrOn(e.target.checked); }}
-                  aria-label="Word-level Tajweed (speech recognition)"
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-4 relative after:top-0.5 after:left-0.5" />
-              </label>
+              <Switch
+                checked={asrOn}
+                onCheckedChange={(checked) => { setAsrEnabled(checked); setAsrOn(checked); }}
+                aria-label="Word-level Tajweed (speech recognition)"
+                className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-slate-700"
+              />
             </div>
             <p className="text-xs text-slate-500">
               Runs an on-device speech-recognition model for word accuracy and Tajweed timing checks.
@@ -409,16 +408,12 @@ export default function Settings() {
                 <Mic2 className="w-4 h-4" />
                 <h3 className="text-sm font-medium text-white">Pace-matched reciter comparison</h3>
               </div>
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={paceMatch}
-                  onChange={(e) => handlePaceMatchChange(e.target.checked)}
-                  aria-label="Pace-matched reciter comparison"
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-4 relative after:top-0.5 after:left-0.5" />
-              </label>
+              <Switch
+                checked={paceMatch}
+                onCheckedChange={handlePaceMatchChange}
+                aria-label="Pace-matched reciter comparison"
+                className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-slate-700"
+              />
             </div>
             <p className="text-xs text-slate-500">
               When on, single-ayah analysis compares you against whichever reciter's recording is
@@ -434,16 +429,12 @@ export default function Settings() {
                 <Sparkles className="w-4 h-4" />
                 <h3 className="text-sm font-medium text-white">Ramadan mode</h3>
               </div>
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={ramadanMode}
-                  onChange={(e) => { setRamadanModeEnabled(e.target.checked); setRamadanMode(e.target.checked); }}
-                  aria-label="Ramadan mode"
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-4 relative after:top-0.5 after:left-0.5" />
-              </label>
+              <Switch
+                checked={ramadanMode}
+                onCheckedChange={(checked) => { setRamadanModeEnabled(checked); setRamadanMode(checked); }}
+                aria-label="Ramadan mode"
+                className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-slate-700"
+              />
             </div>
             <p className="text-xs text-slate-500">
               During Ramadan (Umm al-Qura calendar), the Home screen adds a nightly Taraweeh practice
@@ -501,7 +492,7 @@ export default function Settings() {
               dir="rtl"
               className="text-center text-emerald-300/80 leading-loose"
               style={{
-                fontFamily: "'Scheherazade New', 'Amiri', serif",
+                fontFamily: "var(--font-arabic)",
                 fontSize: `${(1.75 * (ARABIC_TEXT_SIZES.find((s) => s.id === arabicTextSize)?.scale || 1)).toFixed(3)}rem`,
               }}
             >
@@ -509,6 +500,38 @@ export default function Settings() {
             </p>
             <p className="text-xs text-slate-500">
               Sizes the Arabic script in the reader. Starts from your reading-comfort level.
+            </p>
+          </div>
+
+          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-slate-400">
+              <BookOpen className="w-4 h-4" />
+              <h3 className="text-sm font-medium text-white">Arabic font</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {ARABIC_FONTS.map((font) => (
+                <button
+                  key={font.id}
+                  onClick={() => { setArabicFont(font.id); setArabicFontState(font.id); }}
+                  className={`py-2 rounded-xl text-xs font-medium transition-all border ${
+                    arabicFont === font.id
+                      ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                      : "bg-slate-800/40 border-slate-700/30 text-slate-400 hover:border-slate-600/40"
+                  }`}
+                >
+                  {font.label}
+                </button>
+              ))}
+            </div>
+            <p
+              dir="rtl"
+              className="text-center text-emerald-300/80 leading-loose"
+              style={{ fontFamily: "var(--font-arabic)", fontSize: "1.75rem" }}
+            >
+              بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+            </p>
+            <p className="text-xs text-slate-500">
+              Changes the Arabic typeface used throughout the reader, recording screen, and results.
             </p>
           </div>
 

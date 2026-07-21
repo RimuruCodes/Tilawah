@@ -128,13 +128,13 @@ export default function Home() {
         {/* Daily-habit dashboard: resume practice, streak tiles (with the
             all-time average score folded in), daily inspiration. "Glance
             and go" — detail lives in the reader and the Progress tab. */}
-        <RamadanCard />
-        <ContinueRecitingCard lastLog={recitationLogs[0] || null} />
+        <RamadanCard delay={0} />
+        <ContinueRecitingCard lastLog={recitationLogs[0] || null} delay={0.05} />
         <StreakDisplay streaks={streaks} currentStreak={currentStreak} averageScore={averageScore} />
-        <PlanCard planState={planState} logs={recitationLogs} onStart={startPlan} />
+        <PlanCard planState={planState} logs={recitationLogs} onStart={startPlan} delay={0.1} />
         <div className="grid gap-4 md:grid-cols-2">
-          <AyahOfTheDayCard />
-          <HadithOfTheDayCard />
+          <AyahOfTheDayCard delay={0.15} />
+          <HadithOfTheDayCard delay={0.2} />
         </div>
 
         {/* Weekly Activity */}

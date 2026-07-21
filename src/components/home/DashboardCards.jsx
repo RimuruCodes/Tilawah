@@ -10,16 +10,19 @@ import { getDailyAyah, getDailyHadith } from "@/lib/dailyContent";
 import { getHijriDate, isRamadanModeEnabled } from "@/lib/hijri";
 import { JUZ_AMMA_PLAN, getPlanProgress, surahName } from "@/lib/recitationPlans";
 
-const cardMotion = {
+// `delay` lets Home.jsx stagger the dashboard cards in on load instead of
+// having all of them pop in at once.
+const cardMotion = (delay = 0) => ({
   initial: { opacity: 0, y: 10 },
   animate: { opacity: 1, y: 0 },
-};
+  transition: { duration: 0.35, ease: "easeOut", delay },
+});
 
 // "Continue reciting" — one tap back into the last practiced surah.
-export function ContinueRecitingCard({ lastLog }) {
+export function ContinueRecitingCard({ lastLog, delay }) {
   if (!lastLog) {
     return (
-      <motion.div {...cardMotion}>
+      <motion.div {...cardMotion(delay)}>
         <Link
           to="/surah/1"
           className="flex items-center gap-4 rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-emerald-900/30 to-slate-900/60 p-4 hover:border-emerald-500/40 transition-colors"
@@ -38,7 +41,7 @@ export function ContinueRecitingCard({ lastLog }) {
   }
 
   return (
-    <motion.div {...cardMotion}>
+    <motion.div {...cardMotion(delay)}>
       <Link
         to={`/surah/${lastLog.surah_number}`}
         className="flex items-center gap-4 rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-emerald-900/30 to-slate-900/60 p-4 hover:border-emerald-500/40 transition-colors"
@@ -61,7 +64,7 @@ export function ContinueRecitingCard({ lastLog }) {
 }
 
 // Ayah of the Day — same text source as the reader (api.alquran.cloud).
-export function AyahOfTheDayCard() {
+export function AyahOfTheDayCard({ delay } = {}) {
   const [ayah, setAyah] = useState(undefined); // undefined=loading, null=unavailable
 
   useEffect(() => {
@@ -73,7 +76,7 @@ export function AyahOfTheDayCard() {
   if (ayah === null) return null; // offline with no cache — hide rather than show an empty shell
 
   return (
-    <motion.div {...cardMotion} className="rounded-2xl border border-slate-700/20 bg-slate-900/50 p-4 space-y-3">
+    <motion.div {...cardMotion(delay)} className="rounded-2xl border border-slate-700/20 bg-slate-900/50 p-4 space-y-3">
       <div className="flex items-center gap-2">
         <BookOpen className="w-4 h-4 text-emerald-400" />
         <h3 className="text-xs font-medium uppercase tracking-wider text-slate-400">Ayah of the Day</h3>
@@ -99,7 +102,7 @@ export function AyahOfTheDayCard() {
 
 // Hadith of the Day — Sahih al-Bukhari / Sahih Muslim only; grading is the
 // source collections' classification, not this app's.
-export function HadithOfTheDayCard() {
+export function HadithOfTheDayCard({ delay } = {}) {
   const [hadith, setHadith] = useState(undefined);
 
   useEffect(() => {
@@ -111,7 +114,7 @@ export function HadithOfTheDayCard() {
   if (hadith === null) return null;
 
   return (
-    <motion.div {...cardMotion} className="rounded-2xl border border-slate-700/20 bg-slate-900/50 p-4 space-y-3">
+    <motion.div {...cardMotion(delay)} className="rounded-2xl border border-slate-700/20 bg-slate-900/50 p-4 space-y-3">
       <div className="flex items-center gap-2">
         <ScrollText className="w-4 h-4 text-amber-400" />
         <h3 className="text-xs font-medium uppercase tracking-wider text-slate-400">Hadith of the Day</h3>
@@ -141,14 +144,14 @@ export function HadithOfTheDayCard() {
 
 // During Ramadan (Umm al-Qura calendar), a gentle nightly-practice nudge.
 // Hidden entirely outside Ramadan or when disabled in Settings.
-export function RamadanCard() {
+export function RamadanCard({ delay } = {}) {
   const hijri = getHijriDate();
   if (!hijri.isRamadan || !isRamadanModeEnabled()) return null;
   // Taraweeh traditionally covers roughly one juz per night — suggest
   // following along by reviewing that juz's opening surah context.
   return (
     <motion.div
-      {...cardMotion}
+      {...cardMotion(delay)}
       className="rounded-2xl border border-amber-500/20 bg-gradient-to-r from-amber-900/20 to-slate-900/60 p-4"
     >
       <p className="text-[10px] uppercase tracking-wider text-amber-400/90 font-medium">
@@ -164,10 +167,10 @@ export function RamadanCard() {
 }
 
 // Structured plan card: current day's target, completion, overall progress.
-export function PlanCard({ planState, logs, onStart }) {
+export function PlanCard({ planState, logs, onStart, delay }) {
   if (!planState) {
     return (
-      <motion.div {...cardMotion} className="rounded-2xl border border-slate-700/20 bg-slate-900/50 p-4 space-y-2">
+      <motion.div {...cardMotion(delay)} className="rounded-2xl border border-slate-700/20 bg-slate-900/50 p-4 space-y-2">
         <h3 className="text-sm font-semibold text-white">{JUZ_AMMA_PLAN.name}</h3>
         <p className="text-xs text-slate-400">{JUZ_AMMA_PLAN.description}</p>
         <button
@@ -184,7 +187,7 @@ export function PlanCard({ planState, logs, onStart }) {
   const pct = Math.round((progress.completedDays / progress.totalDays) * 100);
 
   return (
-    <motion.div {...cardMotion} className="rounded-2xl border border-slate-700/20 bg-slate-900/50 p-4 space-y-3">
+    <motion.div {...cardMotion(delay)} className="rounded-2xl border border-slate-700/20 bg-slate-900/50 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-white">{JUZ_AMMA_PLAN.name}</h3>
         <span className="text-[10px] text-slate-500">

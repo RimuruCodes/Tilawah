@@ -6,6 +6,12 @@ import { registerSW } from 'virtual:pwa-register'
 import { toast } from '@/components/ui/use-toast'
 import { ToastAction } from '@/components/ui/toast'
 import { initLifecycleDebug, recordLifecycleEvent } from '@/lib/lifecycleDebug'
+import { applyArabicFont } from '@/lib/arabicFont'
+
+// Applies the persisted Arabic font choice to the --font-arabic CSS var
+// before first paint — the preference lives in localStorage, not the DOM,
+// so it must be re-applied on every load.
+applyArabicFont()
 
 // On-page debug console for mobile (iOS has no remote DevTools without a
 // Mac): append ?debug=1 to any app URL and the eruda overlay appears —

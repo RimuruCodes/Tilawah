@@ -65,8 +65,11 @@ export default defineConfig({
         display: 'standalone',
         start_url: '/',
         icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          // Full-bleed art with generous inner padding around the mark, safe
+          // for the OS to crop into a circle/squircle without clipping it.
+          { src: '/icon-1024.png', sizes: '1024x1024', type: 'image/png', purpose: 'any maskable' },
         ],
       },
     }),

@@ -436,7 +436,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
 
           {ayah && (
             <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/30" dir="rtl" lang="ar">
-              <p className="text-xl text-white/90 leading-loose text-center" style={{ fontFamily: "'Scheherazade New', serif", lineHeight: "2.5" }}>
+              <p className="text-xl text-white/90 leading-loose text-center" style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.5" }}>
                 {ayah.arabic}
               </p>
             </div>

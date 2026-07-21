@@ -218,7 +218,7 @@ export default function SurahReader() {
             <span className="text-slate-600">·</span>
             <span className="text-xs text-slate-400">{surah.ayahs} Ayahs</span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-arabic text-emerald-300" dir="rtl" style={{ fontFamily: "'Scheherazade New', serif" }}>
+          <h1 className="text-4xl md:text-5xl font-arabic text-emerald-300" dir="rtl" style={{ fontFamily: "var(--font-arabic)" }}>
             {surah.arabic}
           </h1>
           <h2 className="text-xl text-white font-semibold">{surah.name}</h2>
@@ -228,7 +228,7 @@ export default function SurahReader() {
         {/* Bismillah */}
         {surahNumber !== 1 && surahNumber !== 9 && (
           <div className="text-center py-4" dir="rtl">
-            <p className="text-2xl text-emerald-300/60" style={{ fontFamily: "'Scheherazade New', serif", lineHeight: "2.5" }}>
+            <p className="text-2xl text-emerald-300/60" style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.5" }}>
               بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ
             </p>
           </div>

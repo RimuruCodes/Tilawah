@@ -84,7 +84,7 @@ export default function AyahDisplay({
                   animate={{ opacity: 1, filter: "blur(0px)" }}
                   transition={{ duration: 0.5 }}
                   className={`font-arabic leading-loose text-right tracking-wide transition-colors duration-300 ${isHighlighted ? 'text-emerald-300' : 'text-white/90'}`}
-                  style={{ fontFamily: "'Scheherazade New', 'Amiri', serif", lineHeight: "2.8", fontSize: `${(1.75 * arabicScale).toFixed(3)}rem` }}
+                  style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.8", fontSize: `${(1.75 * arabicScale).toFixed(3)}rem` }}
                 >
                   {ayah.arabic}
                 </motion.p>

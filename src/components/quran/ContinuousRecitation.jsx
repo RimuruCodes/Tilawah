@@ -539,7 +539,7 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                 </div>
                 {currentAyah && (
                   <div className="w-full bg-slate-800/50 rounded-xl p-4 border border-slate-700/30" dir="rtl" lang="ar">
-                    <p className="text-xl text-white/90 leading-loose text-center" style={{ fontFamily: "'Scheherazade New', serif", lineHeight: "2.5" }}>
+                    <p className="text-xl text-white/90 leading-loose text-center" style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.5" }}>
                       {currentAyah.arabic}
                     </p>
                     <p className="text-xs text-slate-500 text-center mt-2" lang="en">Ayah {currentAyah.number}</p>
@@ -611,7 +611,7 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                     animate={{ opacity: 1, y: 0 }}
                     className="w-full bg-emerald-500/10 rounded-xl p-4 border border-emerald-500/20" dir="rtl" lang="ar"
                   >
-                    <p className="text-2xl text-emerald-200 leading-loose text-center" style={{ fontFamily: "'Scheherazade New', serif", lineHeight: "2.8" }}>
+                    <p className="text-2xl text-emerald-200 leading-loose text-center" style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.8" }}>
                       {currentAyah.arabic}
                     </p>
                     {/* aria-live so "Next Ayah" progress is announced. */}
