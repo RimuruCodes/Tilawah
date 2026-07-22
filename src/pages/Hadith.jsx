@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { ScrollText, Search, ChevronRight, ArrowLeft, Loader2, AlertTriangle, Download, Sparkles } from "lucide-react";
+import { ScrollText, Search, ChevronRight, ArrowLeft, Loader2, AlertTriangle, Download, Sparkles, ChevronLeft } from "lucide-react";
 import { HADITH_COLLECTIONS, getBooks, getBookHadiths, searchCollection, isCollectionLoadedForSearch } from "@/lib/hadithData";
 import EmptyState from "@/components/EmptyState";
 import { DUAS, DUA_CATEGORIES } from "@/lib/duasData";
 import { HADITH_TOPICS, TOPIC_ENTRIES_PER_BOOK } from "@/lib/hadithTopics";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 // Hadith browser: Sahih al-Bukhari and Sahih Muslim only — see the
 // disclaimer block at the bottom of the page for the content policy.
@@ -23,6 +24,11 @@ export default function Hadith() {
   const [activeTopic, setActiveTopic] = useState(HADITH_TOPICS[0].id);
   const [topicGroups, setTopicGroups] = useState(null); // [{collectionId, bookNumber, bookName, entries}] | null
   const [topicLoading, setTopicLoading] = useState(false);
+  // The single hadith currently open in the detail view: { list, index,
+  // collectionName, accent } | null. Keeping the whole list + index (rather
+  // than just the one hadith) lets the detail view offer Previous/Next
+  // through whatever list it was opened from.
+  const [viewingHadith, setViewingHadith] = useState(null);
 
   const collection = HADITH_COLLECTIONS.find((c) => c.id === collectionId);
   const books = useMemo(() => getBooks(collectionId), [collectionId]);
@@ -201,8 +207,14 @@ export default function Hadith() {
                   <p className="text-xs text-slate-500">
                     {`${searchResults.length}${searchResults.length >= 50 ? "+" : ""} match${searchResults.length === 1 ? "" : "es"}`}
                   </p>
-                  {searchResults.map((h) => (
-                    <HadithCard key={`${collectionId}-${h.number}`} hadith={h} collectionName={collection.name} accent={collectionId} />
+                  {searchResults.map((h, i) => (
+                    <HadithCard
+                      key={`${collectionId}-${h.number}`}
+                      hadith={h}
+                      collectionName={collection.name}
+                      accent={collectionId}
+                      onClick={() => setViewingHadith({ list: searchResults, index: i, collectionName: collection.name, accent: collectionId })}
+                    />
                   ))}
                 </div>
               )
@@ -242,12 +254,18 @@ export default function Hadith() {
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-1">
                   {HADITH_COLLECTIONS.find((c) => c.id === group.collectionId)?.name} · {group.bookName}
                 </h3>
-                {group.entries.map((h) => (
+                {group.entries.map((h, i) => (
                   <HadithCard
                     key={`${group.collectionId}-${h.number}`}
                     hadith={h}
                     collectionName={HADITH_COLLECTIONS.find((c) => c.id === group.collectionId)?.name}
                     accent={group.collectionId}
+                    onClick={() => setViewingHadith({
+                      list: group.entries,
+                      index: i,
+                      collectionName: HADITH_COLLECTIONS.find((c) => c.id === group.collectionId)?.name,
+                      accent: group.collectionId,
+                    })}
                   />
                 ))}
                 {group.entries.length === 0 && (
@@ -352,8 +370,14 @@ export default function Hadith() {
             )}
             {entries && (
               <div className="space-y-3">
-                {entries.map((h) => (
-                  <HadithCard key={h.number} hadith={h} collectionName={collection.name} accent={collectionId} />
+                {entries.map((h, i) => (
+                  <HadithCard
+                    key={h.number}
+                    hadith={h}
+                    collectionName={collection.name}
+                    accent={collectionId}
+                    onClick={() => setViewingHadith({ list: entries, index: i, collectionName: collection.name, accent: collectionId })}
+                  />
                 ))}
                 {entries.length === 0 && (
                   <EmptyState title="Nothing to show here" message="This book has no displayable entries yet." />
@@ -377,6 +401,12 @@ export default function Hadith() {
           </p>
         </footer>
       </div>
+
+      <HadithDetailModal
+        viewing={viewingHadith}
+        onClose={() => setViewingHadith(null)}
+        onNavigate={(delta) => setViewingHadith((v) => (v ? { ...v, index: v.index + delta } : v))}
+      />
     </div>
   );
 }
@@ -388,20 +418,26 @@ const ACCENT_STYLES = {
   muslim: { border: "border-l-sky-500/50", badge: "bg-sky-500/10 text-sky-300 border-sky-500/20" },
 };
 
-function HadithCard({ hadith, collectionName, accent }) {
+function HadithCard({ hadith, collectionName, accent, onClick }) {
   const style = ACCENT_STYLES[accent] || ACCENT_STYLES.bukhari;
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`rounded-2xl bg-slate-900/50 border border-slate-700/20 border-l-2 ${style.border} p-4 space-y-3`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
+      className={`rounded-2xl bg-slate-900/50 border border-slate-700/20 border-l-2 ${style.border} p-4 space-y-3 ${
+        onClick ? "cursor-pointer hover:border-slate-600/40 hover:bg-slate-900/80 transition-colors" : ""
+      }`}
     >
       {hadith.arabic && (
-        <p dir="rtl" lang="ar" className="font-arabic text-base leading-loose text-white/90 text-right">
+        <p dir="rtl" lang="ar" className="font-arabic text-base leading-loose text-white/90 text-right line-clamp-3">
           {hadith.arabic}
         </p>
       )}
-      <p className="text-sm text-slate-300 leading-relaxed">{hadith.english}</p>
+      <p className="text-sm text-slate-300 leading-relaxed line-clamp-4">{hadith.english}</p>
       <div className="flex items-center gap-2 pt-1">
         <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${style.badge}`}>Sahih</span>
         <p className="text-[11px] text-slate-500">
@@ -410,5 +446,58 @@ function HadithCard({ hadith, collectionName, accent }) {
         </p>
       </div>
     </motion.div>
+  );
+}
+
+// Full detail view for a single hadith, opened by tapping any HadithCard.
+// Keeps the whole originating list + index so Previous/Next can step
+// through without closing back out to the list every time.
+function HadithDetailModal({ viewing, onClose, onNavigate }) {
+  const open = !!viewing;
+  const hadith = viewing?.list?.[viewing.index];
+  if (!hadith) return null;
+  const style = ACCENT_STYLES[viewing.accent] || ACCENT_STYLES.bukhari;
+  const hasPrev = viewing.index > 0;
+  const hasNext = viewing.index < viewing.list.length - 1;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="bg-slate-900 border-slate-700/50 max-w-lg max-h-[85vh] overflow-y-auto p-0">
+        <div className={`p-6 space-y-4 border-l-2 ${style.border}`}>
+          <div className="flex items-center gap-2">
+            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${style.badge}`}>Sahih</span>
+            <p className="text-xs text-slate-500">
+              {viewing.collectionName} {hadith.number}
+              <span className="text-slate-600"> · source collection's grading</span>
+            </p>
+          </div>
+          {hadith.arabic && (
+            <p dir="rtl" lang="ar" className="font-arabic text-2xl leading-loose text-white text-right">
+              {hadith.arabic}
+            </p>
+          )}
+          <p className="text-base text-slate-200 leading-relaxed">{hadith.english}</p>
+          <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
+            <button
+              onClick={() => onNavigate(-1)}
+              disabled={!hasPrev}
+              className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 bg-slate-800/60 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              Previous
+            </button>
+            <span className="text-[11px] text-slate-600">{viewing.index + 1} of {viewing.list.length}</span>
+            <button
+              onClick={() => onNavigate(1)}
+              disabled={!hasNext}
+              className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 bg-slate-800/60 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
