@@ -297,6 +297,7 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
             userSamples,
             ayahArabicText: combinedAyahText,
             asrResult,
+            referenceAlignment: result.referenceAlignment,
           });
         }
       } catch (err) {

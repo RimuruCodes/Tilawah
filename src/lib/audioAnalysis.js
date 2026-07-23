@@ -483,6 +483,7 @@ export function compareSamples(userSamples, refSamples, sampleRate = TARGET_SAMP
       referenceDuration: ref.durationSec,
       pauseCount: 0,
       feedback: ["No speech was detected in your recording — make sure your microphone is working and try again."],
+      referenceAlignment: null,
     };
   }
 
@@ -498,6 +499,23 @@ export function compareSamples(userSamples, refSamples, sampleRate = TARGET_SAMP
 
   const { path, normalizedCost } = dtwAlign(userEnergyDs, refEnergyDs);
   const alignmentScore = clamp(100 * Math.exp(-normalizedCost / 1.4), 0, 100);
+
+  // Small, additive structure for Tajweed rule checks to reuse this SAME
+  // DTW alignment later — after the raw refSamples buffer has already
+  // been released (see recitationService.js). Only a per-frame dB array
+  // (a few hundred floats) and a time-mapping closure survive, never the
+  // raw audio.
+  const mapUserSecToRefSec = buildUserToRefSecMapper({
+    path,
+    userStart: user.start,
+    userTrimmedLen: userEnergy.length,
+    refStart: ref.start,
+    refTrimmedLen: refEnergy.length,
+    hopSec: ref.hopMs / 1000,
+  });
+  const referenceAlignment = mapUserSecToRefSec
+    ? { refEnergyDb: ref.energyDb, hopSec: ref.hopMs / 1000, mapUserSecToRefSec }
+    : null;
 
   // Use the DTW path to align pitch contours (in semitones) before
   // correlating them, so tempo differences don't wreck the comparison.
@@ -575,6 +593,7 @@ export function compareSamples(userSamples, refSamples, sampleRate = TARGET_SAMP
     pitchScore: pitchScore == null ? null : Math.round(pitchScore),
     pauseCount: user.pauseCount,
     feedback,
+    referenceAlignment,
   };
 }
 
@@ -592,16 +611,97 @@ export async function compareRecitation(userArrayBuffer, referenceArrayBuffer) {
 // Extracts a per-frame energy (dB) slice for an arbitrary [startSec, endSec]
 // time window, used by the Tajweed heuristics to look at a specific word's
 // audio rather than the whole recording.
+// Shared by energyProfileForWindow (raw-samples path) and
+// energyProfileForRefWindow (precomputed-array path, used once the raw
+// reference audio has already been released — see recitationService.js).
+function frameWindowBounds(hopSec, startSec, endSec, frameCount) {
+  const startFrame = Math.max(0, Math.floor(startSec / hopSec));
+  const endFrame = Math.min(frameCount - 1, Math.ceil(endSec / hopSec));
+  return { startFrame, endFrame };
+}
+
 export function energyProfileForWindow(samples, sampleRate, startSec, endSec) {
   const { frames, hopSize } = frameSignal(samples, sampleRate);
   const hopSec = hopSize / sampleRate;
-  const startFrame = Math.max(0, Math.floor(startSec / hopSec));
-  const endFrame = Math.min(frames.length - 1, Math.ceil(endSec / hopSec));
+  const { startFrame, endFrame } = frameWindowBounds(hopSec, startSec, endSec, frames.length);
   const energyDb = [];
   for (let i = startFrame; i <= endFrame; i++) {
     if (frames[i]) energyDb.push(toDb(rms(frames[i])));
   }
   return { energyDb, hopSec };
+}
+
+// Reference-side counterpart to energyProfileForWindow. Reads from the
+// small per-frame array retained in a `referenceAlignment` struct (see
+// compareSamples) instead of raw samples — by the time Tajweed rule
+// checks run, the raw reference audio buffer has already been released.
+export function energyProfileForRefWindow(referenceAlignment, startSec, endSec) {
+  if (!referenceAlignment?.refEnergyDb?.length) return { energyDb: [] };
+  const { refEnergyDb, hopSec } = referenceAlignment;
+  const { startFrame, endFrame } = frameWindowBounds(hopSec, startSec, endSec, refEnergyDb.length);
+  const energyDb = [];
+  for (let i = startFrame; i <= endFrame; i++) {
+    if (Number.isFinite(refEnergyDb[i])) energyDb.push(refEnergyDb[i]);
+  }
+  return { energyDb };
+}
+
+// Inverts/interpolates the DTW path compareSamples already computed (over
+// z-scored, downsampled energy buckets) into a function mapping a
+// timestamp in the user's full audio timeline to the corresponding
+// timestamp in the reference's full timeline. Reuses the SAME dtwAlign()
+// call compareSamples already made — this never runs a second DTW.
+//
+// Returns null (not a mapper function) when the path is empty or either
+// side's active region is empty/degenerate (e.g. a silent or near-empty
+// reference) — callers must then skip reference-anchored comparison
+// entirely, falling back to threshold-based checks.
+function buildUserToRefSecMapper({ path, userStart, userTrimmedLen, refStart, refTrimmedLen, hopSec }) {
+  if (path.length === 0 || userTrimmedLen <= 0 || refTrimmedLen <= 0) return null;
+
+  // path indices are bucket indices into the actual downsampled arrays,
+  // whose length can be shorter than targetLen (downsample() returns the
+  // array unchanged when arr.length <= targetLen — true for short
+  // recordings). Derive real bucket counts from the path's own index
+  // range rather than assuming targetLen.
+  const nUser = Math.max(...path.map(([i]) => i)) + 1;
+  const nRef = Math.max(...path.map(([, j]) => j)) + 1;
+
+  // Average every ref bucket the path aligns to each user bucket (a DTW
+  // path can visit several j's for one i, or vice versa).
+  const jSumForI = new Array(nUser).fill(0);
+  const jCountForI = new Array(nUser).fill(0);
+  for (const [i, j] of path) {
+    jSumForI[i] += j;
+    jCountForI[i] += 1;
+  }
+  const jForI = jSumForI.map((sum, i) => (jCountForI[i] ? sum / jCountForI[i] : null));
+  // DTW paths are monotonic and span every row, so every bucket should be
+  // visited — fill any gap defensively via nearest filled neighbor.
+  for (let i = 0; i < nUser; i++) {
+    if (jForI[i] != null) continue;
+    let lo = i - 1;
+    while (lo >= 0 && jForI[lo] == null) lo--;
+    let hi = i + 1;
+    while (hi < nUser && jForI[hi] == null) hi++;
+    jForI[i] = lo >= 0 ? jForI[lo] : hi < nUser ? jForI[hi] : 0;
+  }
+
+  const userBucketWidth = userTrimmedLen / nUser;
+  const refBucketWidth = refTrimmedLen / nRef;
+
+  return function mapUserSecToRefSec(userSec) {
+    const userFrame = userSec / hopSec;
+    const userTrimmedFrame = userFrame - userStart;
+    if (userTrimmedFrame < 0 || userTrimmedFrame > userTrimmedLen) return null; // outside the region DTW actually aligned
+    const bucketFloat = clamp(userTrimmedFrame / userBucketWidth, 0, nUser - 1);
+    const i0 = Math.floor(bucketFloat);
+    const i1 = Math.min(i0 + 1, nUser - 1);
+    const frac = bucketFloat - i0;
+    const j = jForI[i0] + frac * (jForI[i1] - jForI[i0]);
+    const refTrimmedFrame = j * refBucketWidth;
+    return (refTrimmedFrame + refStart) * hopSec;
+  };
 }
 
 // Produces a coarse, normalized (0..1) amplitude envelope over the full
@@ -640,6 +740,7 @@ export function analyzeRecordingQualityOnly(samples, sampleRate = TARGET_SAMPLE_
       userDuration: a.durationSec,
       pauseCount: 0,
       feedback: ["No speech was detected in your recording — make sure your microphone is working and try again."],
+      referenceAlignment: null,
     };
   }
 
@@ -674,5 +775,6 @@ export function analyzeRecordingQualityOnly(samples, sampleRate = TARGET_SAMPLE_
     userDuration: Math.round(a.durationSec * 10) / 10,
     pauseCount: a.pauseCount,
     feedback,
+    referenceAlignment: null,
   };
 }

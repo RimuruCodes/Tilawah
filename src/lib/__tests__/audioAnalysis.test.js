@@ -5,6 +5,7 @@ import {
   frameSignal,
   rms,
   energyProfileForWindow,
+  energyProfileForRefWindow,
   reduceNoise,
   buildFeatures,
   TARGET_SAMPLE_RATE,
@@ -107,6 +108,7 @@ describe("compareSamples", () => {
     const result = compareSamples(makeSilence(1.5), reference, TARGET_SAMPLE_RATE);
     expect(result.score).toBe(0);
     expect(result.feedback[0]).toMatch(/no speech/i);
+    expect(result.referenceAlignment).toBeNull();
   });
 
   it("penalizes a much shorter recording than the reference (pacing mismatch)", () => {
@@ -116,6 +118,65 @@ describe("compareSamples", () => {
     const rushedResult = compareSamples(rushed, reference, TARGET_SAMPLE_RATE);
     const goodResult = compareSamples(goodPace, reference, TARGET_SAMPLE_RATE);
     expect(rushedResult.score).toBeLessThan(goodResult.score);
+  });
+});
+
+// Duplicates every sample `factor` times (nearest-neighbor time-stretch) —
+// preserves the energy envelope's shape exactly while spreading it over a
+// longer duration, giving a clean ground truth for "landmark at user-time t
+// should map to approximately t*factor in the stretched reference".
+function stretchInTime(samples, factor) {
+  const n = Math.round(samples.length * factor);
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = samples[Math.min(samples.length - 1, Math.floor(i / factor))];
+  return out;
+}
+
+describe("compareSamples referenceAlignment", () => {
+  it("is present, with a mapping function and a reference energy array, for a normal comparison", () => {
+    const signal = makeToneBurst({ toneSec: 1.2, amplitude: 0.5 });
+    const result = compareSamples(signal, signal, TARGET_SAMPLE_RATE);
+    expect(result.referenceAlignment).not.toBeNull();
+    expect(typeof result.referenceAlignment.mapUserSecToRefSec).toBe("function");
+    expect(Array.isArray(result.referenceAlignment.refEnergyDb) || ArrayBuffer.isView(result.referenceAlignment.refEnergyDb)).toBe(true);
+    expect(result.referenceAlignment.refEnergyDb.length).toBeGreaterThan(0);
+  });
+
+  it("is null when the reference is silent/near-empty, even though the user recording is fine", () => {
+    const user = makeToneBurst({ toneSec: 1.0, amplitude: 0.5 });
+    const silentRef = makeSilence(1.0);
+    const result = compareSamples(user, silentRef, TARGET_SAMPLE_RATE);
+    expect(result.referenceAlignment).toBeNull();
+  });
+
+  it("maps a user timestamp to approximately itself when the reference is identical", () => {
+    const voice = makeVoiceLike({ durationSec: 2, gapEverySec: 0.4, gapSec: 0.15 });
+    const result = compareSamples(voice, voice, TARGET_SAMPLE_RATE);
+    const durationSec = voice.length / TARGET_SAMPLE_RATE;
+    for (const frac of [0.3, 0.5, 0.7]) {
+      const t = durationSec * frac;
+      const mapped = result.referenceAlignment.mapUserSecToRefSec(t);
+      expect(mapped).not.toBeNull();
+      expect(Math.abs(mapped - t)).toBeLessThan(0.1); // within ~one frame hop's slack
+    }
+  });
+
+  it("maps a user timestamp to approximately the proportionally scaled timestamp in a time-stretched reference", () => {
+    const user = makeVoiceLike({ durationSec: 2, gapEverySec: 0.4, gapSec: 0.15 });
+    const factor = 1.4;
+    const reference = stretchInTime(user, factor);
+    const result = compareSamples(user, reference, TARGET_SAMPLE_RATE);
+    expect(result.referenceAlignment).not.toBeNull();
+    const userDurationSec = user.length / TARGET_SAMPLE_RATE;
+    for (const frac of [0.4, 0.6]) {
+      const t = userDurationSec * frac;
+      const mapped = result.referenceAlignment.mapUserSecToRefSec(t);
+      expect(mapped).not.toBeNull();
+      // Loose tolerance — DTW bucket quantization is inherently coarse;
+      // this asserts order-of-magnitude correctness, not exact equality.
+      const expected = t * factor;
+      expect(Math.abs(mapped - expected)).toBeLessThan(expected * 0.3 + 0.15);
+    }
   });
 });
 
@@ -179,6 +240,23 @@ describe("energyProfileForWindow", () => {
     const toneWindow = energyProfileForWindow(signal, TARGET_SAMPLE_RATE, 0.6, 0.9);
     const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
     expect(avg(toneWindow.energyDb)).toBeGreaterThan(avg(silenceWindow.energyDb));
+  });
+});
+
+describe("energyProfileForRefWindow", () => {
+  it("returns higher average energy for a window over the tone than over silence, reading from a precomputed array", () => {
+    const signal = makeToneBurst({ silenceSec: 0.5, toneSec: 0.5, amplitude: 0.7 });
+    const { energyDb, hopSize } = buildFeatures(signal, TARGET_SAMPLE_RATE);
+    const referenceAlignment = { refEnergyDb: energyDb, hopSec: hopSize / TARGET_SAMPLE_RATE };
+    const silenceWindow = energyProfileForRefWindow(referenceAlignment, 0, 0.3);
+    const toneWindow = energyProfileForRefWindow(referenceAlignment, 0.6, 0.9);
+    const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+    expect(avg(toneWindow.energyDb)).toBeGreaterThan(avg(silenceWindow.energyDb));
+  });
+
+  it("returns an empty profile when referenceAlignment has no energy array", () => {
+    expect(energyProfileForRefWindow(null, 0, 1).energyDb).toEqual([]);
+    expect(energyProfileForRefWindow({ refEnergyDb: [] }, 0, 1).energyDb).toEqual([]);
   });
 });
 

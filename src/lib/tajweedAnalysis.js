@@ -1,5 +1,5 @@
 import { findTajweedRules } from "@/lib/tajweedRules";
-import { energyProfileForWindow } from "@/lib/audioAnalysis";
+import { energyProfileForWindow, energyProfileForRefWindow } from "@/lib/audioAnalysis";
 
 const DIACRITICS_RE = /[\u064B-\u0652\u0670\u0653]/g;
 const TATWEEL_RE = /\u0640/g;
@@ -127,6 +127,28 @@ function timeWindowForRule(rule, alignments, chunks) {
   return { startSec: Math.max(0, start - 0.05), endSec: end + 0.1 };
 }
 
+// Maps a rule's user-audio time window to the corresponding window in the
+// reference reciter's audio, via the DTW-derived mapping compareSamples
+// already computed (src/lib/audioAnalysis.js). Returns null — triggering
+// the per-rule fallback to the threshold path — when: no referenceAlignment
+// was supplied; either endpoint falls outside the region DTW actually
+// aligned; the mapped window is non-positive-width; or the mapped width is
+// wildly inconsistent with the user window's width (a sign the DTW bucket
+// resolution at this point is too coarse to trust — buckets can span
+// 100ms+ in longer/continuous recordings, since the downsample target
+// length caps at 220 regardless of recording length).
+function refWindowForRule(window, referenceAlignment) {
+  if (!referenceAlignment) return null;
+  const refStartSec = referenceAlignment.mapUserSecToRefSec(window.startSec);
+  const refEndSec = referenceAlignment.mapUserSecToRefSec(window.endSec);
+  if (refStartSec == null || refEndSec == null || refEndSec <= refStartSec) return null;
+  const userWidthSec = window.endSec - window.startSec;
+  const refWidthSec = refEndSec - refStartSec;
+  const widthRatio = refWidthSec / userWidthSec;
+  if (widthRatio < 0.2 || widthRatio > 5) return null; // untrustworthy mapping at this resolution
+  return { startSec: refStartSec, endSec: refEndSec };
+}
+
 function averageWordDuration(alignments, chunks) {
   const durations = alignments
     .map((a) => (a.recognizedIndex != null ? chunks[a.recognizedIndex]?.timestamp : null))
@@ -219,6 +241,23 @@ export const TAJWEED_THRESHOLDS = {
   nasalSpikeMaxDb: 10,
   // Fraction of the expected elongation ratio a Madd must reach to pass.
   maddMinRatioFactor: 0.925,
+
+  // --- Reference-anchored thresholds (Phase 1) ---
+  // Used when a DTW-aligned reference-reciter window is available (see
+  // refWindowForRule/checkTajweedRules below): compare the user's
+  // measurement directly against the reference reciter's OWN measurement
+  // at that position, instead of a fixed or self-relative baseline. Unlike
+  // the thresholds above, NONE of these have been run through
+  // tools/qdat-eval yet — that harness works from cached ASR output with
+  // no reference-audio DTW alignment at all, so there is nothing to
+  // validate these against today. Every constant below is a hand-picked
+  // placeholder pending a qdat-eval extension that can log
+  // reference-anchored verdicts.
+  qalqalahRefRatioFactor: 0.6, // user's bounce must reach >=60% of the reference's own bounce here
+  qalqalahRefMinDb: 2, // reference's own bounce must clear this floor, or the comparison isn't trusted
+  nasalHoldRefRatioFactor: 0.75, // user's hold must last >=75% of the reference's own hold duration here
+  nasalSpikeRefToleranceFactor: 1.5, // spike ceiling widens to this multiple of the reference's own spread, if higher than nasalSpikeMaxDb
+  maddRefMinRatioFactor: 0.85, // user's elongation must reach >=85% of the reference's own elongation duration here
 };
 
 // Builds a specific, actionable note for one rule occurrence, naming the
@@ -268,7 +307,7 @@ function buildRuleNote(rule, verdict, { word, letter, actualCounts, expectedCoun
 // each rule in time. This is heuristic — real timing varies by reciter and
 // pace — so checks are relative to the user's own average word duration in
 // this recording, not fixed absolute thresholds.
-export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks }) {
+export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment = null }) {
   const { hits, words } = findTajweedRules(ayahArabicText);
   const avgWordDur = averageWordDuration(alignments, chunks);
   const results = [];
@@ -323,45 +362,101 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
     const maxDb = Math.max(...energyDb);
     const meanDb = energyDb.reduce((a, b) => a + b, 0) / energyDb.length;
 
+    // Attempt a reference-anchored comparison for this occurrence — falls
+    // back to null (threshold path) whenever the mapping isn't available
+    // or trustworthy for THIS position, never globally, since alignment
+    // quality can vary within one recording.
+    const refWindow = refWindowForRule(window, referenceAlignment);
+    let refEnergyDb = null;
+    let refMaxDb = null;
+    let refMeanDb = null;
+    if (refWindow) {
+      const refProfile = energyProfileForRefWindow(referenceAlignment, refWindow.startSec, refWindow.endSec);
+      if (refProfile.energyDb.length >= 2) {
+        refEnergyDb = refProfile.energyDb;
+        refMaxDb = Math.max(...refEnergyDb);
+        refMeanDb = refEnergyDb.reduce((a, b) => a + b, 0) / refEnergyDb.length;
+      }
+    }
+
     // Each branch also records the raw values (`measured`) behind its
     // verdict, so the offline eval harness can re-derive verdicts under
-    // candidate thresholds without re-running ASR.
+    // candidate thresholds without re-running ASR. `measured.mode` records
+    // which path (reference-anchored or threshold) produced the verdict.
     if (rule.ruleType === "qalqalah") {
       const tailStart = Math.floor(energyDb.length * 0.6);
       const tailMax = Math.max(...energyDb.slice(tailStart));
       const bounceDb = tailMax - meanDb;
-      const hasBounce = bounceDb > TAJWEED_THRESHOLDS.qalqalahBounceDb;
-      const verdict = hasBounce ? "pass" : "warn";
-      results.push({ ...rule, word, letter, verdict, ...window, measured: { bounceDb }, note: buildRuleNote(rule, verdict, { word, letter }) });
+
+      let verdict;
+      let measured;
+      if (refEnergyDb) {
+        const refTailStart = Math.floor(refEnergyDb.length * 0.6);
+        const refTailMax = Math.max(...refEnergyDb.slice(refTailStart));
+        const refBounceDb = refTailMax - refMeanDb;
+        if (refBounceDb >= TAJWEED_THRESHOLDS.qalqalahRefMinDb) {
+          const hasBounce = bounceDb >= refBounceDb * TAJWEED_THRESHOLDS.qalqalahRefRatioFactor;
+          verdict = hasBounce ? "pass" : "warn";
+          measured = { mode: "reference", bounceDb, refBounceDb };
+        }
+      }
+      if (!measured) {
+        const hasBounce = bounceDb > TAJWEED_THRESHOLDS.qalqalahBounceDb;
+        verdict = hasBounce ? "pass" : "warn";
+        measured = { mode: "threshold", bounceDb };
+      }
+      results.push({ ...rule, word, letter, verdict, ...window, measured, note: buildRuleNote(rule, verdict, { word, letter }) });
     } else if (NASAL_HOLD_RULE_TYPES.has(rule.ruleType)) {
-      const expectedMinSec = (rule.expectedCounts / 2) * (avgWordDur * TAJWEED_THRESHOLDS.nasalHoldCountWordFraction);
       const energySpreadDb = maxDb - meanDb;
-      const holdsUp = segmentDurationSec >= expectedMinSec && energySpreadDb < TAJWEED_THRESHOLDS.nasalSpikeMaxDb; // sustained, not a spike
-      const verdict = holdsUp ? "pass" : "warn";
-      results.push({
-        ...rule,
-        word,
-        letter,
-        verdict,
-        ...window,
-        measured: { segmentDurationSec, avgWordDur, energySpreadDb, expectedCounts: rule.expectedCounts },
-        note: buildRuleNote(rule, verdict, { word, letter }),
-      });
+
+      let verdict;
+      let measured;
+      if (refEnergyDb) {
+        const refSegDur = refWindow.endSec - refWindow.startSec;
+        const refSpreadDb = refMaxDb - refMeanDb;
+        const durationRatio = segmentDurationSec / refSegDur;
+        const spikeCeiling = Math.max(TAJWEED_THRESHOLDS.nasalSpikeMaxDb, refSpreadDb * TAJWEED_THRESHOLDS.nasalSpikeRefToleranceFactor);
+        const holdsUp = durationRatio >= TAJWEED_THRESHOLDS.nasalHoldRefRatioFactor && energySpreadDb < spikeCeiling;
+        verdict = holdsUp ? "pass" : "warn";
+        measured = { mode: "reference", segmentDurationSec, refSegmentDurationSec: refSegDur, durationRatio, energySpreadDb, refSpreadDb, expectedCounts: rule.expectedCounts };
+      } else {
+        const expectedMinSec = (rule.expectedCounts / 2) * (avgWordDur * TAJWEED_THRESHOLDS.nasalHoldCountWordFraction);
+        const holdsUp = segmentDurationSec >= expectedMinSec && energySpreadDb < TAJWEED_THRESHOLDS.nasalSpikeMaxDb; // sustained, not a spike
+        verdict = holdsUp ? "pass" : "warn";
+        measured = { mode: "threshold", segmentDurationSec, avgWordDur, energySpreadDb, expectedCounts: rule.expectedCounts };
+      }
+      results.push({ ...rule, word, letter, verdict, ...window, measured, note: buildRuleNote(rule, verdict, { word, letter }) });
     } else {
-      // Madd family: compare this word's duration to the user's own
-      // average word duration, scaled by how many counts are expected.
-      const expectedRatio = rule.expectedCounts / 2; // natural madd ~ baseline
-      const actualRatio = segmentDurationSec / avgWordDur;
-      const holdsUp = actualRatio >= expectedRatio * TAJWEED_THRESHOLDS.maddMinRatioFactor;
-      const verdict = holdsUp ? "pass" : "warn";
-      const actualCounts = actualRatio * 2; // rough counts estimate, same scale as expectedCounts
+      // Madd family.
+      let verdict;
+      let measured;
+      let actualCounts;
+      if (refEnergyDb) {
+        const refSegDur = refWindow.endSec - refWindow.startSec;
+        const elongationRatio = segmentDurationSec / refSegDur;
+        const holdsUp = elongationRatio >= TAJWEED_THRESHOLDS.maddRefMinRatioFactor;
+        verdict = holdsUp ? "pass" : "warn";
+        // Scaled the same way as the threshold branch, treating the
+        // reference's own hold at this position as "full counts".
+        actualCounts = elongationRatio * (rule.expectedCounts / 2) * 2;
+        measured = { mode: "reference", segmentDurationSec, refSegmentDurationSec: refSegDur, elongationRatio };
+      } else {
+        // Compare this word's duration to the user's own average word
+        // duration, scaled by how many counts are expected.
+        const expectedRatio = rule.expectedCounts / 2; // natural madd ~ baseline
+        const actualRatio = segmentDurationSec / avgWordDur;
+        const holdsUp = actualRatio >= expectedRatio * TAJWEED_THRESHOLDS.maddMinRatioFactor;
+        verdict = holdsUp ? "pass" : "warn";
+        actualCounts = actualRatio * 2; // rough counts estimate, same scale as expectedCounts
+        measured = { mode: "threshold", actualRatio, expectedRatio };
+      }
       results.push({
         ...rule,
         word,
         letter,
         verdict,
         ...window,
-        measured: { actualRatio, expectedRatio },
+        measured,
         note: buildRuleNote(rule, verdict, { word, letter, actualCounts, expectedCounts: rule.expectedCounts }),
       });
     }
@@ -388,7 +483,7 @@ export function summarizeTajweedChecks(ruleChecks = []) {
 
 // Full pipeline: ASR transcription result + expected ayah text -> word word
 // alignment, word-correctness feedback, and Tajweed rule checks.
-export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate }) {
+export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate, referenceAlignment = null }) {
   const expectedWordsOriginal = ayahArabicText.trim().split(/\s+/).filter(Boolean);
   const expectedWords = expectedWordsOriginal.map(normalizeArabic);
   const chunks = asrResult?.chunks || [];
@@ -396,7 +491,7 @@ export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, use
 
   const alignments = alignWords(expectedWords, recognizedWords);
   const wordFeedback = buildWordFeedback(alignments, expectedWordsOriginal);
-  const ruleChecks = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
+  const ruleChecks = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment });
 
   const ruleTypesPresent = [...new Set(ruleChecks.map((r) => r.ruleType))];
   const glossary = ruleTypesPresent.map((type) => ({ type, ...TAJWEED_RULE_DEFINITIONS[type] }));

@@ -5,10 +5,11 @@ import {
   wordSimilarity,
   alignWords,
   analyzeTajweedFromTranscription,
+  checkTajweedRules,
   summarizeTajweedChecks,
   TAJWEED_RULE_DEFINITIONS,
 } from "@/lib/tajweedAnalysis";
-import { TARGET_SAMPLE_RATE } from "@/lib/audioAnalysis";
+import { TARGET_SAMPLE_RATE, buildFeatures } from "@/lib/audioAnalysis";
 
 describe("normalizeArabic", () => {
   it("strips diacritics and tatweel", () => {
@@ -268,5 +269,178 @@ describe("summarizeTajweedChecks", () => {
 
   it("returns an empty object for no checks", () => {
     expect(summarizeTajweedChecks([])).toEqual({});
+  });
+});
+
+describe("reference-anchored Tajweed checks", () => {
+  const sampleRate = TARGET_SAMPLE_RATE;
+
+  // Qalqalah release-bounce shape: a quiet body followed by a sharp
+  // dB-rising tail. The 1.78x amplitude ratio was picked empirically (a
+  // scratch probe against the real energyProfileForWindow/bounceDb math)
+  // to land bounceDb comfortably between the reference floor (2dB) and the
+  // fixed threshold (4dB) — around 3.4dB.
+  function makeQalqalahShape({ bodySec = 0.35, tailSec = 0.25, bodyAmplitude = 0.1, tailAmplitude = bodyAmplitude * 1.78, freq = 150 } = {}) {
+    const bodyN = Math.round(bodySec * sampleRate);
+    const tailN = Math.round(tailSec * sampleRate);
+    const out = new Float32Array(bodyN + tailN);
+    for (let i = 0; i < bodyN; i++) out[i] = bodyAmplitude * Math.sin((2 * Math.PI * freq * i) / sampleRate);
+    for (let i = 0; i < tailN; i++) out[bodyN + i] = tailAmplitude * Math.sin((2 * Math.PI * freq * i) / sampleRate);
+    return out;
+  }
+
+  // A flat, sustained tone — the nasal-hold / Madd elongation shape.
+  function makeSustainedTone({ holdSec = 1.0, amplitude = 0.15, freq = 120 } = {}) {
+    const n = Math.round(holdSec * sampleRate);
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) out[i] = amplitude * Math.sin((2 * Math.PI * freq * i) / sampleRate);
+    return out;
+  }
+
+  // A reference identical to the user's own recording (same energy shape,
+  // identity time mapping) — proves "the user matched the reciter's own
+  // performance exactly here", regardless of what a fixed or self-relative
+  // baseline would say about the absolute numbers.
+  function makeIdentityReferenceAlignment(userSamples) {
+    const { energyDb, hopSize } = buildFeatures(userSamples, sampleRate);
+    return { refEnergyDb: energyDb, hopSec: hopSize / sampleRate, mapUserSecToRefSec: (sec) => sec };
+  }
+
+  // A reference whose TIMELINE runs at `timeScale`x the user's (e.g. 3
+  // means the reference reciter held this position 3x as long, in
+  // reference-time, as the user did) — an exact linear mapUserSecToRefSec,
+  // not estimated from synthesized audio.
+  function makeTimeScaledReferenceAlignment(userSamples, timeScale) {
+    const { energyDb, hopSize } = buildFeatures(userSamples, sampleRate);
+    return { refEnergyDb: energyDb, hopSec: hopSize / sampleRate, mapUserSecToRefSec: (sec) => sec * timeScale };
+  }
+
+  it("Qalqalah: passes when reference-anchored even though the fixed threshold would warn", () => {
+    const userSamples = makeQalqalahShape();
+    const ayahArabicText = "قَدْ أَفْلَحَ";
+    const alignments = [{ recognizedIndex: 0 }, { recognizedIndex: 1 }];
+    const chunks = [{ timestamp: [0, 0.4] }, { timestamp: [0.45, 1.0] }];
+
+    const thresholdResults = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
+    const qalqalahThreshold = thresholdResults.find((c) => c.ruleType === "qalqalah");
+    expect(qalqalahThreshold.measured.mode).toBe("threshold");
+    expect(qalqalahThreshold.verdict).toBe("warn");
+    expect(qalqalahThreshold.measured.bounceDb).toBeGreaterThan(2);
+    expect(qalqalahThreshold.measured.bounceDb).toBeLessThan(4);
+
+    const referenceAlignment = makeIdentityReferenceAlignment(userSamples);
+    const refResults = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment });
+    const qalqalahRef = refResults.find((c) => c.ruleType === "qalqalah");
+    expect(qalqalahRef.measured.mode).toBe("reference");
+    expect(qalqalahRef.verdict).toBe("pass");
+  });
+
+  it("Ikhfa (nasal-hold family): passes when reference-anchored even though an inflated self-relative baseline would warn", () => {
+    // Word 0 (من) carries the ikhfa hold; words 1-3 carry deliberately
+    // inflated durations, poisoning the self-relative avgWordDur the
+    // threshold path is scaled by — even though word 0's own hold is fine.
+    const userSamples = makeSustainedTone({ holdSec: 0.7 });
+    const ayahArabicText = "مِن شَرِّ مَا خَلَقَ";
+    const alignments = [{ recognizedIndex: 0 }, { recognizedIndex: 1 }, { recognizedIndex: 2 }, { recognizedIndex: 3 }];
+    const chunks = [
+      { timestamp: [0, 0.5] },
+      { timestamp: [0.6, 5.6] }, // inflated
+      { timestamp: [5.7, 10.7] }, // inflated
+      { timestamp: [10.8, 15.8] }, // inflated
+    ];
+
+    const thresholdResults = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
+    const ikhfaThreshold = thresholdResults.find((c) => c.ruleType === "ikhfa");
+    expect(ikhfaThreshold.measured.mode).toBe("threshold");
+    expect(ikhfaThreshold.verdict).toBe("warn");
+
+    const referenceAlignment = makeIdentityReferenceAlignment(userSamples);
+    const refResults = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment });
+    const ikhfaRef = refResults.find((c) => c.ruleType === "ikhfa");
+    expect(ikhfaRef.measured.mode).toBe("reference");
+    expect(ikhfaRef.verdict).toBe("pass");
+  });
+
+  it("Ikhfa (nasal-hold family), opposite direction: warns when reference-anchored even though the self-relative threshold would pass", () => {
+    // Same shape as above, but this time all four words carry ordinary,
+    // consistent durations (self-relative threshold passes easily) — the
+    // reference reciter, however, held this exact position 3x as long in
+    // its own timeline, so the user fell well short of matching it.
+    const userSamples = makeSustainedTone({ holdSec: 0.7 });
+    const ayahArabicText = "مِن شَرِّ مَا خَلَقَ";
+    const alignments = [{ recognizedIndex: 0 }, { recognizedIndex: 1 }, { recognizedIndex: 2 }, { recognizedIndex: 3 }];
+    const chunks = [
+      { timestamp: [0, 0.5] },
+      { timestamp: [0.55, 1.0] },
+      { timestamp: [1.05, 1.4] },
+      { timestamp: [1.45, 1.9] },
+    ];
+
+    const thresholdResults = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
+    const ikhfaThreshold = thresholdResults.find((c) => c.ruleType === "ikhfa");
+    expect(ikhfaThreshold.measured.mode).toBe("threshold");
+    expect(ikhfaThreshold.verdict).toBe("pass");
+
+    const referenceAlignment = makeTimeScaledReferenceAlignment(userSamples, 3);
+    const refResults = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment });
+    const ikhfaRef = refResults.find((c) => c.ruleType === "ikhfa");
+    expect(ikhfaRef.measured.mode).toBe("reference");
+    expect(ikhfaRef.verdict).toBe("warn");
+  });
+
+  it("Madd: passes when reference-anchored even though an inflated self-relative baseline would warn", () => {
+    // Word 0 (قَالَ) carries the natural madd; word 1's duration is
+    // deliberately inflated, poisoning avgWordDur — even though word 0's
+    // own elongation matches the reference reciter's exactly.
+    const userSamples = makeSustainedTone({ holdSec: 0.8 });
+    const ayahArabicText = "قَالَ رَبِّ";
+    const alignments = [{ recognizedIndex: 0 }, { recognizedIndex: 1 }];
+    const chunks = [
+      { timestamp: [0, 0.6] },
+      { timestamp: [0.75, 5.75] }, // inflated
+    ];
+
+    const thresholdResults = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
+    const maddThreshold = thresholdResults.find((c) => c.ruleType.startsWith("madd"));
+    expect(maddThreshold.measured.mode).toBe("threshold");
+    expect(maddThreshold.verdict).toBe("warn");
+
+    const referenceAlignment = makeIdentityReferenceAlignment(userSamples);
+    const refResults = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment });
+    const maddRef = refResults.find((c) => c.ruleType.startsWith("madd"));
+    expect(maddRef.measured.mode).toBe("reference");
+    expect(maddRef.verdict).toBe("pass");
+  });
+
+  it("falls back to threshold verdicts exactly when the reference mapping can't locate this position", () => {
+    const userSamples = makeSustainedTone({ holdSec: 0.7 });
+    const ayahArabicText = "مِن شَرِّ مَا خَلَقَ";
+    const alignments = [{ recognizedIndex: 0 }, { recognizedIndex: 1 }, { recognizedIndex: 2 }, { recognizedIndex: 3 }];
+    const chunks = [
+      { timestamp: [0, 0.5] },
+      { timestamp: [0.55, 1.0] },
+      { timestamp: [1.05, 1.4] },
+      { timestamp: [1.45, 1.9] },
+    ];
+
+    const withoutRef = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment: null });
+    const unresolvableRef = { refEnergyDb: [0, 0, 0], hopSec: 0.012, mapUserSecToRefSec: () => null };
+    const withUnresolvableRef = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment: unresolvableRef });
+    expect(withUnresolvableRef).toEqual(withoutRef);
+  });
+
+  it("passing referenceAlignment: null explicitly matches omitting it (fallback is the default)", () => {
+    const ayahArabicText = "قَدْ أَفْلَحَ";
+    const asrResult = {
+      text: "قد أفلح",
+      chunks: [
+        { text: "قد", timestamp: [0.0, 0.4] },
+        { text: "أفلح", timestamp: [0.45, 1.0] },
+      ],
+    };
+    const userSamples = makeQalqalahShape();
+    const withDefault = analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate });
+    const withExplicitNull = analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate, referenceAlignment: null });
+    expect(withExplicitNull).toEqual(withDefault);
   });
 });

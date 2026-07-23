@@ -291,6 +291,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
           userSamples,
           ayahArabicText: ayah.arabic,
           onModelProgress: (pct) => { if (isCurrentRun()) setModelProgress(pct); },
+          referenceAlignment: dspResult.referenceAlignment,
         });
       } catch (err) {
         console.error("Background Tajweed stage failed — result stands without it:", err);

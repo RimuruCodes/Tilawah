@@ -493,7 +493,7 @@ function describeError(err) {
   return frame ? `${message} | ${frame.trim()}` : message;
 }
 
-export async function runTajweedAnalysis({ userSamples, ayahArabicText, onModelProgress, asrResult = null }) {
+export async function runTajweedAnalysis({ userSamples, ayahArabicText, onModelProgress, asrResult = null, referenceAlignment = null }) {
   try {
     // Reuse an already-obtained transcript when the caller has one (the
     // continuous flow transcribes early for ayah-count detection); only
@@ -523,6 +523,7 @@ export async function runTajweedAnalysis({ userSamples, ayahArabicText, onModelP
       ayahArabicText,
       userSamples,
       sampleRate: TARGET_SAMPLE_RATE,
+      referenceAlignment,
     });
   } catch (err) {
     // This catch also covers analyzeTajweedFromTranscription itself — a
@@ -734,7 +735,7 @@ async function escalateReferenceRetry({ mode, userSamples, reciterFolder, surahN
 // cleanup from the Recalculate OOM fix) BEFORE the second is loaded, so the
 // two models are never resident at once. Returns an improved tajweedResult
 // (higher word confidence) or null.
-async function escalateAsrUpgrade({ userSamples, ayahArabicText, priorTajweed, onModelProgress, isCurrentRun }) {
+async function escalateAsrUpgrade({ userSamples, ayahArabicText, priorTajweed, onModelProgress, isCurrentRun, referenceAlignment = null }) {
   // Release the fast model's worker + wasm heap first — never load a second
   // model alongside the first (that pattern caused the earlier intermittent
   // OOM). This also cancels any lingering inference.
@@ -744,7 +745,7 @@ async function escalateAsrUpgrade({ userSamples, ayahArabicText, priorTajweed, o
   const upgraded = await transcribeUserRecording(userSamples, onModelProgress, ASR_MODEL_OPTIONS.accurate.id);
   if (!upgraded || !isCurrentRun()) return null;
 
-  const newTajweed = await runTajweedAnalysis({ userSamples, ayahArabicText, asrResult: upgraded });
+  const newTajweed = await runTajweedAnalysis({ userSamples, ayahArabicText, asrResult: upgraded, referenceAlignment });
   const prior = priorTajweed?.overallWordConfidence ?? -1;
   const next = newTajweed?.overallWordConfidence ?? -1;
   // Keep it ONLY if it actually read the audio more confidently — otherwise
@@ -859,6 +860,7 @@ export async function escalateAnalysis({
       } else if (step.type === "asrUpgrade") {
         const upgradedTajweed = await escalateAsrUpgrade({
           userSamples, ayahArabicText, priorTajweed: tajweed, onModelProgress, isCurrentRun,
+          referenceAlignment: result?.referenceAlignment,
         });
         if (upgradedTajweed) {
           tajweed = upgradedTajweed;
