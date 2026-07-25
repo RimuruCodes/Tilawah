@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, User, Trash2, LogOut, Loader2, AlertTriangle, Download, Upload, Mic2, CheckCircle2, Sparkles, MessageCircle, BookOpen } from "lucide-react";
+import { ArrowLeft, User, Trash2, LogOut, Loader2, AlertTriangle, Download, Upload, Mic2, CheckCircle2, Sparkles, MessageCircle, BookOpen, ExternalLink } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { useSubscription } from "@/lib/SubscriptionContext";
 import { describeSubscription } from "@/lib/entitlements";
@@ -613,6 +613,37 @@ export default function Settings() {
                 Export feedback reports
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Credits */}
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-slate-400 px-1">Open Data & Credits</h2>
+          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-2">
+            <p className="text-xs text-slate-500">
+              Tilawah's Tajweed-precision research draws on data and tools from{" "}
+              <a
+                href="https://github.com/Wider-Community/quranic-universal-audio"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 inline-flex items-center gap-1"
+              >
+                Qur'anic Universal Audio (QUA)
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              , an open, community-verified project building word- and letter-level Quran recitation
+              timestamps. QUA's timestamps, alignment, and catalog data are licensed under{" "}
+              <a
+                href="https://creativecommons.org/licenses/by/4.0/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
+              >
+                CC BY 4.0
+              </a>
+              . Recitation audio itself remains the property of the original reciters and upstream
+              sources, not QUA or Tilawah.
+            </p>
           </div>
         </div>
 
