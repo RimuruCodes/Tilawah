@@ -17,7 +17,6 @@ function clearLocalUserData(userId) {
 }
 import { ASR_MODEL_OPTIONS, getAsrModelPreference, setAsrModelPreference, isAsrEnabled, setAsrEnabled } from "@/lib/asrEngine";
 import { ESCALATION_BUDGETS, getEscalationBudgetId, setEscalationBudgetId } from "@/lib/escalation";
-import { isPaceMatchEnabled, setPaceMatchEnabled } from "@/lib/paceMatching";
 import { isRamadanModeEnabled, setRamadanModeEnabled } from "@/lib/hijri";
 import { ARABIC_COMFORT_LEVELS, getArabicComfort, setArabicComfort } from "@/lib/arabicComfort";
 import { ARABIC_TEXT_SIZES, getArabicTextSize, setArabicTextSize } from "@/lib/arabicTextSize";
@@ -48,7 +47,6 @@ export default function Settings() {
   const [deleteError, setDeleteError] = useState("");
   const [modelPref, setModelPref] = useState(getAsrModelPreference());
   const [escalationBudget, setEscalationBudget] = useState(getEscalationBudgetId());
-  const [paceMatch, setPaceMatch] = useState(isPaceMatchEnabled());
   const [asrOn, setAsrOn] = useState(isAsrEnabled());
   const [ramadanMode, setRamadanMode] = useState(isRamadanModeEnabled());
   const [comfortLevel, setComfortLevel] = useState(getArabicComfort());
@@ -111,11 +109,6 @@ export default function Settings() {
   const handleEscalationBudgetChange = (id) => {
     setEscalationBudgetId(id);
     setEscalationBudget(id);
-  };
-
-  const handlePaceMatchChange = (on) => {
-    setPaceMatchEnabled(on);
-    setPaceMatch(on);
   };
 
   const downloadJson = (payload, baseName) => {
@@ -402,26 +395,6 @@ export default function Settings() {
             </p>
           </div>
 
-          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-slate-400">
-                <Mic2 className="w-4 h-4" />
-                <h3 className="text-sm font-medium text-white">Pace-matched reciter comparison</h3>
-              </div>
-              <Switch
-                checked={paceMatch}
-                onCheckedChange={handlePaceMatchChange}
-                aria-label="Pace-matched reciter comparison"
-                className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-slate-700"
-              />
-            </div>
-            <p className="text-xs text-slate-500">
-              When on, single-ayah analysis compares you against whichever reciter's recording is
-              closest in length to yours — chosen from audio duration alone, before any scoring, never
-              by which reciter gives you a higher score. When off (default), you're always compared to
-              the reciter you selected.
-            </p>
-          </div>
 
           <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">

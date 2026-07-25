@@ -1,5 +1,4 @@
 import { getAudioUrl, RECITERS } from "@/lib/quranData";
-import { isPaceMatchEnabled, folderBitrateKbps, estimateDurationFromBytes, pickClosestPaceReciter } from "@/lib/paceMatching";
 import {
   decodeToMonoSamples,
   compareSamples,
@@ -149,52 +148,13 @@ export async function decodeUserRecording(userBlob) {
   }
 }
 
-// HEAD request for a reference file's byte size (used only for the cheap
-// duration estimate behind pace matching). Null on any failure.
-async function headContentLength(url, timeoutMs = 6000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { method: "HEAD", mode: "cors", signal: controller.signal });
-    if (!res.ok) return null;
-    const len = parseInt(res.headers.get("content-length") || "", 10);
-    return Number.isFinite(len) ? len : null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// When pace matching is on (Settings toggle, default off), picks the reciter
-// whose recording of this ayah is closest in duration to the user's — from
-// duration estimates alone, before any scoring (see src/lib/paceMatching.js
-// for why it must never be chosen by resulting score). Falls back to the
-// user's chosen reciter whenever estimates can't be fetched.
-async function resolveReciterForPace({ userDurationSec, surahNumber, ayahNumber, reciterFolder, reciterName }) {
-  const fallback = { folder: reciterFolder, name: reciterName, paceMatched: false };
-  if (!isPaceMatchEnabled() || RECITERS.length < 2) return fallback;
-
-  const candidates = await Promise.all(
-    RECITERS.map(async (r) => {
-      const bytes = await headContentLength(getAudioUrl(r.folder, surahNumber, ayahNumber));
-      return { folder: r.folder, name: r.name, durationSec: estimateDurationFromBytes(bytes, folderBitrateKbps(r.folder)) };
-    })
-  );
-  const pick = pickClosestPaceReciter(userDurationSec, candidates.filter((c) => c.durationSec != null));
-  if (!pick) return fallback;
-  return { folder: pick.folder, name: pick.name, paceMatched: pick.folder !== reciterFolder };
-}
-
 // Analyzes a single-ayah recording against its reference reciter audio.
 // Accepts already-decoded samples (see decodeUserRecording) to avoid
 // redundant work when the caller also needs the raw samples for ASR.
-export async function analyzeSingleAyahRecitation({ userSamples, reciterFolder, reciterName, surahNumber, ayahNumber }) {
+export async function analyzeSingleAyahRecitation({ userSamples, reciterFolder, surahNumber, ayahNumber }) {
   const userNoiseFloorDb = getStoredCalibration()?.noiseFloorDb ?? null;
-  const userDurationSec = userSamples.length / TARGET_SAMPLE_RATE;
 
-  const reciter = await resolveReciterForPace({ userDurationSec, surahNumber, ayahNumber, reciterFolder, reciterName });
-  let refSamples = await fetchAyahSamples(reciter.folder, surahNumber, ayahNumber);
+  let refSamples = await fetchAyahSamples(reciterFolder, surahNumber, ayahNumber);
   if (refSamples) {
     trackBuffer("reference-samples", refSamples.length * 4);
     const result = compareSamples(userSamples, refSamples, TARGET_SAMPLE_RATE, { userNoiseFloorDb });
@@ -203,12 +163,6 @@ export async function analyzeSingleAyahRecitation({ userSamples, reciterFolder, 
     // to PROVE the reference audio was no longer referenced by then.
     refSamples = null;
     releaseBuffer("reference-samples");
-    if (reciter.paceMatched) {
-      result.reciterUsed = reciter.name;
-      result.feedback.push(
-        `Pace match: you were compared against ${reciter.name}, whose recording of this ayah is closest in length to yours (chosen by duration before scoring — turn this off in Settings to always use your selected reciter).`
-      );
-    }
     return result;
   }
   return analyzeRecordingQualityOnly(userSamples, TARGET_SAMPLE_RATE, userNoiseFloorDb);
