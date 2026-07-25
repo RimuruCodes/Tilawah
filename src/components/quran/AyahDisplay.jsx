@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, CheckCircle2, Circle, Mic } from "lucide-react";
 import AyahInsights from "@/components/quran/AyahInsights";
+import { splitAyahIntoWords } from "@/lib/tajweedRules";
 
 function lastScoreColor(score) {
   if (score >= 90) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
@@ -9,11 +10,12 @@ function lastScoreColor(score) {
   return "text-orange-400 bg-orange-500/10 border-orange-500/20";
 }
 
-export default function AyahDisplay({
+function AyahDisplay({
   ayah,
   surahNumber,
   isPlaying,
   isHighlighted,
+  highlightedWordIndex = null,
   memorizationStatus,
   showTranslation,
   onRecordClick,
@@ -86,7 +88,24 @@ export default function AyahDisplay({
                   className={`font-arabic leading-loose text-right tracking-wide transition-colors duration-300 ${isHighlighted ? 'text-emerald-300' : 'text-white/90'}`}
                   style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.8", fontSize: `${(1.75 * arabicScale).toFixed(3)}rem` }}
                 >
-                  {ayah.arabic}
+                  {/* Follow-along highlighting: each word is its own span so
+                      AudioPlayer can mark the currently-playing one during
+                      reciter playback (currently only for ayahs with QUA
+                      ground-truth timing — see AudioPlayer.jsx). Splitting
+                      via splitAyahIntoWords keeps indices consistent with
+                      the same function tajweedRules.js/QUA lookups use. */}
+                  {splitAyahIntoWords(ayah.arabic).map((word, i) => (
+                    <span key={i}>
+                      <span
+                        className={`transition-colors duration-150 rounded ${
+                          highlightedWordIndex === i ? "bg-emerald-500/20 text-emerald-300 px-0.5" : ""
+                        }`}
+                      >
+                        {word}
+                      </span>
+                      {" "}
+                    </span>
+                  ))}
                 </motion.p>
               )}
             </AnimatePresence>
@@ -133,3 +152,9 @@ export default function AyahDisplay({
     </motion.div>
   );
 }
+
+// Memoized: during playback, word-level highlight updates re-render
+// SurahReader's whole ayah list every time the active word changes (much
+// more frequent than the old ayah-level-only highlight) — memoizing keeps
+// that to only the ayah(s) whose props actually changed.
+export default React.memo(AyahDisplay);

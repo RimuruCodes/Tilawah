@@ -138,6 +138,18 @@ export function isQuaGroundTruthAvailable(reciterFolder, surahNumber, ayahNumber
   return findAyah(reciterFolder, surahNumber, ayahNumber) != null;
 }
 
+// Translates one QUA word entry's surah-absolute ms into Tilawah's own
+// everyayah ayah buffer's timeline (t=0 at that buffer's start): subtract
+// this ayah's own QUA start (ayah-relative), then apply the validated
+// per-ayah offset (see file header). Returns null for a non-positive-width
+// result rather than a nonsensical window.
+function windowSecForWord(ayah, [, wStartMs, wEndMs]) {
+  const startMs = wStartMs - ayah.verseStartMs - ayah.offsetMs;
+  const endMs = wEndMs - ayah.verseStartMs - ayah.offsetMs;
+  if (endMs <= startMs) return null;
+  return { startSec: Math.max(0, startMs / 1000), endSec: endMs / 1000 };
+}
+
 // Returns the validated ground-truth window, in seconds, for one word of
 // one ayah — in the SAME coordinate system as the reference ayah audio
 // buffer Tilawah itself decoded (t=0 at that buffer's start), so callers
@@ -154,12 +166,24 @@ export function getQuaWordWindowSec(reciterFolder, surahNumber, ayahNumber, word
   const quaWordIdx = wordIndex + 1;
   const word = ayah.words.find((w) => w[0] === quaWordIdx);
   if (!word) return null;
-  const [, wStartMs, wEndMs] = word;
-  // Translate QUA's surah-absolute ms into Tilawah's own everyayah ayah
-  // buffer's timeline: subtract this ayah's own QUA start (ayah-relative),
-  // then apply the validated per-ayah offset (see file header).
-  const startMs = wStartMs - ayah.verseStartMs - ayah.offsetMs;
-  const endMs = wEndMs - ayah.verseStartMs - ayah.offsetMs;
-  if (endMs <= startMs) return null;
-  return { startSec: Math.max(0, startMs / 1000), endSec: endMs / 1000 };
+  return windowSecForWord(ayah, word);
+}
+
+// Returns ground-truth windows for EVERY word of one ayah at once — used by
+// playback-time word highlighting (AudioPlayer.jsx), which needs the whole
+// ayah's word boundaries up front rather than one lookup per word. Same
+// coordinate system and 0-based `wordIndex` as getQuaWordWindowSec above.
+// Returns null (never an empty/partial array) whenever this (reciter,
+// ayah) isn't covered, so callers can tell "nothing to highlight" apart
+// from "an ayah with zero valid words".
+export function getQuaWordWindowsForAyah(reciterFolder, surahNumber, ayahNumber) {
+  const ayah = findAyah(reciterFolder, surahNumber, ayahNumber);
+  if (!ayah) return null;
+  const windows = ayah.words
+    .map((word) => {
+      const win = windowSecForWord(ayah, word);
+      return win && { wordIndex: word[0] - 1, ...win };
+    })
+    .filter(Boolean);
+  return windows.length ? windows : null;
 }

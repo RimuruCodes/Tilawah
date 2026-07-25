@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { QUA_SUPPORTED_RECITER_FOLDERS, isQuaGroundTruthAvailable, getQuaWordWindowSec } from "@/lib/quaReferenceData";
+import { QUA_SUPPORTED_RECITER_FOLDERS, isQuaGroundTruthAvailable, getQuaWordWindowSec, getQuaWordWindowsForAyah } from "@/lib/quaReferenceData";
 
 describe("QUA_SUPPORTED_RECITER_FOLDERS", () => {
   it("is scoped to exactly Husary and Minshawi — Alafasy is permanently excluded (see quaReferenceData.js header), Abdul Basit pending separate Tarteel licensing clarification", () => {
@@ -53,5 +53,31 @@ describe("getQuaWordWindowSec", () => {
 
   it("returns null for an ayah that wasn't part of the validated sample", () => {
     expect(getQuaWordWindowSec("Husary_128kbps", 3, 5, 0)).toBeNull();
+  });
+});
+
+describe("getQuaWordWindowsForAyah", () => {
+  it("returns every word's window for a covered ayah, matching getQuaWordWindowSec word-by-word", () => {
+    const all = getQuaWordWindowsForAyah("Husary_128kbps", 1, 1);
+    expect(all).toHaveLength(4); // بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+    all.forEach((entry, i) => {
+      const single = getQuaWordWindowSec("Husary_128kbps", 1, 1, entry.wordIndex);
+      expect(entry.wordIndex).toBe(i);
+      expect(entry.startSec).toBeCloseTo(single.startSec, 6);
+      expect(entry.endSec).toBeCloseTo(single.endSec, 6);
+    });
+  });
+
+  it("windows are in reading order and non-overlapping", () => {
+    const all = getQuaWordWindowsForAyah("Minshawy_Murattal_128kbps", 112, 1);
+    for (let i = 1; i < all.length; i++) {
+      expect(all[i].wordIndex).toBeGreaterThan(all[i - 1].wordIndex);
+      expect(all[i].startSec).toBeGreaterThanOrEqual(all[i - 1].endSec);
+    }
+  });
+
+  it("returns null for an unvalidated reciter or an ayah outside the validated sample", () => {
+    expect(getQuaWordWindowsForAyah("Alafasy_128kbps", 1, 1)).toBeNull();
+    expect(getQuaWordWindowsForAyah("Husary_128kbps", 3, 5)).toBeNull();
   });
 });

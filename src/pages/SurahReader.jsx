@@ -47,6 +47,10 @@ export default function SurahReader() {
   const [arabicScale] = useState(getArabicTextScale());
   const [hideMode, setHideMode] = useState(false);
   const [highlightedAyah, setHighlightedAyah] = useState(null);
+  // { ayahNumber, wordIndex } | null — which word is currently playing,
+  // only ever set for reciter+ayah pairs with QUA ground-truth timing
+  // (see AudioPlayer.jsx/quaReferenceData.js); null everywhere else.
+  const [highlightedWord, setHighlightedWord] = useState(null);
   const [selectedReciter, setSelectedReciter] = useState(RECITERS[0].id);
   const [recordingAyah, setRecordingAyah] = useState(null);
   const [memorizationMap, setMemorizationMap] = useState({});
@@ -122,6 +126,10 @@ export default function SurahReader() {
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+  }, []);
+
+  const handleWordHighlight = useCallback((ayahNum, wordIndex) => {
+    setHighlightedWord(wordIndex != null ? { ayahNumber: ayahNum, wordIndex } : null);
   }, []);
 
   const handleRecordClick = (ayah) => {
@@ -268,6 +276,7 @@ export default function SurahReader() {
             surahNumber={surahNumber}
             ayahs={ayahs}
             onAyahHighlight={handleAyahHighlight}
+            onWordHighlight={handleWordHighlight}
             selectedReciter={selectedReciter}
             onReciterChange={setSelectedReciter}
           />
@@ -324,6 +333,7 @@ export default function SurahReader() {
                   surahNumber={surahNumber}
                   arabicScale={arabicScale}
                   isHighlighted={highlightedAyah === ayah.number}
+                  highlightedWordIndex={highlightedWord?.ayahNumber === ayah.number ? highlightedWord.wordIndex : null}
                   memorizationStatus={memorizationMap[ayah.number]}
                   lastScore={lastScoreMap[ayah.number]}
                   showTranslation={showTranslation}

@@ -3,8 +3,20 @@ import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, RotateCcw } from 
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RECITERS, getAudioUrl } from "@/lib/quranData";
+import { getQuaWordWindowsForAyah } from "@/lib/quaReferenceData";
 
-export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, selectedReciter, onReciterChange }) {
+// Finds which word (if any) is playing at time `t`, from a small sorted
+// list of {wordIndex, startSec, endSec}. Linear scan is fine — even the
+// longest ayah has well under 100 words.
+function findActiveWordIndex(windows, t) {
+  if (!windows) return null;
+  for (const w of windows) {
+    if (t >= w.startSec && t < w.endSec) return w.wordIndex;
+  }
+  return null;
+}
+
+export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWordHighlight, selectedReciter, onReciterChange }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentAyahIndex, setCurrentAyahIndex] = useState(0);
   const [volume, setVolume] = useState(80);
@@ -21,6 +33,14 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, selec
   const reciterFolderRef = useRef(reciter.folder);
   const surahNumberRef = useRef(surahNumber);
   const onAyahHighlightRef = useRef(onAyahHighlight);
+  const onWordHighlightRef = useRef(onWordHighlight);
+  // Ground-truth word windows for the CURRENTLY LOADED ayah only (null when
+  // this reciter+ayah has no QUA coverage) — recomputed once per ayah
+  // change, not per playback tick, since it only depends on which ayah is
+  // loaded. lastWordIndexRef dedupes onWordHighlight calls so it only fires
+  // on an actual word transition, not every 100ms poll tick.
+  const currentAyahWordWindowsRef = useRef(null);
+  const lastWordIndexRef = useRef(null);
 
   useEffect(() => {
     ayahsRef.current = ayahs;
@@ -30,7 +50,21 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, selec
     reciterFolderRef.current = reciter.folder;
     surahNumberRef.current = surahNumber;
     onAyahHighlightRef.current = onAyahHighlight;
-  }, [reciter.folder, surahNumber, onAyahHighlight]);
+    onWordHighlightRef.current = onWordHighlight;
+  }, [reciter.folder, surahNumber, onAyahHighlight, onWordHighlight]);
+
+  // Recomputes the active ayah's QUA word windows and clears any stale
+  // word highlight from the previous ayah — called every time playback
+  // moves to a different ayah (loadAyah, and the `ended` auto-advance).
+  const primeWordHighlightForAyah = useCallback((ayahNumber) => {
+    currentAyahWordWindowsRef.current = getQuaWordWindowsForAyah(
+      reciterFolderRef.current,
+      surahNumberRef.current,
+      ayahNumber
+    );
+    lastWordIndexRef.current = null;
+    onWordHighlightRef.current?.(ayahNumber, null);
+  }, []);
 
   const loadAyah = useCallback((index) => {
     const list = ayahsRef.current;
@@ -46,8 +80,9 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, selec
       setCurrentAyahIndex(index);
       currentIndexRef.current = index;
       onAyahHighlightRef.current?.(ayah.number);
+      primeWordHighlightForAyah(ayah.number);
     }
-  }, []);
+  }, [primeWordHighlightForAyah]);
 
   useEffect(() => {
     const audio = new Audio();
@@ -76,6 +111,7 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, selec
         setProgress(0);
         setIsLoading(true);
         onAyahHighlightRef.current?.(nextAyah.number);
+        primeWordHighlightForAyah(nextAyah.number);
         audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
       } else {
         setIsPlaying(false);
@@ -104,7 +140,15 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, selec
     if (isPlaying) {
       intervalRef.current = setInterval(() => {
         if (audioRef.current) {
-          setProgress(audioRef.current.currentTime);
+          const t = audioRef.current.currentTime;
+          setProgress(t);
+
+          const activeIdx = findActiveWordIndex(currentAyahWordWindowsRef.current, t);
+          if (activeIdx !== lastWordIndexRef.current) {
+            lastWordIndexRef.current = activeIdx;
+            const ayah = ayahsRef.current?.[currentIndexRef.current];
+            if (ayah) onWordHighlightRef.current?.(ayah.number, activeIdx);
+          }
         }
       }, 100);
     } else {
