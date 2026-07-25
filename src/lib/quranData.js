@@ -134,6 +134,36 @@ export function getAudioUrl(reciterFolder, surahNumber, ayahNumber) {
 // network again — the service worker cache still covers cross-session reuse.
 const surahTextCache = new Map();
 
+// api.alquran.cloud's quran-uthmani edition prepends the Basmalah to ayah 1's
+// own `text` for every surah except At-Tawbah (9) — a convention shared by
+// most Quran text sources, since the Basmalah is recited before starting a
+// surah but isn't itself verse 1 (except in Al-Fatihah, where it IS verse 1).
+// SurahReader.jsx already renders its own separate Basmalah header for every
+// surah but 1 and 9, so leaving the API's prepended copy inside `ayah.arabic`
+// both double-renders it AND silently shifts every downstream word/letter
+// index (Tajweed rule detection, ASR transcript alignment, QUA lookups) by
+// however many Basmalah words got counted as part of "the ayah". Stripped
+// here, once, at the source, so `ayah.arabic` always means exactly what's
+// actually recited for that ayah — no downstream consumer needs to special-
+// case it. Built from verified codepoints (not hand-typed) to avoid any
+// transcription risk in a string this dense with combining marks.
+const BASMALAH_UTHMANI = String.fromCodePoint(
+  0x628, 0x650, 0x633, 0x652, 0x645, 0x650, 0x20,
+  0x671, 0x644, 0x644, 0x651, 0x64e, 0x647, 0x650, 0x20,
+  0x671, 0x644, 0x631, 0x651, 0x64e, 0x62d, 0x652, 0x645, 0x64e, 0x670, 0x646, 0x650, 0x20,
+  0x671, 0x644, 0x631, 0x651, 0x64e, 0x62d, 0x650, 0x64a, 0x645, 0x650
+);
+
+// Strips a prepended Basmalah from ayah 1's text (see BASMALAH_UTHMANI
+// above). Surah 1 (Al-Fatihah) and 9 (At-Tawbah) are left untouched: in
+// Al-Fatihah the Basmalah IS verse 1, and At-Tawbah has no Basmalah to strip.
+export function stripPrependedBasmalah(text, surahNumber, ayahNumberInSurah) {
+  if (ayahNumberInSurah !== 1 || surahNumber === 1 || surahNumber === 9) return text;
+  const trimmed = text.trim();
+  if (!trimmed.startsWith(`${BASMALAH_UTHMANI} `)) return text;
+  return trimmed.slice(BASMALAH_UTHMANI.length + 1);
+}
+
 export async function fetchSurahText(surahNumber) {
   if (surahTextCache.has(surahNumber)) return surahTextCache.get(surahNumber);
 
@@ -148,7 +178,7 @@ export async function fetchSurahText(surahNumber) {
   const [arabicEdition, englishEdition] = data.data;
   const ayahs = arabicEdition.ayahs.map((ayah, i) => ({
     number: ayah.numberInSurah,
-    arabic: ayah.text,
+    arabic: stripPrependedBasmalah(ayah.text, surahNumber, ayah.numberInSurah),
     translation: englishEdition.ayahs[i]?.text || "",
     juz: ayah.juz,
     page: ayah.page
