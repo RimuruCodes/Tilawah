@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { QUA_SUPPORTED_RECITER_FOLDERS, isQuaGroundTruthAvailable, getQuaWordWindowSec } from "@/lib/quaReferenceData";
 
 describe("QUA_SUPPORTED_RECITER_FOLDERS", () => {
-  it("is scoped to exactly Husary and Minshawi — Abdul Basit and Alafasy are deliberately excluded pending re-validation", () => {
+  it("is scoped to exactly Husary and Minshawi — Alafasy is permanently excluded (see quaReferenceData.js header), Abdul Basit pending separate Tarteel licensing clarification", () => {
     expect(QUA_SUPPORTED_RECITER_FOLDERS).toEqual(new Set(["Husary_128kbps", "Minshawy_Murattal_128kbps"]));
   });
 });

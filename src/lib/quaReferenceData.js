@@ -21,10 +21,57 @@
 // Basit was mixed (0.40-0.99) and Alafasy was inconsistent (including
 // negative correlations on some samples) — both are deliberately absent
 // from QUA_DATA below, not just untested, so they keep using the existing
-// DTW-estimated reference window unchanged until independently
-// re-validated. Treating an unvalidated reciter's QUA timestamps as ground
-// truth would risk quietly making Tajweed feedback less accurate while
-// labeling it more trustworthy — worse than today's honest DTW estimate.
+// DTW-estimated reference window unchanged. Treating an unvalidated
+// reciter's QUA timestamps as ground truth would risk quietly making
+// Tajweed feedback less accurate while labeling it more trustworthy —
+// worse than today's honest DTW estimate.
+//
+// --- Investigation status (Alafasy: CLOSED 2026-07-25, permanent) ---
+// Three avenues were explored to get Alafasy real ground-truth timing, none
+// panned out:
+//  1. Reconciling everyayah.com's Alafasy audio against QUA's mp3quran-
+//     sourced Alafasy audio (the same approach that worked for Husary/
+//     Minshawi): inconsistent correlation across sampled ayahs, including
+//     negative values — evidence of a genuine content-level mismatch (not
+//     a fixable offset), most likely everyayah's and mp3quran's Alafasy
+//     files not consistently being the same recording session throughout.
+//  2. Using QUA's own native audio (fetched via their download_audio.py,
+//     matched to their timestamps by construction) purely as an internal
+//     Tajweed-reference source, never for playback: technically validated
+//     as clean (0.99-1.00 correlation against QUA's own timestamps, as
+//     expected), but blocked on licensing — neither mp3quran.net (QUA's
+//     Alafasy audio source) nor everyayah.com (Tilawah's own existing
+//     playback source) has ever published a terms of use, license, or
+//     copyright statement (checked directly: privacy policy, API docs,
+//     about page, sitemap, and Wayback Machine archive history back to
+//     2020 — nothing found on either site). That's an honest "informal
+//     assumption, undocumented" status for both, not something a
+//     comparison between them resolves. Decision: don't build on an
+//     unresolved licensing question — resolving it needs a real outreach
+//     to mp3quran.net/everyayah.com from a person representing Tilawah,
+//     which is explicitly a human/business decision, not something to
+//     pursue from this codebase or session.
+//  3. QUA's live Aligner tool, to align Tilawah's own everyayah.com
+//     Alafasy audio directly (sidestepping the source-matching problem
+//     entirely): not viable as a free/anonymous service — no published
+//     commercial terms, GPU access requires Hugging Face login, and the
+//     anonymous CPU tier is hard-capped at one active request globally
+//     (confirmed via repeated real calls). Their own error response
+//     points bulk/commercial use to contacting the maintainers directly.
+//
+// FINAL DECISION: Alafasy stays on the DTW-estimated reference-timing path
+// permanently — not paused, not pending re-validation. Do not re-open this
+// without a genuinely new reason (e.g. a human-confirmed license answer
+// from mp3quran.net/everyayah.com, or a materially different data source
+// appearing). This does not touch Tilawah's existing everyayah.com usage
+// for actual playback, which is unaffected and continues as-is.
+//
+// Abdul Basit remains a SEPARATE, still-open question (not closed): its
+// QUA audio source is Tarteel's CDN, which Tarteel's own support docs say
+// isn't offered as a public API for third-party apps — pending a direct,
+// human-sent clarification with Tarteel, same category as the Alafasy
+// outreach above but a different counterparty. Until then it also stays
+// on the DTW-estimated path.
 //
 // Word-level only, deliberately: QUA also publishes letter-level timing,
 // but its letters use its own normalized alphabet (e.g. dropping the
