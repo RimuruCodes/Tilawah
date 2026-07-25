@@ -13,6 +13,8 @@ import TajweedResultsPanel from "@/components/quran/TajweedResultsPanel";
 import WaveformTimeline from "@/components/quran/WaveformTimeline";
 import ComparePlayback from "@/components/quran/ComparePlayback";
 import { getAudioUrl } from "@/lib/quranData";
+import { getQuaWordWindowsForAyah } from "@/lib/quaReferenceData";
+import { getCachedWordTimings } from "@/lib/wordTimingCache";
 import MetricBadge from "@/components/quran/MetricBadge";
 import ResultFeedback from "@/components/quran/ResultFeedback";
 import CelebrationOverlay, { celebrationFor } from "@/components/quran/CelebrationOverlay";
@@ -43,6 +45,12 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
   const audioPlaybackRef = useRef(null);
   const [isPlayingBack, setIsPlayingBack] = useState(false);
   const [playheadSec, setPlayheadSec] = useState(null);
+  // Reference-side word timing for "Hear the difference" follow-along
+  // highlighting: QUA ground truth if this reciter+ayah has it, else
+  // whatever's already cached from a previous opted-in AudioPlayer
+  // follow-along session (never triggers new ASR work here — see
+  // ComparePlayback.jsx's header comment).
+  const [compareRefWords, setCompareRefWords] = useState(null);
   const streamRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -70,6 +78,25 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
   useEffect(() => {
     setLifecyclePhase(open ? `single:${state}` : "idle");
   }, [state, open]);
+
+  // Reference-side follow-along data for this ayah — QUA first (free,
+  // synchronous), else whatever's already cached (free, async, never
+  // triggers new ASR). Resolved as soon as the ayah is known, independent
+  // of the recording flow's own state.
+  useEffect(() => {
+    if (!open || !ayah) { setCompareRefWords(null); return; }
+    let cancelled = false;
+    const qua = getQuaWordWindowsForAyah(reciterFolder, surahNumber, ayah.number);
+    if (qua) {
+      setCompareRefWords(qua);
+      return;
+    }
+    setCompareRefWords(null);
+    getCachedWordTimings(reciterFolder, surahNumber, ayah.number).then((cached) => {
+      if (!cancelled && cached?.words?.length) setCompareRefWords(cached.words);
+    });
+    return () => { cancelled = true; };
+  }, [open, ayah, reciterFolder, surahNumber]);
 
   const resetState = () => {
     runSeqRef.current++; // orphan any in-flight background Tajweed UI updates
@@ -656,6 +683,10 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                   userUrl={audioUrl}
                   referenceUrls={[getAudioUrl(reciterFolder, surahNumber, ayah.number)]}
                   onPlayhead={setPlayheadSec}
+                  userAyahText={ayah.arabic}
+                  userWords={tajweedResult?.wordTimings}
+                  referenceAyahTexts={[ayah.arabic]}
+                  referenceWordsByAyah={[compareRefWords]}
                 />
 
                 {tajweedPending ? (

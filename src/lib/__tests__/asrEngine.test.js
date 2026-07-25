@@ -7,6 +7,8 @@ import {
   isAsrEnabled,
   setAsrEnabled,
   isIosWebKit,
+  isAsrBusy,
+  setAsrBusy,
   ASR_CRASH_SUSPECT_KEY,
 } from "@/lib/asrEngine";
 
@@ -86,5 +88,26 @@ describe("defaultAsrEnabled / isAsrEnabled", () => {
     expect(isAsrEnabled()).toBe(false);
     localStorage.removeItem(ASR_CRASH_SUSPECT_KEY);
     localStorage.removeItem("qc_asr_enabled");
+  });
+});
+
+// The concurrency guard between recorded-audio transcription and reference-
+// audio follow-along estimation — two overlapping ASR flows would each
+// hold their own decoded audio buffer alongside the model, stacking memory
+// the way that's crashed mobile tabs before.
+describe("isAsrBusy / setAsrBusy", () => {
+  it("defaults to not busy", () => {
+    expect(isAsrBusy()).toBe(false);
+  });
+
+  it("reflects whatever was last set, coerced to a real boolean", () => {
+    setAsrBusy(true);
+    expect(isAsrBusy()).toBe(true);
+    setAsrBusy(false);
+    expect(isAsrBusy()).toBe(false);
+    setAsrBusy(1); // truthy, non-boolean input
+    expect(isAsrBusy()).toBe(true);
+    setAsrBusy(0);
+    expect(isAsrBusy()).toBe(false);
   });
 });

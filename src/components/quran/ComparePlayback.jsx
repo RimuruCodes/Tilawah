@@ -10,18 +10,86 @@
 // the start, not time-stretched). The A/B toggle switches which one is loud
 // (the other stays quietly audible underneath) and the playhead follows
 // YOUR recording on the waveform.
+//
+// Word-by-word follow-along: BOTH sides highlight their own currently-
+// spoken word at once, in visibly different styles (color AND shape, not
+// color alone) — using useWordHighlight against whichever timing data the
+// caller already has (QUA ground truth, ASR-estimated, or the user's own
+// Tajweed-analysis word timing). Purely additive: with no word data for a
+// side, that side just shows plain text, exactly like before this feature.
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Play, Pause, Volume2 } from "lucide-react";
+import { splitAyahIntoWords } from "@/lib/tajweedRules";
+import { useWordHighlight } from "@/hooks/useWordHighlight";
 
 const LOUD = 1.0;
 const QUIET = 0.15;
+const LOW_CONFIDENCE_THRESHOLD = 0.7; // matches AyahDisplay.jsx / tajweedAnalysis.js's "shaky" cutoff
 
-export default function ComparePlayback({ userUrl, referenceUrls, onPlayhead }) {
+// One color-coded, word-highlighted line of Arabic text. `side` picks the
+// color scheme so "reciter" and "you" are never visually ambiguous even
+// without color (reciter: solid underline; you: solid background box) —
+// mirrors AyahDisplay's low-confidence dashed treatment for estimated timing.
+function HighlightedText({ text, activeWord, side }) {
+  if (!text) return null;
+  const words = splitAyahIntoWords(text);
+  const activeIdx = activeWord?.wordIndex ?? null;
+  const lowConfidence = activeWord != null && activeWord.confidence != null && activeWord.confidence < LOW_CONFIDENCE_THRESHOLD;
+
+  return (
+    <p
+      dir="rtl"
+      lang="ar"
+      className="text-base leading-loose text-right"
+      style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.4" }}
+    >
+      {words.map((word, i) => {
+        const active = i === activeIdx;
+        let cls = "transition-colors duration-150 rounded px-0.5 ";
+        if (active && lowConfidence) {
+          cls += side === "reference"
+            ? "text-sky-300/90 border-b-2 border-dashed border-sky-400/60"
+            : "text-emerald-300/90 border-b-2 border-dashed border-emerald-400/60";
+        } else if (active) {
+          cls += side === "reference"
+            ? "bg-sky-500/20 text-sky-300 underline decoration-2 underline-offset-4"
+            : "bg-emerald-500/20 text-emerald-300";
+        } else {
+          cls += "text-slate-300";
+        }
+        return (
+          <span key={i}>
+            <span className={cls}>{word}</span>
+            {" "}
+          </span>
+        );
+      })}
+    </p>
+  );
+}
+
+export default function ComparePlayback({
+  userUrl,
+  referenceUrls,
+  onPlayhead,
+  userAyahText = null,
+  userWords = null,
+  referenceAyahTexts = null,
+  referenceWordsByAyah = null,
+}) {
   const userAudioRef = useRef(null);
   const refAudioRef = useRef(null);
   const refQueueRef = useRef(0);
   const [playing, setPlaying] = useState(false);
   const [focus, setFocus] = useState("user"); // which side is loud: "user" | "reference"
+  const [userTime, setUserTime] = useState(0);
+  const [refTime, setRefTime] = useState(0);
+  const [refPlayingIndex, setRefPlayingIndex] = useState(0);
+
+  const userActiveWord = useWordHighlight(userWords, playing ? userTime : null);
+  const refWordsForCurrentAyah = referenceWordsByAyah?.[refPlayingIndex] ?? null;
+  const refActiveWord = useWordHighlight(refWordsForCurrentAyah, playing ? refTime : null);
+  const refTextForCurrentAyah = referenceAyahTexts?.[refPlayingIndex] ?? null;
 
   const applyVolumes = useCallback((focusSide) => {
     if (userAudioRef.current) userAudioRef.current.volume = focusSide === "user" ? LOUD : QUIET;
@@ -37,6 +105,8 @@ export default function ComparePlayback({ userUrl, referenceUrls, onPlayhead }) 
       }
     }
     setPlaying(false);
+    setUserTime(0);
+    setRefTime(0);
     onPlayhead?.(null);
   }, [onPlayhead]);
 
@@ -47,7 +117,10 @@ export default function ComparePlayback({ userUrl, referenceUrls, onPlayhead }) 
     stopAll();
     const user = new Audio(userUrl);
     userAudioRef.current = user;
-    user.ontimeupdate = () => onPlayhead?.(user.currentTime);
+    user.ontimeupdate = () => {
+      onPlayhead?.(user.currentTime);
+      setUserTime(user.currentTime);
+    };
     user.onended = () => {
       // The reference may still be running; leave it to finish quietly.
       onPlayhead?.(null);
@@ -63,9 +136,12 @@ export default function ComparePlayback({ userUrl, referenceUrls, onPlayhead }) 
         if (!userAudioRef.current || userAudioRef.current.ended) setPlaying(false);
         return;
       }
+      setRefPlayingIndex(i);
+      setRefTime(0);
       const ref = new Audio(referenceUrls[i]);
       refAudioRef.current = ref;
       ref.volume = focus === "reference" ? LOUD : QUIET;
+      ref.ontimeupdate = () => setRefTime(ref.currentTime);
       ref.onended = playNextRef;
       ref.play().catch(() => { refAudioRef.current = null; });
     };
@@ -84,6 +160,8 @@ export default function ComparePlayback({ userUrl, referenceUrls, onPlayhead }) 
 
   if (!userUrl) return null;
 
+  const hasAnyWordData = !!(userWords?.length || refWordsForCurrentAyah?.length);
+
   return (
     <div className="rounded-xl bg-slate-800/30 border border-slate-700/30 p-3 space-y-2">
       <div className="flex items-center gap-2">
@@ -96,6 +174,27 @@ export default function ComparePlayback({ userUrl, referenceUrls, onPlayhead }) 
         </button>
         <p className="text-xs text-slate-400 flex-1">Hear the difference — both play together; pick which is louder.</p>
       </div>
+
+      {playing && (userAyahText || refTextForCurrentAyah) && (
+        <div className="space-y-2 py-1">
+          {refTextForCurrentAyah && (
+            <div className="flex items-start gap-2">
+              <span className="text-[10px] uppercase tracking-wide text-sky-400/80 font-medium pt-1.5 flex-shrink-0">Reciter</span>
+              <HighlightedText text={refTextForCurrentAyah} activeWord={refActiveWord} side="reference" />
+            </div>
+          )}
+          {userAyahText && (
+            <div className="flex items-start gap-2">
+              <span className="text-[10px] uppercase tracking-wide text-emerald-400/80 font-medium pt-1.5 flex-shrink-0">You</span>
+              <HighlightedText text={userAyahText} activeWord={userActiveWord} side="user" />
+            </div>
+          )}
+          {!hasAnyWordData && (
+            <p className="text-[10px] text-slate-600">Word-by-word timing isn't available for this reciter/ayah yet — text shown without highlighting.</p>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-2">
         {[
           { key: "user", label: "My recording" },

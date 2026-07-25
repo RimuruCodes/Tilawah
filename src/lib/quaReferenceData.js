@@ -169,10 +169,15 @@ export function getQuaWordWindowSec(reciterFolder, surahNumber, ayahNumber, word
   return windowSecForWord(ayah, word);
 }
 
-// Returns ground-truth windows for EVERY word of one ayah at once — used by
-// playback-time word highlighting (AudioPlayer.jsx), which needs the whole
-// ayah's word boundaries up front rather than one lookup per word. Same
-// coordinate system and 0-based `wordIndex` as getQuaWordWindowSec above.
+// Returns ground-truth windows for EVERY word of one ayah at once, in the
+// shared { wordIndex, startSec, endSec, confidence } shape useWordHighlight
+// expects everywhere in the app — used by playback-time word highlighting
+// (AudioPlayer.jsx, ComparePlayback.jsx), which needs the whole ayah's word
+// boundaries up front rather than one lookup per word. Same coordinate
+// system and 0-based `wordIndex` as getQuaWordWindowSec above. `confidence`
+// is always 1 — this IS the verified ground truth, not an estimate (see
+// estimateReferenceWordTiming in recitationService.js for the ASR-estimated
+// case, which reports its own per-word confidence honestly instead).
 // Returns null (never an empty/partial array) whenever this (reciter,
 // ayah) isn't covered, so callers can tell "nothing to highlight" apart
 // from "an ayah with zero valid words".
@@ -182,7 +187,7 @@ export function getQuaWordWindowsForAyah(reciterFolder, surahNumber, ayahNumber)
   const windows = ayah.words
     .map((word) => {
       const win = windowSecForWord(ayah, word);
-      return win && { wordIndex: word[0] - 1, ...win };
+      return win && { wordIndex: word[0] - 1, ...win, confidence: 1 };
     })
     .filter(Boolean);
   return windows.length ? windows : null;

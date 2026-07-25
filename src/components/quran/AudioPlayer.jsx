@@ -1,19 +1,18 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, RotateCcw } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, RotateCcw, Captions, Loader2 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RECITERS, getAudioUrl } from "@/lib/quranData";
 import { getQuaWordWindowsForAyah } from "@/lib/quaReferenceData";
+import { getCachedWordTimings } from "@/lib/wordTimingCache";
+import { estimateReferenceWordTiming } from "@/lib/recitationService";
+import { isAsrEnabled } from "@/lib/asrEngine";
+import { findActiveWord } from "@/hooks/useWordHighlight";
 
-// Finds which word (if any) is playing at time `t`, from a small sorted
-// list of {wordIndex, startSec, endSec}. Linear scan is fine — even the
-// longest ayah has well under 100 words.
-function findActiveWordIndex(windows, t) {
-  if (!windows) return null;
-  for (const w of windows) {
-    if (t >= w.startSec && t < w.endSec) return w.wordIndex;
-  }
-  return null;
+const FOLLOW_ALONG_KEY = "qc_follow_along_enabled";
+
+function getStoredFollowAlong() {
+  return localStorage.getItem(FOLLOW_ALONG_KEY) === "on";
 }
 
 export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWordHighlight, selectedReciter, onReciterChange }) {
@@ -24,6 +23,12 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  // Opt-in, persisted: gates whether a cache MISS triggers new ASR
+  // estimation for a non-QUA ayah. Already-cached/QUA data is always shown
+  // regardless of this toggle — it only gates NEW on-device computation.
+  const [followAlongEnabled, setFollowAlongEnabled] = useState(getStoredFollowAlong);
+  const [estimating, setEstimating] = useState(false);
+  const asrDeviceEnabled = isAsrEnabled(); // device-level gate; re-read on mount is enough, Settings changes take effect on next visit
   const audioRef = useRef(null);
   const intervalRef = useRef(null);
   const ayahsRef = useRef(ayahs);
@@ -34,13 +39,18 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
   const surahNumberRef = useRef(surahNumber);
   const onAyahHighlightRef = useRef(onAyahHighlight);
   const onWordHighlightRef = useRef(onWordHighlight);
-  // Ground-truth word windows for the CURRENTLY LOADED ayah only (null when
-  // this reciter+ayah has no QUA coverage) — recomputed once per ayah
-  // change, not per playback tick, since it only depends on which ayah is
-  // loaded. lastWordIndexRef dedupes onWordHighlight calls so it only fires
-  // on an actual word transition, not every 100ms poll tick.
+  const followAlongEnabledRef = useRef(followAlongEnabled);
+  // Ground-truth/estimated word windows for the CURRENTLY LOADED ayah only
+  // (null when nothing is available for this reciter+ayah) — recomputed
+  // once per ayah change, not per playback tick, since it only depends on
+  // which ayah is loaded. lastWordRef dedupes onWordHighlight calls so it
+  // only fires on an actual word transition, not every 100ms poll tick.
   const currentAyahWordWindowsRef = useRef(null);
-  const lastWordIndexRef = useRef(null);
+  const lastWordRef = useRef(null);
+  // Invalidates an in-flight async word-timing lookup if the ayah changes
+  // again before it resolves (skip/restart while a cache-or-estimate call
+  // is still pending) — same pattern as runSeqRef elsewhere in this app.
+  const wordTimingSeqRef = useRef(0);
 
   useEffect(() => {
     ayahsRef.current = ayahs;
@@ -51,20 +61,57 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
     surahNumberRef.current = surahNumber;
     onAyahHighlightRef.current = onAyahHighlight;
     onWordHighlightRef.current = onWordHighlight;
-  }, [reciter.folder, surahNumber, onAyahHighlight, onWordHighlight]);
+    followAlongEnabledRef.current = followAlongEnabled;
+  }, [reciter.folder, surahNumber, onAyahHighlight, onWordHighlight, followAlongEnabled]);
 
-  // Recomputes the active ayah's QUA word windows and clears any stale
-  // word highlight from the previous ayah — called every time playback
-  // moves to a different ayah (loadAyah, and the `ended` auto-advance).
+  // Recomputes the active ayah's word windows and clears any stale word
+  // highlight from the previous ayah — called every time playback moves to
+  // a different ayah (loadAyah, and the `ended` auto-advance).
+  //
+  // Resolution order: QUA ground truth first (synchronous, free) — if
+  // absent, an already-cached ASR estimate (async but free — no model
+  // work) — if THAT'S also absent and the person has opted into follow-
+  // along, a fresh ASR estimate (the only path that can actually trigger
+  // on-device transcription, and only then).
   const primeWordHighlightForAyah = useCallback((ayahNumber) => {
-    currentAyahWordWindowsRef.current = getQuaWordWindowsForAyah(
-      reciterFolderRef.current,
-      surahNumberRef.current,
-      ayahNumber
-    );
-    lastWordIndexRef.current = null;
+    const seq = ++wordTimingSeqRef.current;
+    const isStale = () => wordTimingSeqRef.current !== seq;
+
+    lastWordRef.current = null;
     onWordHighlightRef.current?.(ayahNumber, null);
-  }, []);
+
+    const quaWindows = getQuaWordWindowsForAyah(reciterFolderRef.current, surahNumberRef.current, ayahNumber);
+    if (quaWindows) {
+      currentAyahWordWindowsRef.current = quaWindows;
+      return;
+    }
+    currentAyahWordWindowsRef.current = null;
+
+    const ayah = ayahsRef.current?.find((a) => a.number === ayahNumber);
+    if (!ayah?.arabic) return;
+
+    (async () => {
+      if (followAlongEnabledRef.current && asrDeviceEnabled) {
+        setEstimating(true);
+        const result = await estimateReferenceWordTiming({
+          reciterFolder: reciterFolderRef.current,
+          surahNumber: surahNumberRef.current,
+          ayahNumber,
+          ayahArabicText: ayah.arabic,
+        });
+        if (isStale()) return;
+        setEstimating(false);
+        if (result.words) currentAyahWordWindowsRef.current = result.words;
+      } else {
+        // Toggle is off (or ASR is off for this device): only ever show
+        // data that's ALREADY cached from a previous opted-in session —
+        // never trigger new computation.
+        const cached = await getCachedWordTimings(reciterFolderRef.current, surahNumberRef.current, ayahNumber);
+        if (isStale()) return;
+        if (cached?.words?.length) currentAyahWordWindowsRef.current = cached.words;
+      }
+    })();
+  }, [asrDeviceEnabled]);
 
   const loadAyah = useCallback((index) => {
     const list = ayahsRef.current;
@@ -128,6 +175,7 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
       audio.src = '';
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- primeWordHighlightForAyah is stable enough in practice (only asrDeviceEnabled in its deps, fixed for the component's lifetime); re-subscribing this effect would tear down the <audio> element.
   }, []);
 
   useEffect(() => {
@@ -143,11 +191,12 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
           const t = audioRef.current.currentTime;
           setProgress(t);
 
-          const activeIdx = findActiveWordIndex(currentAyahWordWindowsRef.current, t);
-          if (activeIdx !== lastWordIndexRef.current) {
-            lastWordIndexRef.current = activeIdx;
+          const activeWord = findActiveWord(currentAyahWordWindowsRef.current, t);
+          const activeIdx = activeWord?.wordIndex ?? null;
+          if (activeIdx !== (lastWordRef.current?.wordIndex ?? null)) {
+            lastWordRef.current = activeWord;
             const ayah = ayahsRef.current?.[currentIndexRef.current];
-            if (ayah) onWordHighlightRef.current?.(ayah.number, activeIdx);
+            if (ayah) onWordHighlightRef.current?.(ayah.number, activeWord);
           }
         }
       }, 100);
@@ -156,6 +205,24 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [isPlaying]);
+
+  const toggleFollowAlong = () => {
+    const next = !followAlongEnabled;
+    setFollowAlongEnabled(next);
+    // Sync the ref immediately, not just via the effect below: the
+    // re-prime call right after this needs the NEW value NOW, and effects
+    // run after this function returns — reading the stale ref here would
+    // silently take the "cache-only" branch on the very click that's
+    // supposed to turn estimation on.
+    followAlongEnabledRef.current = next;
+    localStorage.setItem(FOLLOW_ALONG_KEY, next ? "on" : "off");
+    // Turning it on should light up the CURRENT ayah immediately, not wait
+    // for the next ayah transition.
+    if (next) {
+      const ayah = ayahsRef.current?.[currentIndexRef.current];
+      if (ayah) primeWordHighlightForAyah(ayah.number);
+    }
+  };
 
   // play() rejects on autoplay-policy blocks or when a new src interrupts a
   // pending load; reflect the real outcome in isPlaying instead of letting
@@ -227,6 +294,27 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
             ))}
           </SelectContent>
         </Select>
+
+        {/* Only offered when this device allows ASR at all — matches the
+            same isAsrEnabled() gate Tajweed's word-level checks use. When
+            it's off (e.g. default on iOS), already-QUA-covered ayahs still
+            highlight; this control simply doesn't appear, since it can
+            only ever trigger NEW on-device work. */}
+        {asrDeviceEnabled && (
+          <button
+            onClick={toggleFollowAlong}
+            aria-pressed={followAlongEnabled}
+            aria-label={followAlongEnabled ? "Turn off follow-along word highlighting" : "Turn on follow-along word highlighting"}
+            title={followAlongEnabled ? "Follow-along highlighting is on" : "Turn on follow-along word highlighting (estimates timing on-device, once per ayah, then remembers it)"}
+            className={`p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border transition-colors flex-shrink-0 ${
+              followAlongEnabled
+                ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                : "bg-slate-800/50 border-slate-700 text-slate-500 hover:text-slate-300"
+            }`}
+          >
+            {estimating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Captions className="w-4 h-4" />}
+          </button>
+        )}
 
         {ayahs && (
           <span className="text-xs text-slate-500">

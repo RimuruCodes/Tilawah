@@ -10,12 +10,19 @@ function lastScoreColor(score) {
   return "text-orange-400 bg-orange-500/10 border-orange-500/20";
 }
 
+// Below this, a word's timing is a shaky/estimated match rather than a
+// confident one — reused from the exact threshold tajweedAnalysis.js's
+// buildWordFeedback already uses for "shaky" word-correctness feedback,
+// so "confident" means the same thing in both places, not two notions.
+const LOW_CONFIDENCE_THRESHOLD = 0.7;
+
 function AyahDisplay({
   ayah,
   surahNumber,
   isPlaying,
   isHighlighted,
   highlightedWordIndex = null,
+  highlightedWordConfidence = null,
   memorizationStatus,
   showTranslation,
   onRecordClick,
@@ -90,22 +97,36 @@ function AyahDisplay({
                 >
                   {/* Follow-along highlighting: each word is its own span so
                       AudioPlayer can mark the currently-playing one during
-                      reciter playback (currently only for ayahs with QUA
-                      ground-truth timing — see AudioPlayer.jsx). Splitting
-                      via splitAyahIntoWords keeps indices consistent with
-                      the same function tajweedRules.js/QUA lookups use. */}
-                  {splitAyahIntoWords(ayah.arabic).map((word, i) => (
-                    <span key={i}>
-                      <span
-                        className={`transition-colors duration-150 rounded ${
-                          highlightedWordIndex === i ? "bg-emerald-500/20 text-emerald-300 px-0.5" : ""
-                        }`}
-                      >
-                        {word}
+                      reciter playback — either verified (QUA ground truth)
+                      or ASR-estimated timing (see AudioPlayer.jsx's
+                      follow-along toggle). A low-confidence (estimated,
+                      shaky) word gets a visibly DIFFERENT treatment from a
+                      confident/verified one — dashed underline, not just a
+                      different color, since color alone isn't accessible
+                      to everyone. Splitting via splitAyahIntoWords keeps
+                      indices consistent with the same function tajweedRules.js/
+                      QUA lookups use. */}
+                  {splitAyahIntoWords(ayah.arabic).map((word, i) => {
+                    const active = highlightedWordIndex === i;
+                    const lowConfidence = active && highlightedWordConfidence != null && highlightedWordConfidence < LOW_CONFIDENCE_THRESHOLD;
+                    return (
+                      <span key={i}>
+                        <span
+                          className={`transition-colors duration-150 rounded ${
+                            active
+                              ? lowConfidence
+                                ? "text-amber-300/90 border-b-2 border-dashed border-amber-400/60 px-0.5"
+                                : "bg-emerald-500/20 text-emerald-300 px-0.5"
+                              : ""
+                          }`}
+                          title={lowConfidence ? "Estimated timing — lower confidence" : undefined}
+                        >
+                          {word}
+                        </span>
+                        {" "}
                       </span>
-                      {" "}
-                    </span>
-                  ))}
+                    );
+                  })}
                 </motion.p>
               )}
             </AnimatePresence>

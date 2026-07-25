@@ -490,6 +490,34 @@ export function summarizeTajweedChecks(ruleChecks = []) {
   return summary;
 }
 
+// Turns ASR word alignment + chunk timestamps into the shared word-timing
+// shape ({ wordIndex, startSec, endSec, confidence }) useWordHighlight
+// expects everywhere in the app. `confidence` reuses the exact word-
+// similarity score alignWords already computes for word-correctness
+// feedback — not a second, different notion of confidence.
+//
+// Skips any word ASR didn't recognize at all (recognizedIndex == null), or
+// whose chunk timestamp is missing or corrupt (end <= start — the same
+// Whisper repetition-loop artifact checkTajweedRules already guards
+// against). Never guesses a window for a word with no real timing.
+//
+// Shared by the user's own recording (analyzeTajweedFromTranscription
+// below, reusing the alignments/chunks it already computed — no extra ASR
+// work) and reference-audio ASR estimation (estimateReferenceWordTiming in
+// recitationService.js, which builds its own alignments from a separate
+// transcription of the reciter's audio) — one implementation for turning
+// "alignments + chunks" into playback-ready word timing, not two.
+export function buildWordTimings(alignments, chunks) {
+  const timings = [];
+  alignments.forEach((a, wordIndex) => {
+    if (a.recognizedIndex == null) return;
+    const ts = chunks[a.recognizedIndex]?.timestamp;
+    if (!ts || ts[0] == null || ts[1] == null || ts[1] <= ts[0]) return;
+    timings.push({ wordIndex, startSec: ts[0], endSec: ts[1], confidence: a.similarity });
+  });
+  return timings;
+}
+
 // Full pipeline: ASR transcription result + expected ayah text -> word word
 // alignment, word-correctness feedback, and Tajweed rule checks.
 export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate, referenceAlignment = null, quaContext = null }) {
@@ -532,5 +560,9 @@ export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, use
     glossary,
     alignmentStats,
     overallWordConfidence,
+    // Word-by-word playback highlighting for the user's OWN recording (see
+    // useWordHighlight) — reuses the alignments/chunks already computed
+    // above, so this never triggers extra ASR work.
+    wordTimings: buildWordTimings(alignments, chunks),
   };
 }

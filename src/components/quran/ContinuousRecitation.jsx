@@ -17,6 +17,7 @@ import WaveformTimeline from "@/components/quran/WaveformTimeline";
 import ComparePlayback from "@/components/quran/ComparePlayback";
 import MetricBadge from "@/components/quran/MetricBadge";
 import ResultFeedback from "@/components/quran/ResultFeedback";
+import { getQuaWordWindowsForAyah } from "@/lib/quaReferenceData";
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -39,6 +40,12 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
   const [confidence, setConfidence] = useState(null);
   const [playheadSec, setPlayheadSec] = useState(null);
   const [compareUrl, setCompareUrl] = useState(null);
+  // Reference-side follow-along data per ayah in the recited chain — QUA
+  // ground truth only for now (continuous mode's ASR-estimated reference
+  // timing is a separate, not-yet-built piece; see AudioPlayer.jsx's
+  // single-ayah follow-along for where that exists today). Each entry is
+  // null or a word-timing array, same indexing as referenceUrls below.
+  const [compareRefWordsByAyah, setCompareRefWordsByAyah] = useState([]);
   const [uploadAyahCount, setUploadAyahCount] = useState(ayahs?.length || 1);
   const [overrideCount, setOverrideCount] = useState("");
   const mediaRecorderRef = useRef(null);
@@ -73,6 +80,17 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
   useEffect(() => {
     setLifecyclePhase(open ? `continuous:${state}` : "idle");
   }, [state, open]);
+
+  // QUA lookup per recited ayah, for "Hear the difference" follow-along —
+  // synchronous and free, so this just recomputes whenever the recited
+  // count is known/changes (initial result, or a recalculate). Ordinary
+  // array, not a Set/Map: index i always corresponds to referenceUrls[i]
+  // built the same way below.
+  useEffect(() => {
+    if (!results?.recitedCount) { setCompareRefWordsByAyah([]); return; }
+    const recited = ayahs.slice(0, results.recitedCount);
+    setCompareRefWordsByAyah(recited.map((a) => getQuaWordWindowsForAyah(reciterFolder, surahNumber, a.number)));
+  }, [results?.recitedCount, ayahs, reciterFolder, surahNumber]);
 
   const resetState = () => {
     runSeqRef.current++; // orphan any in-flight background Tajweed UI updates
@@ -754,6 +772,10 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                   userUrl={compareUrl}
                   referenceUrls={ayahs.slice(0, results.recitedCount).map((a) => getAudioUrl(reciterFolder, surahNumber, a.number))}
                   onPlayhead={setPlayheadSec}
+                  userAyahText={ayahs.slice(0, results.recitedCount).map((a) => a.arabic).join(" ")}
+                  userWords={tajweedResult?.wordTimings}
+                  referenceAyahTexts={ayahs.slice(0, results.recitedCount).map((a) => a.arabic)}
+                  referenceWordsByAyah={compareRefWordsByAyah}
                 />
 
                 {tajweedPending ? (

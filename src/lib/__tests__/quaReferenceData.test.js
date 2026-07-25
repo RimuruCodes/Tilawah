@@ -68,6 +68,11 @@ describe("getQuaWordWindowsForAyah", () => {
     });
   });
 
+  it("reports confidence 1 for every word — this is verified ground truth, not an estimate", () => {
+    const all = getQuaWordWindowsForAyah("Husary_128kbps", 1, 1);
+    expect(all.every((w) => w.confidence === 1)).toBe(true);
+  });
+
   it("windows are in reading order and non-overlapping", () => {
     const all = getQuaWordWindowsForAyah("Minshawy_Murattal_128kbps", 112, 1);
     for (let i = 1; i < all.length; i++) {

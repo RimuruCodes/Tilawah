@@ -1,11 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import {
   withTimeout,
   runTajweedAnalysis,
   getLastAsrFailure,
   describeAsrFailureForUser,
   describeAsrFailureForLog,
+  estimateReferenceWordTiming,
 } from "@/lib/recitationService";
+import { setAsrEnabled, setAsrBusy } from "@/lib/asrEngine";
 
 // The analysis pipeline bounds every await with withTimeout because audio
 // decode and the ASR worker can hang forever without throwing (observed on
@@ -69,5 +71,41 @@ describe("ASR failure reasons", () => {
     );
     expect(describeAsrFailureForLog({ code: "empty-transcript", detail: "" })).toBe("empty-transcript");
     expect(describeAsrFailureForLog(null)).toBe("no reason recorded");
+  });
+});
+
+// estimateReferenceWordTiming is opt-in, casual-listening-time ASR work
+// (see AudioPlayer.jsx's follow-along toggle) — these pin its gating
+// behavior: the two fast-path declines that must never touch the network
+// or the ASR model at all. The full "actually transcribe and cache" happy
+// path isn't unit-tested here (no ASR worker in jsdom), same as
+// transcribeUserRecording itself — covered by live verification instead.
+describe("estimateReferenceWordTiming — gating (never touches the network/model when declined)", () => {
+  afterEach(() => {
+    setAsrBusy(false);
+    localStorage.removeItem("qc_asr_enabled");
+  });
+
+  it("declines immediately when ASR is disabled for this device", async () => {
+    setAsrEnabled(false);
+    const result = await estimateReferenceWordTiming({
+      reciterFolder: "Alafasy_128kbps",
+      surahNumber: 1,
+      ayahNumber: 1,
+      ayahArabicText: "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
+    });
+    expect(result).toEqual({ words: null, reason: "asr-disabled" });
+  });
+
+  it("declines immediately when a user-recording transcription is already in flight", async () => {
+    setAsrEnabled(true);
+    setAsrBusy(true);
+    const result = await estimateReferenceWordTiming({
+      reciterFolder: "Alafasy_128kbps",
+      surahNumber: 1,
+      ayahNumber: 1,
+      ayahArabicText: "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
+    });
+    expect(result).toEqual({ words: null, reason: "asr-busy" });
   });
 });

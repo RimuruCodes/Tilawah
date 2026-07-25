@@ -9,9 +9,10 @@ import {
   TARGET_SAMPLE_RATE,
 } from "@/lib/audioAnalysis";
 import { RecitationLog, DailyStreak } from "@/lib/localDb";
-import { ensureAsrModelLoaded, transcribeAudio, resetAsrWorker, getAsrModelPreference, ASR_MODEL_OPTIONS, isIosWebKit } from "@/lib/asrEngine";
+import { ensureAsrModelLoaded, transcribeAudio, resetAsrWorker, getAsrModelPreference, ASR_MODEL_OPTIONS, isIosWebKit, isAsrEnabled, isAsrBusy, setAsrBusy } from "@/lib/asrEngine";
 import { planEscalations, budgetAllows } from "@/lib/escalation";
-import { analyzeTajweedFromTranscription, summarizeTajweedChecks } from "@/lib/tajweedAnalysis";
+import { analyzeTajweedFromTranscription, summarizeTajweedChecks, alignWords, buildWordTimings, normalizeArabic } from "@/lib/tajweedAnalysis";
+import { getCachedWordTimings, setCachedWordTimings } from "@/lib/wordTimingCache";
 import { getStoredCalibration } from "@/lib/micCalibration";
 import { pickBestAyahCount, pickAyahCountFromTranscript } from "@/lib/ayahWindowMatching";
 import { recordLifecycleEvent } from "@/lib/lifecycleDebug";
@@ -358,22 +359,19 @@ export function describeAsrFailureForLog(failure) {
   return failure.detail ? `${failure.code}: ${failure.detail}` : failure.code;
 }
 
-// Runs real speech-recognition-based Tajweed analysis: loads the ASR model
-// (downloads/caches on first use), transcribes the user's recording, then
-// checks word correctness + Qalqalah/Ghunnah/Madd timing against it.
-// Degrades gracefully (returns null) if the model can't load or fails —
-// callers should treat this as a bonus layer on top of the acoustic score,
-// not a required one.
-// Transcribes a recording once, bounded — returns Whisper's result or null,
-// never throws and never hangs. The stall watchdog exists because the ASR
-// worker can wedge without ever erroring (wasm abort / mobile memory
-// pressure), which used to park the UI on a spinner forever. The deadline
-// scales with audio length (inference emits no progress events) and is
-// pushed forward by every model-download progress event so a slow
-// connection isn't mistaken for a stall. The single result is shared by
-// ayah-count detection AND Tajweed analysis — transcription runs once.
-export async function transcribeUserRecording(userSamples, onModelProgress, modelIdOverride) {
-  lastAsrFailure = null; // fresh run, fresh verdict
+// Runs one bounded, watchdog-protected ASR transcription over `samples` —
+// shared by transcribeUserRecording (recorded audio, below) and
+// estimateReferenceWordTiming (reference audio, for follow-along
+// highlighting — see further down this file), so the stall/backgrounding/
+// suspension-detection logic exists in exactly one place rather than two
+// subtly different copies. Returns Whisper's result, or null on any
+// stall/failure — never throws and never hangs. The stall watchdog exists
+// because the ASR worker can wedge without ever erroring (wasm abort /
+// mobile memory pressure), which used to park the UI on a spinner forever.
+// The deadline scales with audio length (inference emits no progress
+// events) and is pushed forward by every model-download progress event so
+// a slow connection isn't mistaken for a stall.
+async function transcribeWithWatchdog(samples, onModelProgress, modelIdOverride) {
   // Backgrounding / power throttling is the most common *user-fixable* cause
   // of a stall: hidden or Low-Power-throttled tabs get their timers frozen
   // and (on iOS) their JS suspended outright, so the worker never finishes —
@@ -383,7 +381,7 @@ export async function transcribeUserRecording(userSamples, onModelProgress, mode
   // (c) treat a large gap between watchdog ticks as evidence of suspension.
   let cleanup = () => {};
   try {
-    const audioSec = userSamples.length / TARGET_SAMPLE_RATE;
+    const audioSec = samples.length / TARGET_SAMPLE_RATE;
     const infCeilingMs = inferenceCeilingMs(audioSec);
     let deadline = Date.now() + infCeilingMs;
     let settled = false;
@@ -405,7 +403,7 @@ export async function transcribeUserRecording(userSamples, onModelProgress, mode
         onModelProgress?.(pct);
       }, modelIdOverride);
       deadline = Date.now() + infCeilingMs; // model resident; inference next (no progress events)
-      return await transcribeAudio(userSamples, undefined, modelIdOverride);
+      return await transcribeAudio(samples, undefined, modelIdOverride);
     })().finally(() => { settled = true; });
 
     const STALLED = Symbol("stalled");
@@ -480,6 +478,100 @@ export async function transcribeUserRecording(userSamples, onModelProgress, mode
   } finally {
     cleanup();
   }
+}
+
+// Runs real speech-recognition-based Tajweed analysis: loads the ASR model
+// (downloads/caches on first use), transcribes the user's recording, then
+// checks word correctness + Qalqalah/Ghunnah/Madd timing against it.
+// Degrades gracefully (returns null) if the model can't load or fails —
+// callers should treat this as a bonus layer on top of the acoustic score,
+// not a required one. The single result is shared by ayah-count detection
+// AND Tajweed analysis — transcription runs once.
+//
+// Holds the ASR busy lock for its whole duration: this is the primary,
+// higher-priority transcription path (something the user is actively
+// waiting on a result for), so estimateReferenceWordTiming (below) checks
+// this lock and simply declines to start rather than ever competing with it.
+export async function transcribeUserRecording(userSamples, onModelProgress, modelIdOverride) {
+  lastAsrFailure = null; // fresh run, fresh verdict
+  setAsrBusy(true);
+  try {
+    return await transcribeWithWatchdog(userSamples, onModelProgress, modelIdOverride);
+  } finally {
+    setAsrBusy(false);
+  }
+}
+
+// Estimates word-level timing for one reciter's reference audio, for
+// follow-along highlighting where no QUA ground truth exists (see
+// quaReferenceData.js). STRICTLY opt-in — only ever called from an
+// explicit user action (see AudioPlayer.jsx's "follow along" toggle) — and
+// computed at most ONCE per (reciter, surah, ayah): a cache hit never
+// touches the ASR model at all, so repeat plays/repeat sessions cost
+// nothing. Reuses transcribeWithWatchdog exactly as transcribeUserRecording
+// does (same bounded stall/backgrounding protection), and refuses to run
+// at all while a user-recording transcription is in flight (isAsrBusy) —
+// this is casual-listening-time work and must never compete with an
+// analysis someone is actively waiting on.
+//
+// Never throws. Returns { words, source: "cache" | "estimated" } on
+// success, or { words: null, reason } when unavailable for any reason
+// (ASR disabled, busy, reference audio unavailable, transcription
+// produced no usable words) — callers should treat that exactly like
+// "no data for this ayah", the same fallback already used for missing QUA
+// coverage.
+export async function estimateReferenceWordTiming({ reciterFolder, surahNumber, ayahNumber, ayahArabicText, onModelProgress }) {
+  const cached = await getCachedWordTimings(reciterFolder, surahNumber, ayahNumber);
+  if (cached?.words?.length) {
+    return { words: cached.words, source: "cache" };
+  }
+
+  if (!isAsrEnabled()) {
+    return { words: null, reason: "asr-disabled" };
+  }
+  if (isAsrBusy()) {
+    // Cheap fast-path: skip the reference-audio fetch entirely when we
+    // already know a user-recording transcription is in flight.
+    return { words: null, reason: "asr-busy" };
+  }
+
+  const samples = await fetchAyahSamples(reciterFolder, surahNumber, ayahNumber);
+  if (!samples) {
+    return { words: null, reason: "audio-unavailable" };
+  }
+
+  // Re-checked as late as possible, right before actually starting: the
+  // fetch above was an await, during which a user-recording transcription
+  // could have started — this is the authoritative, race-minimizing check.
+  if (isAsrBusy()) {
+    return { words: null, reason: "asr-busy" };
+  }
+
+  trackBuffer("reference-word-timing-samples", samples.length * 4);
+  setAsrBusy(true);
+  let asrResult;
+  try {
+    asrResult = await transcribeWithWatchdog(samples, onModelProgress);
+  } finally {
+    releaseBuffer("reference-word-timing-samples");
+    setAsrBusy(false);
+  }
+
+  if (!asrResult?.chunks?.length) {
+    return { words: null, reason: "transcription-failed" };
+  }
+
+  const expectedWords = ayahArabicText.trim().split(/\s+/).filter(Boolean).map(normalizeArabic);
+  const recognizedWords = asrResult.chunks.map((c) => normalizeArabic((c.text || "").trim()));
+  const alignments = alignWords(expectedWords, recognizedWords);
+  const words = buildWordTimings(alignments, asrResult.chunks);
+
+  if (!words.length) {
+    return { words: null, reason: "no-words-aligned" };
+  }
+
+  await setCachedWordTimings(reciterFolder, surahNumber, ayahNumber, words); // best-effort; a write failure just means no caching, not a hard error
+  return { words, source: "estimated" };
 }
 
 // Compact error description for the persisted lifecycle ring buffer:

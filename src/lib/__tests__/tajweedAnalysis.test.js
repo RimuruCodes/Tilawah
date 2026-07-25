@@ -7,6 +7,7 @@ import {
   analyzeTajweedFromTranscription,
   checkTajweedRules,
   summarizeTajweedChecks,
+  buildWordTimings,
   TAJWEED_RULE_DEFINITIONS,
 } from "@/lib/tajweedAnalysis";
 import { TARGET_SAMPLE_RATE, buildFeatures } from "@/lib/audioAnalysis";
@@ -110,6 +111,68 @@ describe("alignWords", () => {
   });
 });
 
+describe("buildWordTimings", () => {
+  it("turns matched alignments + chunk timestamps into the shared word-timing shape", () => {
+    const expected = ["بسم", "الله", "الرحمن", "الرحيم"];
+    const recognized = ["بسم", "الله", "الرحمن", "الرحيم"];
+    const alignments = alignWords(expected, recognized);
+    const chunks = [
+      { timestamp: [0.0, 0.4] },
+      { timestamp: [0.4, 0.9] },
+      { timestamp: [0.9, 1.5] },
+      { timestamp: [1.5, 2.2] },
+    ];
+    const timings = buildWordTimings(alignments, chunks);
+    expect(timings).toHaveLength(4);
+    expect(timings[0]).toEqual({ wordIndex: 0, startSec: 0.0, endSec: 0.4, confidence: 1 });
+    expect(timings[3]).toEqual({ wordIndex: 3, startSec: 1.5, endSec: 2.2, confidence: 1 });
+  });
+
+  it("skips a word ASR never recognized, without shifting the other wordIndex values", () => {
+    const expected = ["بسم", "الله", "الرحمن", "الرحيم"];
+    const recognized = ["بسم", "الرحمن", "الرحيم"]; // "الله" (index 1) skipped
+    const alignments = alignWords(expected, recognized);
+    const chunks = [
+      { timestamp: [0.0, 0.4] },
+      { timestamp: [0.9, 1.5] },
+      { timestamp: [1.5, 2.2] },
+    ];
+    const timings = buildWordTimings(alignments, chunks);
+    const wordIndices = timings.map((t) => t.wordIndex);
+    expect(wordIndices).not.toContain(1); // "الله" never got real timing
+    expect(wordIndices).toContain(0);
+    expect(wordIndices).toContain(2);
+    expect(wordIndices).toContain(3);
+  });
+
+  it("skips a corrupted (end <= start) chunk timestamp rather than emitting a negative-width window", () => {
+    const expected = ["قد", "أفلح"];
+    const recognized = ["قد", "أفلح"];
+    const alignments = alignWords(expected, recognized);
+    const chunks = [
+      { timestamp: [1.0, 0.2] }, // corrupt: ends before it starts
+      { timestamp: [0.45, 1.0] },
+    ];
+    const timings = buildWordTimings(alignments, chunks);
+    expect(timings).toHaveLength(1);
+    expect(timings[0].wordIndex).toBe(1);
+  });
+
+  it("returns an empty array for no alignments/chunks", () => {
+    expect(buildWordTimings([], [])).toEqual([]);
+  });
+
+  it("carries the exact word-similarity score through as confidence, not a rounded/bucketed value", () => {
+    const expected = ["الرحمن"];
+    const recognized = ["الرحيم"]; // similar but not identical
+    const alignments = alignWords(expected, recognized);
+    const chunks = [{ timestamp: [0, 0.6] }];
+    const timings = buildWordTimings(alignments, chunks);
+    expect(timings[0].confidence).toBeGreaterThan(0);
+    expect(timings[0].confidence).toBeLessThan(1);
+  });
+});
+
 describe("analyzeTajweedFromTranscription", () => {
   const sampleRate = TARGET_SAMPLE_RATE;
 
@@ -137,6 +200,27 @@ describe("analyzeTajweedFromTranscription", () => {
     });
     expect(result.wordFeedback.some((f) => /clearly recognized/i.test(f))).toBe(true);
     expect(result.ruleChecks.length).toBeGreaterThan(0); // qalqalah in قَدْ
+  });
+
+  it("includes wordTimings for playback highlighting, reusing the same alignment (not a second transcription)", () => {
+    const ayahArabicText = "قَدْ أَفْلَحَ";
+    const asrResult = {
+      text: "قد أفلح",
+      chunks: [
+        { text: "قد", timestamp: [0.0, 0.4] },
+        { text: "أفلح", timestamp: [0.45, 1.0] },
+      ],
+    };
+    const result = analyzeTajweedFromTranscription({
+      asrResult,
+      ayahArabicText,
+      userSamples: makeSamples(1.0),
+      sampleRate,
+    });
+    expect(result.wordTimings).toEqual([
+      { wordIndex: 0, startSec: 0.0, endSec: 0.4, confidence: 1 },
+      { wordIndex: 1, startSec: 0.45, endSec: 1.0, confidence: 1 },
+    ]);
   });
 
   it("flags a word as missed when it has no reasonable match in the transcription", () => {
@@ -525,4 +609,5 @@ describe("QUA ground-truth reference — scoped to Husary/Minshawi only", () => 
     expect(withExplicitNull).toEqual(withDefault);
   });
 });
+
 
