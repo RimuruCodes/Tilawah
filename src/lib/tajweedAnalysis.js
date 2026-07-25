@@ -1,5 +1,6 @@
 import { findTajweedRules } from "@/lib/tajweedRules";
 import { energyProfileForWindow, energyProfileForRefWindow } from "@/lib/audioAnalysis";
+import { getQuaWordWindowSec } from "@/lib/quaReferenceData";
 
 const DIACRITICS_RE = /[\u064B-\u0652\u0670\u0653]/g;
 const TATWEEL_RE = /\u0640/g;
@@ -307,7 +308,7 @@ function buildRuleNote(rule, verdict, { word, letter, actualCounts, expectedCoun
 // each rule in time. This is heuristic — real timing varies by reciter and
 // pace — so checks are relative to the user's own average word duration in
 // this recording, not fixed absolute thresholds.
-export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment = null }) {
+export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment = null, quaContext = null }) {
   const { hits, words } = findTajweedRules(ayahArabicText);
   const avgWordDur = averageWordDuration(alignments, chunks);
   const results = [];
@@ -362,11 +363,19 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
     const maxDb = Math.max(...energyDb);
     const meanDb = energyDb.reduce((a, b) => a + b, 0) / energyDb.length;
 
-    // Attempt a reference-anchored comparison for this occurrence — falls
-    // back to null (threshold path) whenever the mapping isn't available
-    // or trustworthy for THIS position, never globally, since alignment
-    // quality can vary within one recording.
-    const refWindow = refWindowForRule(window, referenceAlignment);
+    // Attempt a reference-anchored comparison for this occurrence, in order
+    // of precision: QUA's validated ground-truth word timing first (only
+    // ever available for the narrow reciter+ayah set in quaReferenceData.js
+    // — returns null for everything else, including every ayah of every
+    // reciter not on that approved list), then the existing DTW-estimated
+    // mapping, then the threshold path. Falls back per-occurrence, never
+    // globally, since alignment quality/coverage can vary within one
+    // recording.
+    const quaWindow = quaContext
+      ? getQuaWordWindowSec(quaContext.reciterFolder, quaContext.surahNumber, quaContext.ayahNumber, rule.wordIndex)
+      : null;
+    const refWindow = quaWindow || refWindowForRule(window, referenceAlignment);
+    const refMode = quaWindow ? "ground-truth" : "reference";
     let refEnergyDb = null;
     let refMaxDb = null;
     let refMeanDb = null;
@@ -397,7 +406,7 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
         if (refBounceDb >= TAJWEED_THRESHOLDS.qalqalahRefMinDb) {
           const hasBounce = bounceDb >= refBounceDb * TAJWEED_THRESHOLDS.qalqalahRefRatioFactor;
           verdict = hasBounce ? "pass" : "warn";
-          measured = { mode: "reference", bounceDb, refBounceDb };
+          measured = { mode: refMode, bounceDb, refBounceDb };
         }
       }
       if (!measured) {
@@ -418,7 +427,7 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
         const spikeCeiling = Math.max(TAJWEED_THRESHOLDS.nasalSpikeMaxDb, refSpreadDb * TAJWEED_THRESHOLDS.nasalSpikeRefToleranceFactor);
         const holdsUp = durationRatio >= TAJWEED_THRESHOLDS.nasalHoldRefRatioFactor && energySpreadDb < spikeCeiling;
         verdict = holdsUp ? "pass" : "warn";
-        measured = { mode: "reference", segmentDurationSec, refSegmentDurationSec: refSegDur, durationRatio, energySpreadDb, refSpreadDb, expectedCounts: rule.expectedCounts };
+        measured = { mode: refMode, segmentDurationSec, refSegmentDurationSec: refSegDur, durationRatio, energySpreadDb, refSpreadDb, expectedCounts: rule.expectedCounts };
       } else {
         const expectedMinSec = (rule.expectedCounts / 2) * (avgWordDur * TAJWEED_THRESHOLDS.nasalHoldCountWordFraction);
         const holdsUp = segmentDurationSec >= expectedMinSec && energySpreadDb < TAJWEED_THRESHOLDS.nasalSpikeMaxDb; // sustained, not a spike
@@ -439,7 +448,7 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
         // Scaled the same way as the threshold branch, treating the
         // reference's own hold at this position as "full counts".
         actualCounts = elongationRatio * (rule.expectedCounts / 2) * 2;
-        measured = { mode: "reference", segmentDurationSec, refSegmentDurationSec: refSegDur, elongationRatio };
+        measured = { mode: refMode, segmentDurationSec, refSegmentDurationSec: refSegDur, elongationRatio };
       } else {
         // Compare this word's duration to the user's own average word
         // duration, scaled by how many counts are expected.
@@ -483,7 +492,7 @@ export function summarizeTajweedChecks(ruleChecks = []) {
 
 // Full pipeline: ASR transcription result + expected ayah text -> word word
 // alignment, word-correctness feedback, and Tajweed rule checks.
-export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate, referenceAlignment = null }) {
+export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate, referenceAlignment = null, quaContext = null }) {
   const expectedWordsOriginal = ayahArabicText.trim().split(/\s+/).filter(Boolean);
   const expectedWords = expectedWordsOriginal.map(normalizeArabic);
   const chunks = asrResult?.chunks || [];
@@ -491,7 +500,7 @@ export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, use
 
   const alignments = alignWords(expectedWords, recognizedWords);
   const wordFeedback = buildWordFeedback(alignments, expectedWordsOriginal);
-  const ruleChecks = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment });
+  const ruleChecks = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment, quaContext });
 
   const ruleTypesPresent = [...new Set(ruleChecks.map((r) => r.ruleType))];
   const glossary = ruleTypesPresent.map((type) => ({ type, ...TAJWEED_RULE_DEFINITIONS[type] }));

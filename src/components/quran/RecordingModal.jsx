@@ -292,6 +292,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
           ayahArabicText: ayah.arabic,
           onModelProgress: (pct) => { if (isCurrentRun()) setModelProgress(pct); },
           referenceAlignment: dspResult.referenceAlignment,
+          quaContext: { reciterFolder, surahNumber, ayahNumber: ayah.number },
         });
       } catch (err) {
         console.error("Background Tajweed stage failed — result stands without it:", err);

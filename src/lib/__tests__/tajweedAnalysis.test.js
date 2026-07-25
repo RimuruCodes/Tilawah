@@ -11,6 +11,52 @@ import {
 } from "@/lib/tajweedAnalysis";
 import { TARGET_SAMPLE_RATE, buildFeatures } from "@/lib/audioAnalysis";
 
+const sampleRate = TARGET_SAMPLE_RATE;
+
+// Qalqalah release-bounce shape: a quiet body followed by a sharp
+// dB-rising tail. Also the exact acoustic signature Idgham without
+// Ghunnah's absence-of-release check looks for — just interpreted
+// oppositely (a bounce here is a warn, not a pass). The 1.78x amplitude
+// ratio was picked empirically (a scratch probe against the real
+// energyProfileForWindow/bounceDb math) to land bounceDb comfortably
+// between the reference floor (2dB) and the fixed threshold (4dB) —
+// around 3.4dB; 2.5x lands around 5.3dB, comfortably above it.
+function makeQalqalahShape({ bodySec = 0.35, tailSec = 0.25, bodyAmplitude = 0.1, tailAmplitude = bodyAmplitude * 1.78, freq = 150 } = {}) {
+  const bodyN = Math.round(bodySec * sampleRate);
+  const tailN = Math.round(tailSec * sampleRate);
+  const out = new Float32Array(bodyN + tailN);
+  for (let i = 0; i < bodyN; i++) out[i] = bodyAmplitude * Math.sin((2 * Math.PI * freq * i) / sampleRate);
+  for (let i = 0; i < tailN; i++) out[bodyN + i] = tailAmplitude * Math.sin((2 * Math.PI * freq * i) / sampleRate);
+  return out;
+}
+
+// A flat, sustained tone — the nasal-hold / Madd elongation shape, and
+// also the "no release transient" shape for Idgham without Ghunnah.
+function makeSustainedTone({ holdSec = 1.0, amplitude = 0.15, freq = 120 } = {}) {
+  const n = Math.round(holdSec * sampleRate);
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = amplitude * Math.sin((2 * Math.PI * freq * i) / sampleRate);
+  return out;
+}
+
+// A reference identical to the user's own recording (same energy shape,
+// identity time mapping) — proves "the user matched the reciter's own
+// performance exactly here", regardless of what a fixed or self-relative
+// baseline would say about the absolute numbers.
+function makeIdentityReferenceAlignment(userSamples) {
+  const { energyDb, hopSize } = buildFeatures(userSamples, sampleRate);
+  return { refEnergyDb: energyDb, hopSec: hopSize / sampleRate, mapUserSecToRefSec: (sec) => sec };
+}
+
+// A reference whose TIMELINE runs at `timeScale`x the user's (e.g. 3
+// means the reference reciter held this position 3x as long, in
+// reference-time, as the user did) — an exact linear mapUserSecToRefSec,
+// not estimated from synthesized audio.
+function makeTimeScaledReferenceAlignment(userSamples, timeScale) {
+  const { energyDb, hopSize } = buildFeatures(userSamples, sampleRate);
+  return { refEnergyDb: energyDb, hopSec: hopSize / sampleRate, mapUserSecToRefSec: (sec) => sec * timeScale };
+}
+
 describe("normalizeArabic", () => {
   it("strips diacritics and tatweel", () => {
     expect(normalizeArabic("بِسْمِ")).toBe("بسم");
@@ -273,48 +319,6 @@ describe("summarizeTajweedChecks", () => {
 });
 
 describe("reference-anchored Tajweed checks", () => {
-  const sampleRate = TARGET_SAMPLE_RATE;
-
-  // Qalqalah release-bounce shape: a quiet body followed by a sharp
-  // dB-rising tail. The 1.78x amplitude ratio was picked empirically (a
-  // scratch probe against the real energyProfileForWindow/bounceDb math)
-  // to land bounceDb comfortably between the reference floor (2dB) and the
-  // fixed threshold (4dB) — around 3.4dB.
-  function makeQalqalahShape({ bodySec = 0.35, tailSec = 0.25, bodyAmplitude = 0.1, tailAmplitude = bodyAmplitude * 1.78, freq = 150 } = {}) {
-    const bodyN = Math.round(bodySec * sampleRate);
-    const tailN = Math.round(tailSec * sampleRate);
-    const out = new Float32Array(bodyN + tailN);
-    for (let i = 0; i < bodyN; i++) out[i] = bodyAmplitude * Math.sin((2 * Math.PI * freq * i) / sampleRate);
-    for (let i = 0; i < tailN; i++) out[bodyN + i] = tailAmplitude * Math.sin((2 * Math.PI * freq * i) / sampleRate);
-    return out;
-  }
-
-  // A flat, sustained tone — the nasal-hold / Madd elongation shape.
-  function makeSustainedTone({ holdSec = 1.0, amplitude = 0.15, freq = 120 } = {}) {
-    const n = Math.round(holdSec * sampleRate);
-    const out = new Float32Array(n);
-    for (let i = 0; i < n; i++) out[i] = amplitude * Math.sin((2 * Math.PI * freq * i) / sampleRate);
-    return out;
-  }
-
-  // A reference identical to the user's own recording (same energy shape,
-  // identity time mapping) — proves "the user matched the reciter's own
-  // performance exactly here", regardless of what a fixed or self-relative
-  // baseline would say about the absolute numbers.
-  function makeIdentityReferenceAlignment(userSamples) {
-    const { energyDb, hopSize } = buildFeatures(userSamples, sampleRate);
-    return { refEnergyDb: energyDb, hopSec: hopSize / sampleRate, mapUserSecToRefSec: (sec) => sec };
-  }
-
-  // A reference whose TIMELINE runs at `timeScale`x the user's (e.g. 3
-  // means the reference reciter held this position 3x as long, in
-  // reference-time, as the user did) — an exact linear mapUserSecToRefSec,
-  // not estimated from synthesized audio.
-  function makeTimeScaledReferenceAlignment(userSamples, timeScale) {
-    const { energyDb, hopSize } = buildFeatures(userSamples, sampleRate);
-    return { refEnergyDb: energyDb, hopSec: hopSize / sampleRate, mapUserSecToRefSec: (sec) => sec * timeScale };
-  }
-
   it("Qalqalah: passes when reference-anchored even though the fixed threshold would warn", () => {
     const userSamples = makeQalqalahShape();
     const ayahArabicText = "قَدْ أَفْلَحَ";
@@ -444,3 +448,81 @@ describe("reference-anchored Tajweed checks", () => {
     expect(withExplicitNull).toEqual(withDefault);
   });
 });
+
+describe("QUA ground-truth reference — scoped to Husary/Minshawi only", () => {
+  const ayahArabicText = "قَدْ أَفْلَحَ";
+  const alignments = [{ recognizedIndex: 0 }, { recognizedIndex: 1 }];
+  const chunks = [{ timestamp: [0, 0.4] }, { timestamp: [0.45, 1.0] }];
+
+  it("(a) uses QUA ground truth for Husary once quaContext resolves a real (surah, ayah, word)", () => {
+    const userSamples = makeQalqalahShape();
+    const referenceAlignment = makeIdentityReferenceAlignment(userSamples);
+    const quaContext = { reciterFolder: "Husary_128kbps", surahNumber: 1, ayahNumber: 1 };
+    const results = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment, quaContext });
+    const qalqalah = results.find((c) => c.ruleType === "qalqalah");
+    expect(qalqalah.measured.mode).toBe("ground-truth");
+  });
+
+  it("(a) also uses QUA ground truth for Minshawi", () => {
+    // Minshawi's validated 1:1-word-1 window (~0.54s-0.97s) falls later than
+    // the default shape's 0.6s length AND later than its quiet/loud
+    // transition (0.35s) — lengthen the body so the transition sits inside
+    // this window (a "bounce" needs the window to actually span quiet-then-
+    // loud, not just sit entirely within the loud tail). The rule's own
+    // window (from chunks[0], below) is unaffected by this.
+    const userSamples = makeQalqalahShape({ bodySec: 0.8, tailSec: 0.4 });
+    const referenceAlignment = makeIdentityReferenceAlignment(userSamples);
+    const quaContext = { reciterFolder: "Minshawy_Murattal_128kbps", surahNumber: 1, ayahNumber: 1 };
+    const results = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment, quaContext });
+    const qalqalah = results.find((c) => c.ruleType === "qalqalah");
+    expect(qalqalah.measured.mode).toBe("ground-truth");
+  });
+
+  it("(b) Abdul Basit and Alafasy fall through to the DTW-estimated window UNCHANGED — a real regression test on the full result, not just an absent lookup", () => {
+    const userSamples = makeQalqalahShape();
+    const referenceAlignment = makeIdentityReferenceAlignment(userSamples);
+    const withoutQuaContext = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment });
+
+    for (const reciterFolder of ["Abdul_Basit_Murattal_192kbps", "Alafasy_128kbps"]) {
+      // Same ayah Husary/Minshawi DO have ground truth for — proves the gate
+      // is the reciter allowlist, not just "this ayah has no QUA data".
+      const withQuaContext = checkTajweedRules({
+        userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment,
+        quaContext: { reciterFolder, surahNumber: 1, ayahNumber: 1 },
+      });
+      expect(withQuaContext).toEqual(withoutQuaContext);
+      const qalqalah = withQuaContext.find((c) => c.ruleType === "qalqalah");
+      expect(qalqalah.measured.mode).toBe("reference"); // DTW path, never "ground-truth"
+    }
+  });
+
+  it("(b) with no referenceAlignment either, an unsupported reciter's quaContext still degrades to the plain threshold path unchanged", () => {
+    const userSamples = makeQalqalahShape();
+    const withoutAnything = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
+    const withQuaContextOnly = checkTajweedRules({
+      userSamples, sampleRate, ayahArabicText, alignments, chunks,
+      quaContext: { reciterFolder: "Abdul_Basit_Murattal_192kbps", surahNumber: 1, ayahNumber: 1 },
+    });
+    expect(withQuaContextOnly).toEqual(withoutAnything);
+  });
+
+  it("a supported reciter's quaContext for an ayah that was never validated falls back to the DTW path exactly", () => {
+    const userSamples = makeQalqalahShape();
+    const referenceAlignment = makeIdentityReferenceAlignment(userSamples);
+    const withoutQuaContext = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment });
+    const withUnvalidatedAyah = checkTajweedRules({
+      userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment,
+      quaContext: { reciterFolder: "Husary_128kbps", surahNumber: 3, ayahNumber: 5 }, // never sampled/validated
+    });
+    expect(withUnvalidatedAyah).toEqual(withoutQuaContext);
+  });
+
+  it("passing quaContext: null explicitly matches omitting it (fallback is the default)", () => {
+    const userSamples = makeQalqalahShape();
+    const referenceAlignment = makeIdentityReferenceAlignment(userSamples);
+    const withDefault = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment });
+    const withExplicitNull = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment, quaContext: null });
+    expect(withExplicitNull).toEqual(withDefault);
+  });
+});
+
