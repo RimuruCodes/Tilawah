@@ -452,8 +452,12 @@ describe("reference-anchored Tajweed checks", () => {
   it("Ikhfa (nasal-hold family), opposite direction: warns when reference-anchored even though the self-relative threshold would pass", () => {
     // Same shape as above, but this time all four words carry ordinary,
     // consistent durations (self-relative threshold passes easily) — the
-    // reference reciter, however, held this exact position 3x as long in
-    // its own timeline, so the user fell well short of matching it.
+    // reference reciter, however, held this exact position 4.6x as long in
+    // its own timeline, so the user fell short of matching it. 4.6 (not a
+    // rounder number) is deliberate: nasalHoldRefRatioFactor is a lenient
+    // 0.225 (1/4.6 ≈ 0.217 clears "warn"), but refWindowForRule's own
+    // width-ratio sanity band caps trusted mappings at 5x — this needs to
+    // sit inside both.
     const userSamples = makeSustainedTone({ holdSec: 0.7 });
     const ayahArabicText = "مِن شَرِّ مَا خَلَقَ";
     const alignments = [{ recognizedIndex: 0 }, { recognizedIndex: 1 }, { recognizedIndex: 2 }, { recognizedIndex: 3 }];
@@ -469,7 +473,7 @@ describe("reference-anchored Tajweed checks", () => {
     expect(ikhfaThreshold.measured.mode).toBe("threshold");
     expect(ikhfaThreshold.verdict).toBe("pass");
 
-    const referenceAlignment = makeTimeScaledReferenceAlignment(userSamples, 3);
+    const referenceAlignment = makeTimeScaledReferenceAlignment(userSamples, 4.6);
     const refResults = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment });
     const ikhfaRef = refResults.find((c) => c.ruleType === "ikhfa");
     expect(ikhfaRef.measured.mode).toBe("reference");

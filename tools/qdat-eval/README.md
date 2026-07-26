@@ -28,6 +28,17 @@ npx vite-node tools/qdat-eval/extract-features.mjs -- --data <download-dir>
 
 # 3. Score current thresholds and grid-search better ones (fast, offline).
 npx vite-node tools/qdat-eval/tune-thresholds.mjs
+
+# --- Reference-anchored variant (validates the OTHER threshold set: the one
+#     used when a DTW-aligned reference-reciter window is available) ---
+
+# 2b. Same idea, but also builds a real referenceAlignment (fetches Husary's
+#     everyayah.com audio for 5:109, trims to the QDAT fragment) so
+#     checkTajweedRules exercises its reference-anchored branch for real.
+npx vite-node tools/qdat-eval/extract-features-ref.mjs -- --data <download-dir>
+
+# 3b. Same tune/holdout method, for the reference-anchored constants.
+npx vite-node tools/qdat-eval/tune-thresholds-ref.mjs
 ```
 
 ## Other tools in this folder
@@ -43,7 +54,6 @@ npx vite-node tools/qdat-eval/tune-thresholds.mjs
   transformers.js v4 does not implement real beam search for Whisper —
   passing `num_beams` produces byte-identical transcripts at identical
   latency, so there is nothing to gain by exposing a beam-search setting.
-
 ## Converting the Quran-tuned model yourself
 
 To get a Quran-tuned model with word timestamps, export
@@ -105,6 +115,38 @@ reason the nasal pair is judged jointly and **left unchanged** — doing so is
 what protects Iqlab from a Ghunnah-driven regression. Verified improvement
 "for Iqlab too" is therefore: *no change is the improvement* (any change
 available here is net-negative for the Iqlab family).
+
+## Reference-anchored results (2026-07, same model, 1,466 recordings, reference reciter: Husary)
+
+`extract-features-ref.mjs` builds the exact `referenceAlignment` structure
+`compareSamples` produces in the shipping app (real DTW against Husary's
+everyayah.com audio for 5:109), so `checkTajweedRules` actually exercises its
+reference-anchored branch (`measured.mode === "reference"`) instead of always
+falling through to the plain-threshold branch. This validates a *different*
+set of constants than the table above — the ones `refWindowForRule` uses when
+a trustworthy reference-aligned window exists.
+
+| Rule | Before | After tuning | Always-pass baseline | Applied? |
+|---|---|---|---|---|
+| Madd | 65.2% | **67.5%** (`maddRefMinRatioFactor` 0.85→0.6) | 56.3% | yes |
+| Ghunnah | **42.2%** | 83.4% (`nasalHoldRefRatioFactor` 0.75→0.225, `nasalSpikeRefToleranceFactor` 1.5→0.8) | 85.1% | yes |
+| Ikhfa | 58.1% | 57.1% (flat, noise-level) | 53.7% | yes (rides the nasal pair above) |
+
+The Ghunnah number before tuning is not a rounding error: the original
+hand-picked reference-anchored pair (0.75, 1.5) scored **worse than always
+answering "pass"** — actively harmful, not just unhelpful. The tuned pair
+fixes that, though it still lands just under the always-pass baseline: the
+same weak-duration-signal story as the threshold-mode table above applies
+here too (real Ghunnah/Ikhfa gains need spectral features, not different
+duration/energy cutoffs) — the fix is "no longer actively wrong," not "now
+discriminative." The Iqlab-coupling check (same method as the threshold-mode
+one — optimize the shared pair for Ghunnah alone, read off the effect on
+Ikhfa/Iqlab) confirmed the applied pair doesn't cost Ikhfa.
+
+QDAT has no Qalqalah or Idgham-without-Ghunnah labels, so
+`qalqalahRefRatioFactor`/`qalqalahRefMinDb` and
+`idghamNoGhunnahTransientDb`/`idghamNoGhunnahRefToleranceFactor` remain
+hand-picked, same limitation as the threshold-mode table.
 
 ## Honesty notes
 

@@ -261,18 +261,31 @@ export const TAJWEED_THRESHOLDS = {
   // Used when a DTW-aligned reference-reciter window is available (see
   // refWindowForRule/checkTajweedRules below): compare the user's
   // measurement directly against the reference reciter's OWN measurement
-  // at that position, instead of a fixed or self-relative baseline. Unlike
-  // the thresholds above, NONE of these have been run through
-  // tools/qdat-eval yet — that harness works from cached ASR output with
-  // no reference-audio DTW alignment at all, so there is nothing to
-  // validate these against today. Every constant below is a hand-picked
-  // placeholder pending a qdat-eval extension that can log
-  // reference-anchored verdicts.
+  // at that position, instead of a fixed or self-relative baseline.
+  //
+  // Validated against QDAT via tools/qdat-eval/extract-features-ref.mjs +
+  // tune-thresholds-ref.mjs (1,466 recordings, real DTW referenceAlignment
+  // against Husary's everyayah.com audio, half-split tune/holdout, 2026-07):
+  //  - maddRefMinRatioFactor 0.85 -> 0.6 raised holdout agreement from 65.2%
+  //    to 67.5% (always-pass baseline 56.3%) — applied.
+  //  - nasalHoldRefRatioFactor 0.75 -> 0.225 and nasalSpikeRefToleranceFactor
+  //    1.5 -> 0.8 fix a genuinely BROKEN prior setting: the old pair scored
+  //    42.2% holdout accuracy on Ghunnah against an 85.1% always-pass
+  //    baseline (i.e. actively worse than doing nothing). Tuned reaches
+  //    83.4% — still just under the baseline (the same weak-duration-signal
+  //    story as the threshold-mode pair below; real Ghunnah/Ikhfa gains need
+  //    spectral features, not different cutoffs) but no longer harmful, and
+  //    the Iqlab-coupling check confirmed it doesn't cost Ikhfa (58.1% ->
+  //    57.1%, noise-level) — applied.
+  //  - QDAT has no Qalqalah or Idgham-without-Ghunnah labels, so
+  //    qalqalahRefRatioFactor/qalqalahRefMinDb and
+  //    idghamNoGhunnahTransientDb/idghamNoGhunnahRefToleranceFactor (above)
+  //    stay hand-picked.
   qalqalahRefRatioFactor: 0.6, // user's bounce must reach >=60% of the reference's own bounce here
   qalqalahRefMinDb: 2, // reference's own bounce must clear this floor, or the comparison isn't trusted
-  nasalHoldRefRatioFactor: 0.75, // user's hold must last >=75% of the reference's own hold duration here
-  nasalSpikeRefToleranceFactor: 1.5, // spike ceiling widens to this multiple of the reference's own spread, if higher than nasalSpikeMaxDb
-  maddRefMinRatioFactor: 0.85, // user's elongation must reach >=85% of the reference's own elongation duration here
+  nasalHoldRefRatioFactor: 0.225, // user's hold must last >=22.5% of the reference's own hold duration here
+  nasalSpikeRefToleranceFactor: 0.8, // spike ceiling widens to this multiple of the reference's own spread, if higher than nasalSpikeMaxDb
+  maddRefMinRatioFactor: 0.6, // user's elongation must reach >=60% of the reference's own elongation duration here
 };
 
 // Builds a specific, actionable note for one rule occurrence, naming the
