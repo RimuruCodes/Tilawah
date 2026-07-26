@@ -35,10 +35,27 @@ export default defineConfig({
           {
             // Reciter audio (everyayah.com) — static per-ayah mp3s that
             // never change, safe to cache aggressively.
+            //
+            // Cache name bumped v1 -> v2 (2026-07): before crossOrigin was
+            // set on the Audio() elements in AudioPlayer.jsx/ComparePlayback.jsx,
+            // ordinary no-crossOrigin playback produced OPAQUE (status 0)
+            // responses that this cache happily stored (statuses: [0, 200]
+            // below). A later cors-mode fetch() for the same URL (Voice
+            // Comparison's reference-audio scoring) would then be served
+            // that cached opaque entry — which the Fetch spec forbids for a
+            // non-no-cors request, failing every time with a generic
+            // "TypeError: Failed to fetch" for an ayah that was actually
+            // perfectly fetchable. The crossOrigin fix stops NEW opaque
+            // entries from being written, but every existing user's
+            // already-poisoned entries would keep breaking Voice Comparison
+            // indefinitely (CacheFirst never revalidates) without this
+            // rename — it moves everyone to a clean, empty cache on their
+            // next service-worker update, no manual "clear site data"
+            // required. Do not revert the name to v1.
             urlPattern: ({ url }) => url.hostname === 'everyayah.com',
             handler: 'CacheFirst',
             options: {
-              cacheName: 'reciter-audio-cache',
+              cacheName: 'reciter-audio-cache-v2',
               expiration: { maxEntries: 1000, maxAgeSeconds: 60 * 60 * 24 * 365 },
               cacheableResponse: { statuses: [0, 200] },
             },
