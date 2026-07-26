@@ -54,6 +54,24 @@ npx vite-node tools/qdat-eval/tune-thresholds-ref.mjs
   transformers.js v4 does not implement real beam search for Whisper —
   passing `num_beams` produces byte-identical transcripts at identical
   latency, so there is nothing to gain by exposing a beam-search setting.
+- `build-reciter-profile.mjs` + `compile-reciter-profile.mjs` — not QDAT
+  tools (no labels involved); builds statistical per-reciter style profiles
+  (Madd/nasal-hold pacing, pitch-contour volatility) for reciters with no QUA
+  ground-truth timing, into `src/lib/reciterStyleProfiles.js`. See that
+  script's header comment for scope and the fairness reasoning behind what
+  it deliberately does NOT profile.
+- `validate-reciter-style.mjs` — validates whether a reciter style profile
+  should be allowed to shift threshold-mode Madd/nasal-hold pass/warn
+  verdicts (reuses the cached `features.json`, no re-extraction). Finding
+  (2026-07, Alafasy): it made holdout accuracy WORSE across the board —
+  Madd 69.4%→66.5%, Ghunnah 79.9%→**38.4%** (far below the 81.1% always-pass
+  baseline), Ikhfa 54.0%→51.9%. QDAT labels track canonical correctness, not
+  similarity to one reciter's personal pacing, so a reciter's own typical
+  timing is NOT a safe stand-in for "correct" — the app now uses reciter
+  style profiles for the Style Match sub-score only (an honest similarity
+  signal, not a correctness claim), never for verdicts. See the
+  `styleTargetRatio`/`styleTargetMinSec` comments in `tajweedAnalysis.js`.
+
 ## Converting the Quran-tuned model yourself
 
 To get a Quran-tuned model with word timestamps, export

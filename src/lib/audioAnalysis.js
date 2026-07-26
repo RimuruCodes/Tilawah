@@ -259,19 +259,34 @@ function trimToActive(active) {
   return { start, end };
 }
 
-function countPauses(active, start, end, hopMs, minPauseMs = 280) {
+// Same detection loop as before, but also keeps each qualifying pause's own
+// length — countPauses only ever needed the count, but the reciter style
+// profiler (tools/qdat-eval/build-reciter-profile.mjs) needs typical pause
+// LENGTH too, not just how often they happen.
+function measurePauses(active, start, end, hopMs, minPauseMs = 280) {
   const minPauseFrames = Math.max(1, Math.round(minPauseMs / hopMs));
-  let pauses = 0;
+  let count = 0;
   let silentRun = 0;
+  const durationsSec = [];
   for (let i = start; i <= end; i++) {
     if (!active[i]) {
       silentRun++;
     } else {
-      if (silentRun >= minPauseFrames) pauses++;
+      if (silentRun >= minPauseFrames) {
+        count++;
+        durationsSec.push((silentRun * hopMs) / 1000);
+      }
       silentRun = 0;
     }
   }
-  return pauses;
+  // No trailing-silence check needed: `end` is always the last ACTIVE frame
+  // (by construction of trimToActive), so the loop's else-branch already
+  // closes out any pending silentRun by the time i reaches end.
+  return { count, durationsSec };
+}
+
+function countPauses(active, start, end, hopMs, minPauseMs = 280) {
+  return measurePauses(active, start, end, hopMs, minPauseMs).count;
 }
 
 function zScore(arr) {
@@ -455,16 +470,45 @@ function buildFeedback({ overall, durationRatio, alignmentScore, energyScore, pi
   return notes;
 }
 
-function analyzeSingle(samples, sampleRate, noiseFloorDb = null) {
+// Standard deviation of the voiced pitch contour, in semitones, over
+// [start, end]. Shift-invariant by construction (std ignores a constant
+// offset), so this measures how much the contour MOVES — volatility/shape —
+// never where it sits (register) or what it's made of (timbre); this
+// codebase has no spectral/formant analysis anywhere, so timbre isn't
+// something these numbers could reflect even incidentally. Shared by
+// analyzeRecordingQualityOnly's pitchStabilityScore and the reciter style
+// profiler (tools/qdat-eval/build-reciter-profile.mjs), so both reuse one
+// definition of "pitch volatility" rather than keeping two.
+export function pitchStdSemitones(pitchHz, start, end) {
+  const values = pitchHz.slice(start, end + 1).filter((p) => p > 0).map(hzToSemitone);
+  if (values.length < 6) return null;
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+export function analyzeSingle(samples, sampleRate, noiseFloorDb = null) {
   const { energyDb, pitchHz, hopSize } = buildFeatures(samples, sampleRate);
   const hopMs = (hopSize / sampleRate) * 1000;
   const active = detectActivity(energyDb, 32, noiseFloorDb);
   const { start, end } = trimToActive(active);
   const isSilent = start > end;
-  const pauseCount = isSilent ? 0 : countPauses(active, start, end, hopMs);
+  const pauses = isSilent ? { count: 0, durationsSec: [] } : measurePauses(active, start, end, hopMs);
   const durationSec = samples.length / sampleRate;
   const activeDurationSec = isSilent ? 0 : ((end - start + 1) * hopSize) / sampleRate;
-  return { energyDb, pitchHz, hopMs, active, start, end, isSilent, pauseCount, durationSec, activeDurationSec };
+  return {
+    energyDb,
+    pitchHz,
+    hopMs,
+    active,
+    start,
+    end,
+    isSilent,
+    pauseCount: pauses.count,
+    pauseDurationsSec: pauses.durationsSec,
+    durationSec,
+    activeDurationSec,
+  };
 }
 
 // Compares two already-decoded mono sample arrays (same sample rate).
@@ -772,14 +816,8 @@ export function analyzeRecordingQualityOnly(samples, sampleRate = TARGET_SAMPLE_
   const totalFrames = a.end - a.start + 1;
   const voicedRatio = voicedFrames / Math.max(totalFrames, 1);
 
-  const pitchValues = a.pitchHz.slice(a.start, a.end + 1).filter((p) => p > 0).map(hzToSemitone);
-  let pitchStabilityScore = 60;
-  if (pitchValues.length >= 6) {
-    const mean = pitchValues.reduce((s, v) => s + v, 0) / pitchValues.length;
-    const variance = pitchValues.reduce((s, v) => s + (v - mean) ** 2, 0) / pitchValues.length;
-    const std = Math.sqrt(variance);
-    pitchStabilityScore = clamp(100 - std * 12, 20, 100);
-  }
+  const pitchStd = pitchStdSemitones(a.pitchHz, a.start, a.end);
+  const pitchStabilityScore = pitchStd == null ? 60 : clamp(100 - pitchStd * 12, 20, 100);
 
   const pauseScore = clamp(100 - a.pauseCount * 12, 20, 100);
   const voicedScore = clamp(voicedRatio * 130, 0, 100);

@@ -1,6 +1,9 @@
 import { findTajweedRules } from "@/lib/tajweedRules";
-import { buildEnergyFrameCache, energyProfileForCachedWindow, energyProfileForRefWindow } from "@/lib/audioAnalysis";
+import { buildEnergyFrameCache, energyProfileForCachedWindow, energyProfileForRefWindow, analyzeSingle, pitchStdSemitones } from "@/lib/audioAnalysis";
 import { getQuaWordWindowSec } from "@/lib/quaReferenceData";
+import { RECITER_STYLE_PROFILES } from "@/lib/reciterStyleProfiles";
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 const DIACRITICS_RE = /[\u064B-\u0652\u0670\u0653]/g;
 const TATWEEL_RE = /\u0640/g;
@@ -341,7 +344,7 @@ function buildRuleNote(rule, verdict, { word, letter, actualCounts, expectedCoun
 // each rule in time. This is heuristic — real timing varies by reciter and
 // pace — so checks are relative to the user's own average word duration in
 // this recording, not fixed absolute thresholds.
-export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment = null, quaContext = null }) {
+export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment = null, quaContext = null, reciterStyleProfile = null }) {
   const { hits, words } = findTajweedRules(ayahArabicText);
   const avgWordDur = averageWordDuration(alignments, chunks);
   const results = [];
@@ -495,9 +498,20 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
         measured = { mode: refMode, segmentDurationSec, refSegmentDurationSec: refSegDur, durationRatio, energySpreadDb, refSpreadDb, expectedCounts: rule.expectedCounts };
       } else {
         const expectedMinSec = (rule.expectedCounts / 2) * (avgWordDur * TAJWEED_THRESHOLDS.nasalHoldCountWordFraction);
+        // styleTargetMinSec (see reciterStyleProfiles.js) is computed for the
+        // Style Match sub-score ONLY — it deliberately does NOT feed the
+        // verdict below. It was validated against QDAT
+        // (tools/qdat-eval/validate-reciter-style.mjs, 2026-07) and made
+        // Ghunnah holdout accuracy actively worse (79.9% -> 38.4%, well
+        // below the always-pass baseline): QDAT's labels track canonical
+        // correctness, not similarity to one reciter's personal pacing, and
+        // Alafasy's real nasal-hold tendency (2.6x the generic minimum) is
+        // far more than what's typically needed to be "correct" — using it
+        // as everyone's new bar failed a lot of genuinely correct holds.
+        const styleTargetMinSec = expectedMinSec * (reciterStyleProfile?.nasalHoldMultiplier ?? 1);
         const holdsUp = segmentDurationSec >= expectedMinSec && energySpreadDb < TAJWEED_THRESHOLDS.nasalSpikeMaxDb; // sustained, not a spike
         verdict = holdsUp ? "pass" : "warn";
-        measured = { mode: "threshold", segmentDurationSec, avgWordDur, energySpreadDb, expectedCounts: rule.expectedCounts };
+        measured = { mode: "threshold", segmentDurationSec, avgWordDur, energySpreadDb, expectedCounts: rule.expectedCounts, styleTargetMinSec };
       }
       results.push({ ...rule, word, letter, verdict, ...window, measured, note: buildRuleNote(rule, verdict, { word, letter }) });
     } else {
@@ -519,10 +533,18 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
         // duration, scaled by how many counts are expected.
         const expectedRatio = rule.expectedCounts / 2; // natural madd ~ baseline
         const actualRatio = segmentDurationSec / avgWordDur;
+        // styleTargetRatio (see reciterStyleProfiles.js) is computed for the
+        // Style Match sub-score ONLY, same as nasal-hold's styleTargetMinSec
+        // above — it deliberately does NOT feed the verdict below.
+        // tools/qdat-eval/validate-reciter-style.mjs (2026-07) found it made
+        // Madd holdout accuracy worse too (69.4% -> 66.5%): QDAT's labels
+        // track canonical correctness, not similarity to one reciter's
+        // personal pacing.
+        const styleTargetRatio = expectedRatio * (reciterStyleProfile?.maddElongationMultiplier ?? 1);
         const holdsUp = actualRatio >= expectedRatio * TAJWEED_THRESHOLDS.maddMinRatioFactor;
         verdict = holdsUp ? "pass" : "warn";
         actualCounts = actualRatio * 2; // rough counts estimate, same scale as expectedCounts
-        measured = { mode: "threshold", actualRatio, expectedRatio };
+        measured = { mode: "threshold", actualRatio, expectedRatio, styleTargetRatio };
       }
       results.push({
         ...rule,
@@ -583,9 +605,51 @@ export function buildWordTimings(alignments, chunks) {
   return timings;
 }
 
+// 0-100: 100 at an exact match to `target`, falling to 0 at a 100%+
+// relative deviation either direction. Hand-picked like qalqalahBounceDb —
+// not yet validated against labeled data (no reciter-style-profile-aware
+// dataset exists to validate against).
+function styleFitScore(actual, target) {
+  return clamp(100 - Math.abs(actual / target - 1) * 100, 0, 100);
+}
+
+// How closely the user's pacing/elongation/pitch-contour pattern matched
+// THIS reciter's own typical style (see reciterStyleProfiles.js) — a
+// separate notion from pass/warn correctness. Only ever built from
+// threshold-mode occurrences (see styleTargetRatio/styleTargetMinSec above):
+// reference-anchored occurrences already compare directly against real
+// reference audio at that exact position, which is strictly more precise
+// than a reciter-wide statistical average, so they're left out of this
+// rather than mixed in. Returns null — hiding the UI badge, same convention
+// as pitchScore — when there's no profile for this reciter, or nothing
+// measurable to compare (e.g. every occurrence in this recording happened
+// to be reference-anchored, or the recording was silent).
+function computeStyleMatchScore(ruleChecks, reciterStyleProfile, userSamples, sampleRate) {
+  if (!reciterStyleProfile) return null;
+  const fits = [];
+
+  for (const check of ruleChecks) {
+    if (check.measured?.mode !== "threshold") continue;
+    if (check.ruleType.startsWith("madd") && reciterStyleProfile.maddElongationMultiplier != null) {
+      fits.push(styleFitScore(check.measured.actualRatio, check.measured.styleTargetRatio));
+    } else if (NASAL_HOLD_RULE_TYPES.has(check.ruleType) && reciterStyleProfile.nasalHoldMultiplier != null) {
+      fits.push(styleFitScore(check.measured.segmentDurationSec, check.measured.styleTargetMinSec));
+    }
+  }
+
+  if (reciterStyleProfile.pitchContourVolatilitySemitones != null) {
+    const a = analyzeSingle(userSamples, sampleRate);
+    const userPitchStd = a.isSilent ? null : pitchStdSemitones(a.pitchHz, a.start, a.end);
+    if (userPitchStd != null) fits.push(styleFitScore(userPitchStd, reciterStyleProfile.pitchContourVolatilitySemitones));
+  }
+
+  if (fits.length === 0) return null;
+  return Math.round(fits.reduce((sum, v) => sum + v, 0) / fits.length);
+}
+
 // Full pipeline: ASR transcription result + expected ayah text -> word word
 // alignment, word-correctness feedback, and Tajweed rule checks.
-export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate, referenceAlignment = null, quaContext = null }) {
+export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate, referenceAlignment = null, quaContext = null, reciterFolder = null }) {
   const expectedWordsOriginal = ayahArabicText.trim().split(/\s+/).filter(Boolean);
   const expectedWords = expectedWordsOriginal.map(normalizeArabic);
   const chunks = asrResult?.chunks || [];
@@ -593,7 +657,8 @@ export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, use
 
   const alignments = alignWords(expectedWords, recognizedWords);
   const wordFeedback = buildWordFeedback(alignments, expectedWordsOriginal);
-  const ruleChecks = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment, quaContext });
+  const reciterStyleProfile = reciterFolder ? RECITER_STYLE_PROFILES[reciterFolder] : null;
+  const ruleChecks = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment, quaContext, reciterStyleProfile });
 
   const ruleTypesPresent = [...new Set(ruleChecks.map((r) => r.ruleType))];
   const glossary = ruleTypesPresent.map((type) => ({ type, ...TAJWEED_RULE_DEFINITIONS[type] }));
@@ -629,5 +694,9 @@ export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, use
     // useWordHighlight) — reuses the alignments/chunks already computed
     // above, so this never triggers extra ASR work.
     wordTimings: buildWordTimings(alignments, chunks),
+    // null for every reciter without a built style profile (see
+    // reciterStyleProfiles.js) — purely additive, hides the Style Match
+    // badge rather than showing a fabricated number.
+    styleMatchScore: computeStyleMatchScore(ruleChecks, reciterStyleProfile, userSamples, sampleRate),
   };
 }

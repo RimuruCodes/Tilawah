@@ -10,6 +10,8 @@ import {
   energyProfileForRefWindow,
   reduceNoise,
   buildFeatures,
+  analyzeSingle,
+  pitchStdSemitones,
   TARGET_SAMPLE_RATE,
 } from "@/lib/audioAnalysis";
 
@@ -232,6 +234,70 @@ describe("pitch scoring on voice-like signals", () => {
     expect(result.score).toBeGreaterThanOrEqual(0);
     expect(result.score).toBeLessThanOrEqual(100);
     expect(result.feedback.length).toBeGreaterThan(0);
+  });
+});
+
+describe("analyzeSingle — pause detection", () => {
+  it("reports zero pauses for one continuous tone with no internal gap", () => {
+    const signal = makeToneBurst({ silenceSec: 0.3, toneSec: 1.0 });
+    const result = analyzeSingle(signal, TARGET_SAMPLE_RATE);
+    expect(result.pauseCount).toBe(0);
+    expect(result.pauseDurationsSec).toEqual([]);
+  });
+
+  it("detects one pause of roughly the right length between two tone bursts", () => {
+    // tone, ~500ms silent gap (well over the 280ms minimum), tone again —
+    // all voiced by the same relative-to-peak activity gate, so the middle
+    // gap is the only thing that should register as a pause.
+    const toneA = makeToneBurst({ silenceSec: 0, toneSec: 0.6, amplitude: 0.6 });
+    const gap = makeSilence(0.5);
+    const toneB = makeToneBurst({ silenceSec: 0, toneSec: 0.6, amplitude: 0.6 });
+    const signal = new Float32Array(toneA.length + gap.length + toneB.length);
+    signal.set(toneA, 0);
+    signal.set(gap, toneA.length);
+    signal.set(toneB, toneA.length + gap.length);
+
+    const result = analyzeSingle(signal, TARGET_SAMPLE_RATE);
+    expect(result.pauseCount).toBe(1);
+    expect(result.pauseDurationsSec).toHaveLength(1);
+    expect(result.pauseDurationsSec[0]).toBeGreaterThan(0.35);
+    expect(result.pauseDurationsSec[0]).toBeLessThan(0.65);
+  });
+});
+
+describe("pitchStdSemitones", () => {
+  it("returns null when there are too few voiced frames to measure", () => {
+    // Fewer than 6 voiced (>0) entries — below the minimum this function
+    // requires before a standard deviation would mean anything.
+    const pitchHz = [0, 0, 120, 0, 118, 0, 0, 0];
+    expect(pitchStdSemitones(pitchHz, 0, pitchHz.length - 1)).toBeNull();
+  });
+
+  it("is register-invariant: an octave-shifted contour has ~the same volatility", () => {
+    // hzToSemitone is 12*log2(hz/anchor) — multiplying every Hz value by a
+    // constant factor (an octave shift) adds a CONSTANT to every semitone
+    // value, which standard deviation is blind to by construction. This is
+    // the concrete property the reciter style profiler leans on to claim
+    // "volatility, not register" — pin it directly rather than just assert.
+    const low = makeVoiceLike({ baseHz: 130, swingHz: 40 });
+    const high = makeVoiceLike({ baseHz: 260, swingHz: 80 }); // same shape, one octave up
+    const lowFeat = buildFeatures(low, TARGET_SAMPLE_RATE);
+    const highFeat = buildFeatures(high, TARGET_SAMPLE_RATE);
+    const lowStd = pitchStdSemitones(lowFeat.pitchHz, 0, lowFeat.pitchHz.length - 1);
+    const highStd = pitchStdSemitones(highFeat.pitchHz, 0, highFeat.pitchHz.length - 1);
+    expect(lowStd).not.toBeNull();
+    expect(highStd).not.toBeNull();
+    expect(Math.abs(lowStd - highStd)).toBeLessThan(1.5);
+  });
+
+  it("a flat/steady pitch has lower volatility than a wide swinging one", () => {
+    const steady = makeVoiceLike({ baseHz: 150, swingHz: 2 });
+    const swinging = makeVoiceLike({ baseHz: 150, swingHz: 60 });
+    const steadyFeat = buildFeatures(steady, TARGET_SAMPLE_RATE);
+    const swingingFeat = buildFeatures(swinging, TARGET_SAMPLE_RATE);
+    const steadyStd = pitchStdSemitones(steadyFeat.pitchHz, 0, steadyFeat.pitchHz.length - 1);
+    const swingingStd = pitchStdSemitones(swingingFeat.pitchHz, 0, swingingFeat.pitchHz.length - 1);
+    expect(steadyStd).toBeLessThan(swingingStd);
   });
 });
 

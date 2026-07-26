@@ -316,6 +316,7 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
             ayahArabicText: combinedAyahText,
             asrResult,
             referenceAlignment: result.referenceAlignment,
+            reciterFolder,
           });
         }
       } catch (err) {
@@ -759,10 +760,11 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                 </div>
 
                 {results.referenceAvailable && (
-                  <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className={`grid gap-2 text-center ${tajweedResult?.styleMatchScore != null ? "grid-cols-4" : "grid-cols-3"}`}>
                     <MetricBadge label="Rhythm" value={results.alignmentScore} />
                     <MetricBadge label="Loudness" value={results.energyScore} />
                     <MetricBadge label="Pitch" value={results.pitchScore} />
+                    <MetricBadge label="Style Match" value={tajweedResult?.styleMatchScore} />
                   </div>
                 )}
 

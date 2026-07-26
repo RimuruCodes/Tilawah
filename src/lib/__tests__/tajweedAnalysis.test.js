@@ -9,6 +9,7 @@ import {
   summarizeTajweedChecks,
   buildWordTimings,
   TAJWEED_RULE_DEFINITIONS,
+  TAJWEED_THRESHOLDS,
 } from "@/lib/tajweedAnalysis";
 import { TARGET_SAMPLE_RATE, buildFeatures } from "@/lib/audioAnalysis";
 
@@ -534,6 +535,107 @@ describe("reference-anchored Tajweed checks", () => {
     const withDefault = analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate });
     const withExplicitNull = analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate, referenceAlignment: null });
     expect(withExplicitNull).toEqual(withDefault);
+  });
+});
+
+describe("reciter style profile — informs Style Match only, never the verdict", () => {
+  // tools/qdat-eval/validate-reciter-style.mjs (2026-07) found that letting a
+  // style profile shift the pass/warn verdict made accuracy against real
+  // QDAT expert labels WORSE (Ghunnah 79.9% -> 38.4% holdout) — QDAT tracks
+  // canonical correctness, not similarity to one reciter's personal pacing.
+  // So a profile must change styleTargetRatio/styleTargetMinSec (read by
+  // computeStyleMatchScore) without ever touching the verdict itself.
+  it("Madd: a style profile changes styleTargetRatio but the verdict matches the profile-free run exactly", () => {
+    const userSamples = makeSustainedTone({ holdSec: 0.8 });
+    const ayahArabicText = "قَالَ رَبِّ";
+    const alignments = [{ recognizedIndex: 0 }, { recognizedIndex: 1 }];
+    const chunks = [
+      { timestamp: [0, 0.5] },
+      { timestamp: [0.65, 1.5] },
+    ];
+
+    const generic = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
+    const maddGeneric = generic.find((c) => c.ruleType.startsWith("madd"));
+    expect(maddGeneric.measured.mode).toBe("threshold");
+    expect(maddGeneric.verdict).toBe("warn");
+
+    const reciterStyleProfile = { maddElongationMultiplier: 0.5 };
+    const styled = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, reciterStyleProfile });
+    const maddStyled = styled.find((c) => c.ruleType.startsWith("madd"));
+    expect(maddStyled.measured.mode).toBe("threshold");
+    expect(maddStyled.verdict).toBe("warn"); // unchanged from generic — the point of this test
+    expect(maddStyled.measured.styleTargetRatio).toBeCloseTo(maddGeneric.measured.expectedRatio * 0.5, 5);
+    expect(maddStyled.measured.styleTargetRatio).not.toBeCloseTo(maddGeneric.measured.styleTargetRatio, 5);
+  });
+
+  it("nasal-hold family: a style profile changes styleTargetMinSec but the verdict matches the profile-free run exactly", () => {
+    const userSamples = makeSustainedTone({ holdSec: 0.7 });
+    const ayahArabicText = "مِن شَرِّ مَا خَلَقَ";
+    const alignments = [{ recognizedIndex: 0 }, { recognizedIndex: 1 }, { recognizedIndex: 2 }, { recognizedIndex: 3 }];
+    const chunks = [
+      { timestamp: [0, 0.5] },
+      { timestamp: [0.55, 1.0] },
+      { timestamp: [1.05, 1.4] },
+      { timestamp: [1.45, 1.9] },
+    ];
+
+    const generic = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
+    const ikhfaGeneric = generic.find((c) => c.ruleType === "ikhfa");
+    expect(ikhfaGeneric.measured.mode).toBe("threshold");
+    expect(ikhfaGeneric.verdict).toBe("pass");
+
+    const reciterStyleProfile = { nasalHoldMultiplier: 4 };
+    const styled = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, reciterStyleProfile });
+    const ikhfaStyled = styled.find((c) => c.ruleType === "ikhfa");
+    expect(ikhfaStyled.measured.mode).toBe("threshold");
+    expect(ikhfaStyled.verdict).toBe("pass"); // unchanged from generic — the point of this test
+    const expectedMinSec = (ikhfaGeneric.expectedCounts / 2) * (ikhfaGeneric.measured.avgWordDur * TAJWEED_THRESHOLDS.nasalHoldCountWordFraction);
+    expect(ikhfaStyled.measured.styleTargetMinSec).toBeCloseTo(expectedMinSec * 4, 5);
+  });
+
+  it("a reference-anchored occurrence ignores the style profile entirely (it already compares to real reference audio)", () => {
+    const userSamples = makeSustainedTone({ holdSec: 0.8 });
+    const ayahArabicText = "قَالَ رَبِّ";
+    const alignments = [{ recognizedIndex: 0 }, { recognizedIndex: 1 }];
+    const chunks = [{ timestamp: [0, 0.6] }, { timestamp: [0.65, 1.5] }];
+    const referenceAlignment = makeIdentityReferenceAlignment(userSamples);
+
+    const withoutProfile = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment });
+    const withProfile = checkTajweedRules({
+      userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment,
+      reciterStyleProfile: { maddElongationMultiplier: 5 },
+    });
+    expect(withProfile).toEqual(withoutProfile);
+  });
+
+  it("computeStyleMatchScore (via analyzeTajweedFromTranscription): null when the selected reciter has no profile", () => {
+    const ayahArabicText = "قَالَ رَبِّ";
+    const asrResult = {
+      text: "قال رب",
+      chunks: [
+        { text: "قال", timestamp: [0, 0.6] },
+        { text: "رب", timestamp: [0.65, 1.5] },
+      ],
+    };
+    const userSamples = makeSustainedTone({ holdSec: 0.8 });
+    const result = analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate, reciterFolder: "Husary_128kbps" });
+    expect(result.styleMatchScore).toBeNull();
+  });
+
+  it("computeStyleMatchScore (via analyzeTajweedFromTranscription): a real number for a reciter with a built profile", () => {
+    const ayahArabicText = "قَالَ رَبِّ";
+    const asrResult = {
+      text: "قال رب",
+      chunks: [
+        { text: "قال", timestamp: [0, 0.6] },
+        { text: "رب", timestamp: [0.65, 1.5] },
+      ],
+    };
+    const userSamples = makeSustainedTone({ holdSec: 0.8 });
+    const result = analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate, reciterFolder: "Alafasy_128kbps" });
+    expect(result.styleMatchScore).not.toBeNull();
+    expect(result.styleMatchScore).toBeGreaterThanOrEqual(0);
+    expect(result.styleMatchScore).toBeLessThanOrEqual(100);
   });
 });
 

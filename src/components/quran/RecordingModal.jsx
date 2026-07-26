@@ -320,6 +320,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
           onModelProgress: (pct) => { if (isCurrentRun()) setModelProgress(pct); },
           referenceAlignment: dspResult.referenceAlignment,
           quaContext: { reciterFolder, surahNumber, ayahNumber: ayah.number },
+          reciterFolder,
         });
       } catch (err) {
         console.error("Background Tajweed stage failed — result stands without it:", err);
@@ -670,10 +671,11 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                 </div>
 
                 {analysisResult.referenceAvailable && (
-                  <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className={`grid gap-2 text-center ${tajweedResult?.styleMatchScore != null ? "grid-cols-4" : "grid-cols-3"}`}>
                     <MetricBadge label="Rhythm" value={analysisResult.alignmentScore} />
                     <MetricBadge label="Loudness" value={analysisResult.energyScore} />
                     <MetricBadge label="Pitch" value={analysisResult.pitchScore} />
+                    <MetricBadge label="Style Match" value={tajweedResult?.styleMatchScore} />
                   </div>
                 )}
 
