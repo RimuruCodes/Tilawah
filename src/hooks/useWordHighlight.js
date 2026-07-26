@@ -17,13 +17,19 @@ import { useMemo } from "react";
 // this hook — see quaReferenceData.js / tajweedAnalysis.js for where word
 // timing actually gets produced.
 //
+// Generic over granularity: works identically for a word list ({ wordIndex,
+// startSec, endSec, confidence }) or a letter list ({ wordIndex, charIndex,
+// startSec, endSec, confidence }) — the lookup only ever needs startSec/
+// endSec, so useLetterHighlight below reuses this exact function rather
+// than growing a parallel copy of the same half-open-interval scan.
+//
 // Exported as a plain function (testable without any React rendering) plus
-// a thin useMemo hook wrapper for use inside components.
-export function findActiveWord(words, currentTimeSec) {
-  if (!words || !words.length || currentTimeSec == null) return null;
-  for (const word of words) {
-    if (currentTimeSec >= word.startSec && currentTimeSec < word.endSec) {
-      return word;
+// thin useMemo hook wrappers for use inside components.
+export function findActiveWord(items, currentTimeSec) {
+  if (!items || !items.length || currentTimeSec == null) return null;
+  for (const item of items) {
+    if (currentTimeSec >= item.startSec && currentTimeSec < item.endSec) {
+      return item;
     }
   }
   return null;
@@ -37,4 +43,14 @@ export function findActiveWord(words, currentTimeSec) {
 // timing data at all for this audio).
 export function useWordHighlight(words, currentTimeSec) {
   return useMemo(() => findActiveWord(words, currentTimeSec), [words, currentTimeSec]);
+}
+
+// Same lookup, letter granularity. `letters`: array of { wordIndex,
+// charIndex, startSec, endSec, confidence } — see buildLetterTimings in
+// letterTiming.js for how these are produced (always an even-division
+// estimate within a word's own timing, whether that word timing itself is
+// QUA ground truth or ASR-estimated; see that file for why letter position
+// is never verified ground truth even for QUA-covered reciters).
+export function useLetterHighlight(letters, currentTimeSec) {
+  return useMemo(() => findActiveWord(letters, currentTimeSec), [letters, currentTimeSec]);
 }

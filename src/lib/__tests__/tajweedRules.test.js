@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findTajweedRules, splitAyahIntoWords } from "@/lib/tajweedRules";
+import { findTajweedRules, splitAyahIntoWords, baseLetterCharIndexes, wordLetterClusters } from "@/lib/tajweedRules";
 
 describe("splitAyahIntoWords", () => {
   it("splits on whitespace and drops empty tokens", () => {
@@ -8,6 +8,42 @@ describe("splitAyahIntoWords", () => {
       "اللَّهِ",
       "الرَّحْمَٰنِ",
     ]);
+  });
+});
+
+describe("baseLetterCharIndexes", () => {
+  it("returns one index per base letter, skipping attached diacritics", () => {
+    // ب-kasra س-sukun م-kasra: 3 base letters at raw positions 0, 2, 4.
+    expect(baseLetterCharIndexes("بِسْمِ")).toEqual([0, 2, 4]);
+  });
+
+  it("returns one index per array slot for a word with no diacritics at all", () => {
+    expect(baseLetterCharIndexes("قل")).toEqual([0, 1]);
+  });
+
+  it("returns an empty array for a word that's entirely diacritics (degenerate input)", () => {
+    expect(baseLetterCharIndexes("َِ")).toEqual([]);
+  });
+});
+
+describe("wordLetterClusters", () => {
+  it("groups each base letter with its own trailing diacritics", () => {
+    expect(wordLetterClusters("بِسْمِ")).toEqual([
+      { charIndex: 0, text: "بِ" },
+      { charIndex: 2, text: "سْ" },
+      { charIndex: 4, text: "مِ" },
+    ]);
+  });
+
+  it("returns one cluster per letter for a word with no diacritics", () => {
+    expect(wordLetterClusters("قل")).toEqual([
+      { charIndex: 0, text: "ق" },
+      { charIndex: 1, text: "ل" },
+    ]);
+  });
+
+  it("returns an empty array for a word that's entirely diacritics", () => {
+    expect(wordLetterClusters("َِ")).toEqual([]);
   });
 });
 

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, CheckCircle2, Circle, Mic } from "lucide-react";
 import AyahInsights from "@/components/quran/AyahInsights";
-import { splitAyahIntoWords } from "@/lib/tajweedRules";
+import { splitAyahIntoWords, wordLetterClusters } from "@/lib/tajweedRules";
 
 function lastScoreColor(score) {
   if (score >= 90) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
@@ -22,6 +22,7 @@ function AyahDisplay({
   isPlaying,
   isHighlighted,
   highlightedWordIndex = null,
+  highlightedCharIndex = null,
   highlightedWordConfidence = null,
   memorizationStatus,
   showTranslation,
@@ -105,21 +106,49 @@ function AyahDisplay({
                       different color, since color alone isn't accessible
                       to everyone. Splitting via splitAyahIntoWords keeps
                       indices consistent with the same function tajweedRules.js/
-                      QUA lookups use. */}
+                      QUA lookups use.
+
+                      Letter-level: when AudioPlayer resolved a charIndex for
+                      the active word (see letterTiming.js — always an
+                      even-division estimate, whether the word's own timing
+                      is QUA ground truth or ASR-estimated), only that one
+                      letter cluster is highlighted instead of the whole
+                      word. Falls back to whole-word highlighting whenever
+                      highlightedCharIndex is null — no letter timing was
+                      available for this ayah/reciter. */}
                   {splitAyahIntoWords(ayah.arabic).map((word, i) => {
                     const active = highlightedWordIndex === i;
                     const lowConfidence = active && highlightedWordConfidence != null && highlightedWordConfidence < LOW_CONFIDENCE_THRESHOLD;
+                    const highlightClass = lowConfidence
+                      ? "text-amber-300/90 border-b-2 border-dashed border-amber-400/60 px-0.5"
+                      : "bg-emerald-500/20 text-emerald-300 px-0.5";
+                    const highlightTitle = lowConfidence ? "Estimated timing — lower confidence" : undefined;
+
+                    if (active && highlightedCharIndex != null) {
+                      return (
+                        <span key={i}>
+                          {wordLetterClusters(word).map((cluster) => {
+                            const letterActive = cluster.charIndex === highlightedCharIndex;
+                            return (
+                              <span
+                                key={cluster.charIndex}
+                                className={`transition-colors duration-150 rounded ${letterActive ? highlightClass : ""}`}
+                                title={letterActive ? highlightTitle : undefined}
+                              >
+                                {cluster.text}
+                              </span>
+                            );
+                          })}
+                          {" "}
+                        </span>
+                      );
+                    }
+
                     return (
                       <span key={i}>
                         <span
-                          className={`transition-colors duration-150 rounded ${
-                            active
-                              ? lowConfidence
-                                ? "text-amber-300/90 border-b-2 border-dashed border-amber-400/60 px-0.5"
-                                : "bg-emerald-500/20 text-emerald-300 px-0.5"
-                              : ""
-                          }`}
-                          title={lowConfidence ? "Estimated timing — lower confidence" : undefined}
+                          className={`transition-colors duration-150 rounded ${active ? highlightClass : ""}`}
+                          title={active ? highlightTitle : undefined}
                         >
                           {word}
                         </span>

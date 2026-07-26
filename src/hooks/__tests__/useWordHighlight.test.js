@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findActiveWord } from "@/hooks/useWordHighlight";
+import { findActiveWord, useLetterHighlight } from "@/hooks/useWordHighlight";
 
 const words = [
   { wordIndex: 0, startSec: 0.0, endSec: 0.5, confidence: 1 },
@@ -43,5 +43,19 @@ describe("findActiveWord", () => {
     // rendering concern for callers (Step 5), not this lookup's job.
     const active = findActiveWord(words, 1.5);
     expect(active.confidence).toBe(0.4);
+  });
+
+  it("works identically for letter-shaped items (extra charIndex field is irrelevant to the lookup)", () => {
+    const letters = [
+      { wordIndex: 0, charIndex: 0, startSec: 0.0, endSec: 0.3, confidence: 1 },
+      { wordIndex: 0, charIndex: 2, startSec: 0.3, endSec: 0.5, confidence: 1 },
+    ];
+    expect(findActiveWord(letters, 0.4)).toEqual(letters[1]);
+  });
+});
+
+describe("useLetterHighlight", () => {
+  it("is exported as a hook, reusing findActiveWord's exact lookup", () => {
+    expect(typeof useLetterHighlight).toBe("function");
   });
 });

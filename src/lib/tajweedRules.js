@@ -83,6 +83,34 @@ export function splitAyahIntoWords(arabicText) {
   return arabicText.trim().split(/\s+/).filter(Boolean);
 }
 
+// Returns this word's base-letter positions, in reading order — the same
+// charIndex convention rule hits below use (a diacritic's own array slot is
+// never a charIndex; it's absorbed into the base letter immediately before
+// it). Used by useLetterHighlight's estimation path to know how many
+// letter-sized slices to divide a word's timing window into.
+export function baseLetterCharIndexes(word) {
+  const chars = Array.from(word);
+  const indexes = [];
+  for (let i = 0; i < chars.length; i++) {
+    if (!isDiacritic(chars[i])) indexes.push(i);
+  }
+  return indexes;
+}
+
+// One cluster per base letter, each carrying its own trailing diacritics —
+// the rendering-side counterpart of baseLetterCharIndexes, shared by every
+// screen that highlights at letter granularity (AyahDisplay.jsx,
+// ComparePlayback.jsx) so they can't drift into two different ideas of
+// "where does letter N start and end".
+export function wordLetterClusters(word) {
+  const chars = Array.from(word);
+  const charIndexes = baseLetterCharIndexes(word);
+  return charIndexes.map((charIndex, i) => ({
+    charIndex,
+    text: chars.slice(charIndex, charIndexes[i + 1] ?? chars.length).join(""),
+  }));
+}
+
 // Walks one word's characters (base letters + trailing diacritics grouped
 // together) and returns Tajweed rule hits within it. `nextWord` (if any)
 // is used to check for Madd Munfasil across a word boundary.

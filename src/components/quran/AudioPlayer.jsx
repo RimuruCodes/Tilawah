@@ -8,6 +8,7 @@ import { getCachedWordTimings } from "@/lib/wordTimingCache";
 import { estimateReferenceWordTiming } from "@/lib/recitationService";
 import { isAsrEnabled } from "@/lib/asrEngine";
 import { findActiveWord } from "@/hooks/useWordHighlight";
+import { buildLetterTimings } from "@/lib/letterTiming";
 
 const FOLLOW_ALONG_KEY = "qc_follow_along_enabled";
 
@@ -43,9 +44,14 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
   // Ground-truth/estimated word windows for the CURRENTLY LOADED ayah only
   // (null when nothing is available for this reciter+ayah) — recomputed
   // once per ayah change, not per playback tick, since it only depends on
-  // which ayah is loaded. lastWordRef dedupes onWordHighlight calls so it
-  // only fires on an actual word transition, not every 100ms poll tick.
+  // which ayah is loaded. currentAyahLetterTimingsRef is the even-divided
+  // per-letter breakdown of the SAME windows (see letterTiming.js) — null
+  // whenever word windows themselves are null, or the ayah text wasn't
+  // available to divide against. lastWordRef dedupes onWordHighlight calls
+  // so it only fires on an actual word/letter transition, not every 100ms
+  // poll tick.
   const currentAyahWordWindowsRef = useRef(null);
+  const currentAyahLetterTimingsRef = useRef(null);
   const lastWordRef = useRef(null);
   // Invalidates an in-flight async word-timing lookup if the ayah changes
   // again before it resolves (skip/restart while a cache-or-estimate call
@@ -80,14 +86,24 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
     lastWordRef.current = null;
     onWordHighlightRef.current?.(ayahNumber, null);
 
+    const ayah = ayahsRef.current?.find((a) => a.number === ayahNumber);
+
+    // Letter timing is always derived from whatever word windows we have —
+    // real QUA windows or ASR-estimated ones alike (see letterTiming.js for
+    // why letter position is an estimate either way) — so every path below
+    // sets both refs together rather than letting them drift out of sync.
+    const setWordWindows = (windows) => {
+      currentAyahWordWindowsRef.current = windows;
+      currentAyahLetterTimingsRef.current = windows && ayah?.arabic ? buildLetterTimings(windows, ayah.arabic) : null;
+    };
+
     const quaWindows = getQuaWordWindowsForAyah(reciterFolderRef.current, surahNumberRef.current, ayahNumber);
     if (quaWindows) {
-      currentAyahWordWindowsRef.current = quaWindows;
+      setWordWindows(quaWindows);
       return;
     }
-    currentAyahWordWindowsRef.current = null;
+    setWordWindows(null);
 
-    const ayah = ayahsRef.current?.find((a) => a.number === ayahNumber);
     if (!ayah?.arabic) return;
 
     (async () => {
@@ -101,14 +117,14 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
         });
         if (isStale()) return;
         setEstimating(false);
-        if (result.words) currentAyahWordWindowsRef.current = result.words;
+        if (result.words) setWordWindows(result.words);
       } else {
         // Toggle is off (or ASR is off for this device): only ever show
         // data that's ALREADY cached from a previous opted-in session —
         // never trigger new computation.
         const cached = await getCachedWordTimings(reciterFolderRef.current, surahNumberRef.current, ayahNumber);
         if (isStale()) return;
-        if (cached?.words?.length) currentAyahWordWindowsRef.current = cached.words;
+        if (cached?.words?.length) setWordWindows(cached.words);
       }
     })();
   }, [asrDeviceEnabled]);
@@ -191,12 +207,22 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
           const t = audioRef.current.currentTime;
           setProgress(t);
 
-          const activeWord = findActiveWord(currentAyahWordWindowsRef.current, t);
-          const activeIdx = activeWord?.wordIndex ?? null;
-          if (activeIdx !== (lastWordRef.current?.wordIndex ?? null)) {
-            lastWordRef.current = activeWord;
+          // Letter granularity when available, falling back to word
+          // granularity — never both at once, since currentAyahLetterTimingsRef
+          // is only ever non-null when it was successfully derived from the
+          // exact word windows currently in currentAyahWordWindowsRef.
+          const activeItem = currentAyahLetterTimingsRef.current
+            ? findActiveWord(currentAyahLetterTimingsRef.current, t)
+            : findActiveWord(currentAyahWordWindowsRef.current, t);
+          // Dedupe key includes charIndex: moving between two letters of the
+          // SAME word must still fire an update, which a wordIndex-only
+          // comparison would miss.
+          const activeKey = activeItem ? `${activeItem.wordIndex}:${activeItem.charIndex ?? ""}` : null;
+          const lastKey = lastWordRef.current ? `${lastWordRef.current.wordIndex}:${lastWordRef.current.charIndex ?? ""}` : null;
+          if (activeKey !== lastKey) {
+            lastWordRef.current = activeItem;
             const ayah = ayahsRef.current?.[currentIndexRef.current];
-            if (ayah) onWordHighlightRef.current?.(ayah.number, activeWord);
+            if (ayah) onWordHighlightRef.current?.(ayah.number, activeItem);
           }
         }
       }, 100);

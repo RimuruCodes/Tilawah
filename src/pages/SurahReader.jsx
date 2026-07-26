@@ -129,9 +129,12 @@ export default function SurahReader() {
   }, []);
 
   // `word` is the full { wordIndex, startSec, endSec, confidence } object
-  // (or null) from AudioPlayer's useWordHighlight lookup — confidence rides
+  // (or null) from AudioPlayer's word/letter lookup — confidence rides
   // along so AyahDisplay can style a low-confidence (ASR-estimated) word
-  // differently from a verified (QUA) one.
+  // differently from a verified (QUA) one. `charIndex` is present only when
+  // AudioPlayer resolved letter-level timing for this ayah (see
+  // letterTiming.js); AyahDisplay falls back to whole-word highlighting
+  // when it's absent.
   const handleWordHighlight = useCallback((ayahNum, word) => {
     setHighlightedWord(word ? { ayahNumber: ayahNum, ...word } : null);
   }, []);
@@ -338,6 +341,7 @@ export default function SurahReader() {
                   arabicScale={arabicScale}
                   isHighlighted={highlightedAyah === ayah.number}
                   highlightedWordIndex={highlightedWord?.ayahNumber === ayah.number ? highlightedWord.wordIndex : null}
+                  highlightedCharIndex={highlightedWord?.ayahNumber === ayah.number ? highlightedWord.charIndex ?? null : null}
                   highlightedWordConfidence={highlightedWord?.ayahNumber === ayah.number ? highlightedWord.confidence : null}
                   memorizationStatus={memorizationMap[ayah.number]}
                   lastScore={lastScoreMap[ayah.number]}

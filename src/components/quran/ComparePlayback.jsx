@@ -11,30 +11,55 @@
 // (the other stays quietly audible underneath) and the playhead follows
 // YOUR recording on the waveform.
 //
-// Word-by-word follow-along: BOTH sides highlight their own currently-
-// spoken word at once, in visibly different styles (color AND shape, not
-// color alone) — using useWordHighlight against whichever timing data the
+// Word-by-word (or letter-by-letter, when available) follow-along: BOTH
+// sides highlight their own currently-spoken position at once, in visibly
+// different styles (color AND shape, not color alone) — using
+// useWordHighlight/useLetterHighlight against whichever timing data the
 // caller already has (QUA ground truth, ASR-estimated, or the user's own
-// Tajweed-analysis word timing). Purely additive: with no word data for a
+// Tajweed-analysis word timing). Letter timing is derived here, on the fly,
+// from that same word data (see letterTiming.js — always an even-division
+// estimate, never a separate verified tier), so callers don't need to
+// compute or thread anything new. Purely additive: with no word data for a
 // side, that side just shows plain text, exactly like before this feature.
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Play, Pause, Volume2 } from "lucide-react";
-import { splitAyahIntoWords } from "@/lib/tajweedRules";
-import { useWordHighlight } from "@/hooks/useWordHighlight";
+import { splitAyahIntoWords, wordLetterClusters } from "@/lib/tajweedRules";
+import { useWordHighlight, useLetterHighlight } from "@/hooks/useWordHighlight";
+import { buildLetterTimings } from "@/lib/letterTiming";
 
 const LOUD = 1.0;
 const QUIET = 0.15;
 const LOW_CONFIDENCE_THRESHOLD = 0.7; // matches AyahDisplay.jsx / tajweedAnalysis.js's "shaky" cutoff
 
-// One color-coded, word-highlighted line of Arabic text. `side` picks the
-// color scheme so "reciter" and "you" are never visually ambiguous even
-// without color (reciter: solid underline; you: solid background box) —
-// mirrors AyahDisplay's low-confidence dashed treatment for estimated timing.
-function HighlightedText({ text, activeWord, side }) {
+// One color-coded, word- or letter-highlighted line of Arabic text. `side`
+// picks the color scheme so "reciter" and "you" are never visually
+// ambiguous even without color (reciter: solid underline; you: solid
+// background box) — mirrors AyahDisplay's low-confidence dashed treatment
+// for estimated timing. `activeItem` is whatever useWordHighlight/
+// useLetterHighlight resolved — a charIndex on it means highlight just that
+// one letter cluster; its absence means highlight the whole active word.
+function HighlightedText({ text, activeItem, side }) {
   if (!text) return null;
   const words = splitAyahIntoWords(text);
-  const activeIdx = activeWord?.wordIndex ?? null;
-  const lowConfidence = activeWord != null && activeWord.confidence != null && activeWord.confidence < LOW_CONFIDENCE_THRESHOLD;
+  const activeIdx = activeItem?.wordIndex ?? null;
+  const activeCharIdx = activeItem?.charIndex ?? null;
+  const lowConfidence = activeItem != null && activeItem.confidence != null && activeItem.confidence < LOW_CONFIDENCE_THRESHOLD;
+
+  const classFor = (isActive) => {
+    let cls = "transition-colors duration-150 rounded px-0.5 ";
+    if (isActive && lowConfidence) {
+      cls += side === "reference"
+        ? "text-sky-300/90 border-b-2 border-dashed border-sky-400/60"
+        : "text-emerald-300/90 border-b-2 border-dashed border-emerald-400/60";
+    } else if (isActive) {
+      cls += side === "reference"
+        ? "bg-sky-500/20 text-sky-300 underline decoration-2 underline-offset-4"
+        : "bg-emerald-500/20 text-emerald-300";
+    } else {
+      cls += "text-slate-300";
+    }
+    return cls;
+  };
 
   return (
     <p
@@ -45,21 +70,23 @@ function HighlightedText({ text, activeWord, side }) {
     >
       {words.map((word, i) => {
         const active = i === activeIdx;
-        let cls = "transition-colors duration-150 rounded px-0.5 ";
-        if (active && lowConfidence) {
-          cls += side === "reference"
-            ? "text-sky-300/90 border-b-2 border-dashed border-sky-400/60"
-            : "text-emerald-300/90 border-b-2 border-dashed border-emerald-400/60";
-        } else if (active) {
-          cls += side === "reference"
-            ? "bg-sky-500/20 text-sky-300 underline decoration-2 underline-offset-4"
-            : "bg-emerald-500/20 text-emerald-300";
-        } else {
-          cls += "text-slate-300";
+
+        if (active && activeCharIdx != null) {
+          return (
+            <span key={i}>
+              {wordLetterClusters(word).map((cluster) => (
+                <span key={cluster.charIndex} className={classFor(cluster.charIndex === activeCharIdx)}>
+                  {cluster.text}
+                </span>
+              ))}
+              {" "}
+            </span>
+          );
         }
+
         return (
           <span key={i}>
-            <span className={cls}>{word}</span>
+            <span className={classFor(active)}>{word}</span>
             {" "}
           </span>
         );
@@ -86,10 +113,22 @@ export default function ComparePlayback({
   const [refTime, setRefTime] = useState(0);
   const [refPlayingIndex, setRefPlayingIndex] = useState(0);
 
-  const userActiveWord = useWordHighlight(userWords, playing ? userTime : null);
   const refWordsForCurrentAyah = referenceWordsByAyah?.[refPlayingIndex] ?? null;
-  const refActiveWord = useWordHighlight(refWordsForCurrentAyah, playing ? refTime : null);
   const refTextForCurrentAyah = referenceAyahTexts?.[refPlayingIndex] ?? null;
+
+  const userLetters = useMemo(() => buildLetterTimings(userWords, userAyahText), [userWords, userAyahText]);
+  const refLettersForCurrentAyah = useMemo(
+    () => buildLetterTimings(refWordsForCurrentAyah, refTextForCurrentAyah),
+    [refWordsForCurrentAyah, refTextForCurrentAyah]
+  );
+
+  const userActiveWord = useWordHighlight(userWords, playing ? userTime : null);
+  const userActiveLetter = useLetterHighlight(userLetters, playing ? userTime : null);
+  const userActiveItem = userActiveLetter ?? userActiveWord;
+
+  const refActiveWord = useWordHighlight(refWordsForCurrentAyah, playing ? refTime : null);
+  const refActiveLetter = useLetterHighlight(refLettersForCurrentAyah, playing ? refTime : null);
+  const refActiveItem = refActiveLetter ?? refActiveWord;
 
   const applyVolumes = useCallback((focusSide) => {
     if (userAudioRef.current) userAudioRef.current.volume = focusSide === "user" ? LOUD : QUIET;
@@ -180,13 +219,13 @@ export default function ComparePlayback({
           {refTextForCurrentAyah && (
             <div className="flex items-start gap-2">
               <span className="text-[10px] uppercase tracking-wide text-sky-400/80 font-medium pt-1.5 flex-shrink-0">Reciter</span>
-              <HighlightedText text={refTextForCurrentAyah} activeWord={refActiveWord} side="reference" />
+              <HighlightedText text={refTextForCurrentAyah} activeItem={refActiveItem} side="reference" />
             </div>
           )}
           {userAyahText && (
             <div className="flex items-start gap-2">
               <span className="text-[10px] uppercase tracking-wide text-emerald-400/80 font-medium pt-1.5 flex-shrink-0">You</span>
-              <HighlightedText text={userAyahText} activeWord={userActiveWord} side="user" />
+              <HighlightedText text={userAyahText} activeItem={userActiveItem} side="user" />
             </div>
           )}
           {!hasAnyWordData && (
