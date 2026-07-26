@@ -165,44 +165,83 @@ function averageWordDuration(alignments, chunks) {
   return durations.reduce((a, b) => a + b, 0) / durations.length;
 }
 
+// Real-evidence tiers for TAJWEED_RULE_DEFINITIONS' `validation` field below,
+// from tools/qdat-eval's QDAT validation (2026-07; see its README for the
+// full numbers this is summarized from):
+//  - "validated": beats a real always-pass baseline by a real margin against
+//    ~1,400 expert-labeled recordings.
+//  - "weak-signal": WAS tested against that same real data, but the result
+//    barely (or doesn't) beat the baseline — a real measurement, just not a
+//    useful one yet.
+//  - "unvalidated": never tested against real labeled data at all — QDAT
+//    has no examples of the rule, so the threshold is a hand-picked guess
+//    with no empirical check behind it, positive or negative.
+const MADD_VALIDATION = {
+  status: "validated",
+  note: "Tested against ~1,400 real expert-labeled recordings (2026-07): meaningfully beats guessing \"correct\" every time (68-69% accuracy vs a 56-58% baseline) — the most reliable of the app's Tajweed checks. (Tested via the Madd Munfasil variant specifically; Tabi'i/Lazim share the identical measurement method.)",
+};
+const NASAL_WEAK_VALIDATION = (range, baseline) => ({
+  status: "weak-signal",
+  note: `Tested against ~1,400 real expert-labeled recordings (2026-07): this duration-based check only ${range} beats guessing "correct" every time (baseline ~${baseline}) — treat a warn here loosely, it could easily be wrong.`,
+});
+const NASAL_UNVALIDATED = {
+  status: "unvalidated",
+  note: "Never tested against real labeled recordings — the dataset used to validate the app's other checks has no examples of this rule. It shares its detection method with Ghunnah/Ikhfa, which tested weakly, so treat it with at least the same skepticism.",
+};
+
 // Plain-language explanation of each rule, shown once per rule type so
 // people understand *what* is being checked, not just pass/warn.
 export const TAJWEED_RULE_DEFINITIONS = {
   qalqalah: {
     title: "Qalqalah (bounce)",
     definition: "A slight bouncing echo produced on the letters ق ط ب ج د when they carry a sukoon (no vowel) — instead of stopping the sound flatly, you release it with an audible little bounce.",
+    validation: {
+      status: "unvalidated",
+      note: "Never tested against real labeled recordings — the dataset used to validate the app's other checks has no Qalqalah labels, so this threshold is a hand-picked estimate, not a measured one.",
+    },
   },
   ghunnah: {
     title: "Ghunnah (nasal hold)",
     definition: "A nasal hum held for about 2 counts on ن or م when they carry a shaddah (doubling mark) — the sound resonates through the nose while the mouth stays closed/blocked.",
+    validation: NASAL_WEAK_VALIDATION("barely", "81-85%"),
   },
   iqlab: {
     title: "Iqlab (noon → meem sound)",
     definition: "When a noon sakinah or tanween is followed by ب, it's converted into a hidden م sound with a nasal hum held for about 2 counts — the lips close as if saying \"m\" instead of \"n\".",
+    validation: NASAL_UNVALIDATED,
   },
   idgham_ghunnah: {
     title: "Idgham with Ghunnah (merging with nasal hold)",
     definition: "When a noon sakinah or tanween is followed by ي ن م و at the start of the next word, the noon sound merges into that letter, carried on a nasal hum held for about 2 counts. Honest limit: the audio check only verifies that a sustained nasal hold happened at the right spot and lasted long enough — it cannot verify the merge itself (it can't tell proper merging apart from clearly pronouncing the noon with an added hum).",
+    validation: NASAL_UNVALIDATED,
   },
   idgham_no_ghunnah: {
     title: "Idgham without Ghunnah (direct merge)",
     definition: "When a noon sakinah or tanween is followed by ل or ر at the start of the next word, the noon merges directly into that letter with NO nasal hum — a smooth glide, unlike Idgham with Ghunnah's hummed merge. Honest limit: the audio check only verifies the absence of an audible release/stop at the noon's position — it can't tell whether the following ل/ر was actually doubled (geminated) as required.",
+    validation: {
+      status: "unvalidated",
+      note: "Never tested against real labeled recordings — this threshold is a hand-picked estimate, not a validated measurement.",
+    },
   },
   ikhfa: {
     title: "Ikhfa (hiding the noon)",
     definition: "When a noon sakinah or tanween is followed by one of the 15 Ikhfa letters (ت ث ج د ذ ز س ش ص ض ط ظ ف ق ك), the noon is \"hidden\": pronounced as a light nasal hum held for about 2 counts while the mouth prepares for the next letter. Honest limit: the audio check only verifies a sustained nasal hold at the right position — it cannot verify the noon was actually hidden rather than pronounced clearly with a hum added.",
+    validation: NASAL_WEAK_VALIDATION("slightly", "52-54%"),
   },
   madd_natural: {
     title: "Madd Tabi'i (natural elongation)",
     definition: "A natural elongation of about 2 counts on ا, و, or ي acting as a long vowel — roughly the time it takes to pronounce a single extra beat.",
+    validation: MADD_VALIDATION,
   },
   madd_extended: {
     title: "Madd Muttasil / Munfasil (extended elongation)",
     definition: "The vowel is held for about 4-5 counts because a hamzah (ء) follows — either later in the same word (Muttasil) or at the start of the next word (Munfasil).",
+    validation: MADD_VALIDATION,
   },
   madd_obligatory: {
     title: "Madd Lazim (obligatory elongation)",
     definition: "The longest elongation, held for 6 counts, required when the vowel letter is followed by a shaddah or sukoon within the same word.",
+    validation: MADD_VALIDATION,
   },
 };
 
@@ -324,6 +363,18 @@ function buildRuleNote(rule, verdict, { word, letter, actualCounts, expectedCoun
         : rule.ruleType === "ikhfa"
         ? " (Note: this only measures the nasal hold's timing — it can't confirm the noon was truly hidden rather than pronounced clearly with a hum.)"
         : "";
+    // Ghunnah/Ikhfa tested weak against real labeled data (see
+    // TAJWEED_RULE_DEFINITIONS' validation field / tools/qdat-eval/README.md)
+    // — copy-only honesty here, no change to the verdict itself: the wording
+    // says plainly that this specific measurement could easily be wrong,
+    // rather than stating the outcome with the same confidence as a
+    // validated check like Madd.
+    const isWeakSignal = rule.ruleType === "ghunnah" || rule.ruleType === "ikhfa";
+    if (isWeakSignal) {
+      return verdict === "pass"
+        ? `${label[0].toUpperCase()}${label.slice(1)} on ${letter} in ${w} looked sustained here, though this measurement is weak — it's easy for real timing errors here to slip past it.${caveat}`
+        : `${label[0].toUpperCase()}${label.slice(1)} on ${letter} in ${w} looked short or spiky rather than sustained — though this measurement is weak enough that it could be flagging something that was actually fine. Still, aim to ring it through your nose for about 2 counts, humming through the transition rather than passing over it quickly.${caveat}`;
+    }
     return verdict === "pass"
       ? `${label[0].toUpperCase()}${label.slice(1)} on ${letter} in ${w} was sustained well.${caveat}`
       : `${label[0].toUpperCase()}${label.slice(1)} on ${letter} in ${w} seemed short or spiky rather than sustained. This should ring through your nose for about 2 counts — try humming through that transition rather than passing over it quickly.${caveat}`;

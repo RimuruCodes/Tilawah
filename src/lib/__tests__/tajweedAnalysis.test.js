@@ -286,6 +286,10 @@ describe("analyzeTajweedFromTranscription", () => {
     expect(["pass", "warn"]).toContain(ikhfa.verdict);
     expect(ikhfa.note.length).toBeGreaterThan(0);
     expect(result.glossary.some((g) => g.type === "ikhfa")).toBe(true);
+    // Ikhfa tested weak-signal against real QDAT data (see
+    // TAJWEED_RULE_DEFINITIONS) — the note must say so plainly rather than
+    // stating the verdict with the same confidence as a validated check.
+    expect(ikhfa.note).toMatch(/this measurement is weak|could be flagging something that was actually fine/);
   });
 
   it("runs the nasal-hold acoustic check for Idgham with Ghunnah", () => {
@@ -307,6 +311,12 @@ describe("analyzeTajweedFromTranscription", () => {
     const idgham = result.ruleChecks.find((c) => c.ruleType === "idgham_ghunnah");
     expect(idgham).toBeDefined();
     expect(["pass", "warn"]).toContain(idgham.verdict);
+    // Idgham with Ghunnah is unvalidated (never tested against real data at
+    // all), NOT weak-signal (tested and found weak) — those are different
+    // honest claims, so it must keep its original wording, not Ikhfa's
+    // "this measurement is weak" phrasing which specifically means "we
+    // checked, and it barely works."
+    expect(idgham.note).not.toMatch(/this measurement is weak|could be flagging something that was actually fine/);
   });
 
   it("treats a corrupted (end < start) ASR timestamp as unchecked, never a negative measurement", () => {
@@ -373,6 +383,34 @@ describe("TAJWEED_RULE_DEFINITIONS — honesty caveats for the new rules", () =>
       // The glossary must not oversell the check: it only measures the
       // nasal hold, not which consonant was produced.
       expect(def.definition).toMatch(/cannot verify|can't tell|only verifies/i);
+    }
+  });
+});
+
+describe("TAJWEED_RULE_DEFINITIONS — validation tiers (honest evidence status per rule)", () => {
+  const VALID_STATUSES = new Set(["validated", "weak-signal", "unvalidated"]);
+
+  it("every rule has a validation status and a non-empty note", () => {
+    for (const [type, def] of Object.entries(TAJWEED_RULE_DEFINITIONS)) {
+      expect(VALID_STATUSES.has(def.validation?.status), `${type} has an invalid/missing validation.status`).toBe(true);
+      expect(def.validation.note.length, `${type}'s validation.note is empty`).toBeGreaterThan(0);
+    }
+  });
+
+  it("classifies the Madd family as validated — the only rule that beat a real QDAT baseline by a real margin", () => {
+    for (const type of ["madd_natural", "madd_extended", "madd_obligatory"]) {
+      expect(TAJWEED_RULE_DEFINITIONS[type].validation.status).toBe("validated");
+    }
+  });
+
+  it("classifies Ghunnah/Ikhfa as weak-signal — tested against QDAT, barely beat the baseline", () => {
+    expect(TAJWEED_RULE_DEFINITIONS.ghunnah.validation.status).toBe("weak-signal");
+    expect(TAJWEED_RULE_DEFINITIONS.ikhfa.validation.status).toBe("weak-signal");
+  });
+
+  it("classifies Qalqalah, Iqlab, and both Idgham types as unvalidated — QDAT has no labels for any of them", () => {
+    for (const type of ["qalqalah", "iqlab", "idgham_ghunnah", "idgham_no_ghunnah"]) {
+      expect(TAJWEED_RULE_DEFINITIONS[type].validation.status).toBe("unvalidated");
     }
   });
 });
