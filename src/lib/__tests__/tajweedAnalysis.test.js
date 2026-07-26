@@ -365,7 +365,7 @@ describe("analyzeTajweedFromTranscription", () => {
 
 describe("TAJWEED_RULE_DEFINITIONS — honesty caveats for the new rules", () => {
   it("defines idgham_ghunnah and ikhfa, each stating what the check can NOT verify", () => {
-    for (const type of ["idgham_ghunnah", "ikhfa"]) {
+    for (const type of ["idgham_ghunnah", "ikhfa", "idgham_no_ghunnah"]) {
       const def = TAJWEED_RULE_DEFINITIONS[type];
       expect(def).toBeDefined();
       expect(def.title.length).toBeGreaterThan(0);
@@ -610,4 +610,54 @@ describe("QUA ground-truth reference — scoped to Husary/Minshawi only", () => 
   });
 });
 
+describe("checkTajweedRules — Idgham without Ghunnah", () => {
+  // مِن رَّبِّهِمْ: bare noon sakinah in مِن merging (without ghunnah) into the
+  // ر of رَّبِّهِمْ. Window for word 0 (من), from chunk [0, 0.4]: [0, 0.5].
+  const ayahArabicText = "مِن رَّبِّهِمْ";
+  const alignments = [{ recognizedIndex: 0 }, { recognizedIndex: 1 }];
+  const chunks = [{ timestamp: [0, 0.4] }, { timestamp: [0.45, 1.0] }];
+
+  it("warns when a release transient is present (an audible stop-then-release rather than a smooth merge)", () => {
+    // 2.5x amplitude ratio -> bounceDb ~5.3, clearing the 4dB threshold.
+    const userSamples = makeQalqalahShape({ tailAmplitude: 0.1 * 2.5 });
+    const results = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
+    const idgham = results.find((c) => c.ruleType === "idgham_no_ghunnah");
+    expect(idgham).toBeDefined();
+    expect(idgham.measured.mode).toBe("threshold");
+    expect(idgham.measured.transientDb).toBeGreaterThan(4);
+    expect(idgham.verdict).toBe("warn");
+  });
+
+  it("passes when no release transient is present (a smooth, sustained glide)", () => {
+    const userSamples = makeSustainedTone({ holdSec: 0.6 });
+    const results = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
+    const idgham = results.find((c) => c.ruleType === "idgham_no_ghunnah");
+    expect(idgham).toBeDefined();
+    expect(idgham.measured.mode).toBe("threshold");
+    expect(idgham.measured.transientDb).toBeLessThan(4);
+    expect(idgham.verdict).toBe("pass");
+  });
+
+  it("reference-anchored: passes a transient that exactly matches the reference reciter's own", () => {
+    const userSamples = makeQalqalahShape({ tailAmplitude: 0.1 * 2.5 }); // would warn under the fixed threshold alone
+    const referenceAlignment = makeIdentityReferenceAlignment(userSamples);
+    const results = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment });
+    const idgham = results.find((c) => c.ruleType === "idgham_no_ghunnah");
+    expect(idgham.measured.mode).toBe("reference");
+    expect(idgham.verdict).toBe("pass");
+  });
+
+  it("includes idgham_no_ghunnah in the glossary when present", () => {
+    const asrResult = {
+      text: "من ربهم",
+      chunks: [
+        { text: "من", timestamp: [0, 0.4] },
+        { text: "ربهم", timestamp: [0.45, 1.0] },
+      ],
+    };
+    const userSamples = makeSustainedTone({ holdSec: 0.6 });
+    const result = analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate });
+    expect(result.glossary.some((g) => g.type === "idgham_no_ghunnah")).toBe(true);
+  });
+});
 

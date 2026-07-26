@@ -6,15 +6,18 @@
 //
 // This intentionally covers the rules that are realistically checkable
 // from a plain waveform: Qalqalah (an audible "bounce" on certain
-// letters), Madd (elongation length), and the nasal-hold family —
-// Ghunnah, Iqlab, Idgham-with-Ghunnah, and Ikhfa, all of which share the
-// same acoustic signature (a nasal hum sustained for ~2 counts). For the
-// last two, only the hold's presence/length at the right position is
-// checkable — not *which* consonant was produced (proper merging/hiding
-// of the noon), which would need phoneme-level analysis. Idgham WITHOUT
-// ghunnah (before ل ر) is deliberately not covered: its signature is the
-// absence of a released noon, not a nasal hold, so this heuristic can't
-// see it.
+// letters), Madd (elongation length), the nasal-hold family — Ghunnah,
+// Iqlab, Idgham-with-Ghunnah, and Ikhfa, all of which share the same
+// acoustic signature (a nasal hum sustained for ~2 counts) — and Idgham
+// WITHOUT Ghunnah (before ل ر), whose signature is the opposite: the
+// ABSENCE of a released noon sound (see tajweedAnalysis.js's check, which
+// looks for the absence of a release transient rather than its presence,
+// as Qalqalah's does). For the nasal-hold family's last two rule types,
+// and for Idgham without Ghunnah, only the acoustic signature's
+// presence/absence at the right position is checkable — not *which*
+// consonant was actually produced (proper merging/hiding of the noon, or
+// proper gemination of the following ل/ر), which would need
+// phoneme-level analysis.
 //
 // Script-encoding note (verified against the Tanzil Uthmani text served
 // by api.alquran.cloud): an assimilated noon sakinah (Iqlab/Idgham/Ikhfa)
@@ -59,6 +62,10 @@ const ALEF_MADDA = "آ";
 // word boundary. (Within one word, noon before ي/و is Izhar Mutlaq — e.g.
 // دُنْيَا, قِنْوَان — never Idgham; restricting to word boundaries encodes that.)
 const IDGHAM_GHUNNAH_LETTERS = new Set([YA, NOON, MEEM, WAW]);
+// Idgham without Ghunnah: noon sakinah/tanween merges directly into ل or ر
+// across a word boundary, with no nasal hold — a smooth glide rather than
+// Idgham with Ghunnah's hummed merge.
+const IDGHAM_NO_GHUNNAH_LETTERS = new Set(["ل", "ر"]); // ل ر
 // Ikhfa: the 15 letters before which noon sakinah/tanween is "hidden"
 // into a nasal hum (everything except the Izhar six, ي ن م و, ل ر, and ب).
 const IKHFA_LETTERS = new Set([
@@ -170,9 +177,8 @@ function analyzeWord(word, wordIndex, nextWord) {
     const nextWordFirstChar = isLastLetterOfWord && nextWord ? Array.from(nextWord)[0] : null;
 
     // --- Noon sakinah / tanween family: Iqlab (before ب), Idgham with
-    // Ghunnah (before ي ن م و across words), Ikhfa (before the 15 Ikhfa
-    // letters). Idgham *without* ghunnah (before ل ر) is deliberately not
-    // detected — it has no nasal hold for the acoustic check to measure.
+    // Ghunnah (before ي ن م و across words), Idgham without Ghunnah
+    // (before ل ر across words), Ikhfa (before the 15 Ikhfa letters).
     // Noon sakinah comes in three written forms (see the encoding note at
     // the top of this file): explicit sukun (plain script, and Uthmani
     // Izhar), completely bare (Uthmani assimilation contexts), or carrying
@@ -218,6 +224,19 @@ function analyzeWord(word, wordIndex, nextWord) {
           wordIndex,
           charIndex: i,
           expectedCounts: 2,
+        });
+      } else if (followerIsInNextWord && followerChar && IDGHAM_NO_GHUNNAH_LETTERS.has(followerChar)) {
+        // --- Idgham without Ghunnah: noon/tanween merges directly into
+        // the next word's initial ل or ر, with no nasal hold at all — a
+        // smooth glide rather than a released noon sound. No count/hold
+        // is expected here (that's what distinguishes it from Idgham with
+        // Ghunnah), so expectedCounts is 0 rather than a duration target.
+        hits.push({
+          ruleType: "idgham_no_ghunnah",
+          label: "Idgham without Ghunnah (direct merge)",
+          wordIndex,
+          charIndex: i,
+          expectedCounts: 0,
         });
       } else if (followerChar && IKHFA_LETTERS.has(followerChar)) {
         // --- Ikhfa: noon/tanween "hidden" into a nasal hum before one of

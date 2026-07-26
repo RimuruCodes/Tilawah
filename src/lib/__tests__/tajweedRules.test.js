@@ -166,17 +166,47 @@ describe("findTajweedRules — Idgham with Ghunnah", () => {
     expect(idghamOf("قِنْوَانٌۭ دَانِيَةٌۭ")).toHaveLength(0);
   });
 
-  it("does not flag Idgham WITHOUT ghunnah (before ل or ر) — out of scope (2:26, 107:4)", () => {
+  it("classifies Idgham WITHOUT ghunnah (before ل or ر) as its own rule type, not idgham_ghunnah or ikhfa (2:26, 107:4)", () => {
     expect(idghamOf("مِن رَّبِّهِمْ")).toHaveLength(0);
     expect(idghamOf("فَوَيْلٌۭ لِّلْمُصَلِّينَ")).toHaveLength(0);
-    const ikhfa = findTajweedRules("مِن رَّبِّهِمْ").hits.filter((h) => h.ruleType === "ikhfa");
-    expect(ikhfa).toHaveLength(0);
+    const { hits } = findTajweedRules("مِن رَّبِّهِمْ");
+    expect(hits.filter((h) => h.ruleType === "ikhfa")).toHaveLength(0);
+    expect(hits.filter((h) => h.ruleType === "idgham_no_ghunnah")).toHaveLength(1);
   });
 
   it("does not flag Izhar (noon sakinah with explicit sukun before hamza, 6:99 مِّنْ أَعْنَابٍۢ)", () => {
     const { hits } = findTajweedRules("مِّنْ أَعْنَابٍۢ");
     const family = hits.filter((h) => ["idgham_ghunnah", "ikhfa", "iqlab"].includes(h.ruleType));
     expect(family).toHaveLength(0);
+  });
+});
+
+describe("findTajweedRules — Idgham without Ghunnah", () => {
+  const idghamNoGhunnahOf = (text) => findTajweedRules(text).hits.filter((h) => h.ruleType === "idgham_no_ghunnah");
+
+  it("detects bare noon sakinah before ra across words (2:5 هُدًى مِّن رَّبِّهِمْ)", () => {
+    const hits = idghamNoGhunnahOf("مِن رَّبِّهِمْ");
+    expect(hits).toHaveLength(1);
+    expect(hits[0].wordIndex).toBe(0);
+    expect(hits[0].expectedCounts).toBe(0);
+  });
+
+  it("detects tanween before lam across words (2:2 هُدًى لِّلْمُتَّقِينَ)", () => {
+    const hits = idghamNoGhunnahOf("هُدًى لِّلْمُتَّقِينَ");
+    expect(hits).toHaveLength(1);
+    expect(hits[0].wordIndex).toBe(0);
+  });
+
+  it("does not flag noon sakinah before ل/ر within a single word", () => {
+    // No real Izhar-Mutlaq-style exception is needed here since bare
+    // noon-sakinah-before-ل/ر doesn't occur word-internally in practice,
+    // but the across-word requirement itself must still hold: a lone,
+    // single-word text can never trigger this rule.
+    expect(idghamNoGhunnahOf("مِنْ")).toHaveLength(0);
+  });
+
+  it("does not flag Izhar (noon sakinah with explicit sukun before hamza, 6:99 مِّنْ أَعْنَابٍۢ)", () => {
+    expect(idghamNoGhunnahOf("مِّنْ أَعْنَابٍۢ")).toHaveLength(0);
   });
 });
 

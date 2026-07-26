@@ -181,6 +181,10 @@ export const TAJWEED_RULE_DEFINITIONS = {
     title: "Idgham with Ghunnah (merging with nasal hold)",
     definition: "When a noon sakinah or tanween is followed by ي ن م و at the start of the next word, the noon sound merges into that letter, carried on a nasal hum held for about 2 counts. Honest limit: the audio check only verifies that a sustained nasal hold happened at the right spot and lasted long enough — it cannot verify the merge itself (it can't tell proper merging apart from clearly pronouncing the noon with an added hum).",
   },
+  idgham_no_ghunnah: {
+    title: "Idgham without Ghunnah (direct merge)",
+    definition: "When a noon sakinah or tanween is followed by ل or ر at the start of the next word, the noon merges directly into that letter with NO nasal hum — a smooth glide, unlike Idgham with Ghunnah's hummed merge. Honest limit: the audio check only verifies the absence of an audible release/stop at the noon's position — it can't tell whether the following ل/ر was actually doubled (geminated) as required.",
+  },
   ikhfa: {
     title: "Ikhfa (hiding the noon)",
     definition: "When a noon sakinah or tanween is followed by one of the 15 Ikhfa letters (ت ث ج د ذ ز س ش ص ض ط ظ ف ق ك), the noon is \"hidden\": pronounced as a light nasal hum held for about 2 counts while the mouth prepares for the next letter. Honest limit: the audio check only verifies a sustained nasal hold at the right position — it cannot verify the noon was actually hidden rather than pronounced clearly with a hum added.",
@@ -234,6 +238,16 @@ export const TAJWEED_THRESHOLDS = {
   // dB the window's tail peak must rise above its mean energy to count as
   // an audible Qalqalah bounce.
   qalqalahBounceDb: 4,
+  // dB above which a tail energy rise reads as an audible released
+  // stop rather than a smooth merge — the mirror image of
+  // qalqalahBounceDb, used by Idgham without Ghunnah's absence-of-release
+  // check. Hand-picked like qalqalahBounceDb: QDAT has no labels for this
+  // rule either.
+  idghamNoGhunnahTransientDb: 4,
+  // Reference-anchored ceiling for the same check widens to this multiple
+  // of the reference reciter's own transient at that position, if that's
+  // higher than the fixed floor above.
+  idghamNoGhunnahRefToleranceFactor: 1.5,
   // Seconds of nasal hold required per "count", expressed as a fraction of
   // the reciter's own average word duration in this recording.
   nasalHoldCountWordFraction: 0.5,
@@ -271,6 +285,12 @@ function buildRuleNote(rule, verdict, { word, letter, actualCounts, expectedCoun
     return verdict === "pass"
       ? `Good — a clear bounce came through on the ${letter} in ${w}.`
       : `The bounce on ${letter} in ${w} wasn't clearly audible. Try releasing that letter with a light, audible "pop" — press the articulation point closed, then let go with a small echo, rather than cutting the sound off flatly or adding an extra vowel after it.`;
+  }
+
+  if (rule.ruleType === "idgham_no_ghunnah") {
+    return verdict === "pass"
+      ? `Good — the noon in ${w} merged smoothly into the following ل/ر with no audible release.`
+      : `The noon in ${w} sounded released rather than merged smoothly. For Idgham without Ghunnah, glide directly into the ل/ر with no stop and no hum in between — don't pronounce the noon clearly before it (that's Izhar), and don't hum through it either (that's Idgham with Ghunnah).`;
   }
 
   if (NASAL_HOLD_RULE_TYPES.has(rule.ruleType)) {
@@ -413,6 +433,31 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
         const hasBounce = bounceDb > TAJWEED_THRESHOLDS.qalqalahBounceDb;
         verdict = hasBounce ? "pass" : "warn";
         measured = { mode: "threshold", bounceDb };
+      }
+      results.push({ ...rule, word, letter, verdict, ...window, measured, note: buildRuleNote(rule, verdict, { word, letter }) });
+    } else if (rule.ruleType === "idgham_no_ghunnah") {
+      // The opposite acoustic signature to Qalqalah: instead of checking
+      // for the PRESENCE of a release bounce, this checks for its
+      // ABSENCE — a smooth, direct glide into the following ل/ر rather
+      // than a released, percussive noon sound.
+      const tailStart = Math.floor(energyDb.length * 0.6);
+      const tailMax = Math.max(...energyDb.slice(tailStart));
+      const transientDb = tailMax - meanDb;
+
+      let verdict;
+      let measured;
+      if (refEnergyDb) {
+        const refTailStart = Math.floor(refEnergyDb.length * 0.6);
+        const refTailMax = Math.max(...refEnergyDb.slice(refTailStart));
+        const refTransientDb = refTailMax - refMeanDb;
+        const ceiling = Math.max(TAJWEED_THRESHOLDS.idghamNoGhunnahTransientDb, refTransientDb * TAJWEED_THRESHOLDS.idghamNoGhunnahRefToleranceFactor);
+        const hasReleaseTransient = transientDb >= ceiling;
+        verdict = hasReleaseTransient ? "warn" : "pass";
+        measured = { mode: refMode, transientDb, refTransientDb };
+      } else {
+        const hasReleaseTransient = transientDb > TAJWEED_THRESHOLDS.idghamNoGhunnahTransientDb;
+        verdict = hasReleaseTransient ? "warn" : "pass";
+        measured = { mode: "threshold", transientDb };
       }
       results.push({ ...rule, word, letter, verdict, ...window, measured, note: buildRuleNote(rule, verdict, { word, letter }) });
     } else if (NASAL_HOLD_RULE_TYPES.has(rule.ruleType)) {
