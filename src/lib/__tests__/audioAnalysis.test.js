@@ -5,6 +5,8 @@ import {
   frameSignal,
   rms,
   energyProfileForWindow,
+  energyProfileForCachedWindow,
+  buildEnergyFrameCache,
   energyProfileForRefWindow,
   reduceNoise,
   buildFeatures,
@@ -240,6 +242,35 @@ describe("energyProfileForWindow", () => {
     const toneWindow = energyProfileForWindow(signal, TARGET_SAMPLE_RATE, 0.6, 0.9);
     const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
     expect(avg(toneWindow.energyDb)).toBeGreaterThan(avg(silenceWindow.energyDb));
+  });
+});
+
+describe("buildEnergyFrameCache / energyProfileForCachedWindow", () => {
+  it("produces byte-identical results to energyProfileForWindow's one-shot form, for multiple windows against the same signal", () => {
+    // This is the exact usage pattern checkTajweedRules moved to: frame
+    // once, look up many windows — must be indistinguishable in output
+    // from framing fresh on every lookup (the previous behavior).
+    const signal = makeToneBurst({ silenceSec: 0.5, toneSec: 0.5, amplitude: 0.7 });
+    const cache = buildEnergyFrameCache(signal, TARGET_SAMPLE_RATE);
+
+    const windows = [
+      [0, 0.3],
+      [0.6, 0.9],
+      [0.4, 0.7],
+    ];
+    for (const [startSec, endSec] of windows) {
+      const fresh = energyProfileForWindow(signal, TARGET_SAMPLE_RATE, startSec, endSec);
+      const cached = energyProfileForCachedWindow(cache, startSec, endSec);
+      expect(cached).toEqual(fresh);
+    }
+  });
+
+  it("energyProfileForWindow itself is defined in terms of the cache (single source of truth for the windowing math)", () => {
+    const signal = makeToneBurst({ silenceSec: 0.2, toneSec: 0.3, amplitude: 0.6 });
+    const direct = buildEnergyFrameCache(signal, TARGET_SAMPLE_RATE);
+    expect(energyProfileForCachedWindow(direct, 0, 0.2)).toEqual(
+      energyProfileForWindow(signal, TARGET_SAMPLE_RATE, 0, 0.2)
+    );
   });
 });
 

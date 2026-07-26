@@ -611,24 +611,48 @@ export async function compareRecitation(userArrayBuffer, referenceArrayBuffer) {
 // Extracts a per-frame energy (dB) slice for an arbitrary [startSec, endSec]
 // time window, used by the Tajweed heuristics to look at a specific word's
 // audio rather than the whole recording.
-// Shared by energyProfileForWindow (raw-samples path) and
-// energyProfileForRefWindow (precomputed-array path, used once the raw
-// reference audio has already been released — see recitationService.js).
+// Shared by energyProfileForCachedWindow (user-signal path, cached or
+// one-shot via energyProfileForWindow) and energyProfileForRefWindow
+// (precomputed reference-array path, used once the raw reference audio has
+// already been released — see recitationService.js).
 function frameWindowBounds(hopSec, startSec, endSec, frameCount) {
   const startFrame = Math.max(0, Math.floor(startSec / hopSec));
   const endFrame = Math.min(frameCount - 1, Math.ceil(endSec / hopSec));
   return { startFrame, endFrame };
 }
 
-export function energyProfileForWindow(samples, sampleRate, startSec, endSec) {
+// Precomputes the full-signal framing ONCE, for callers that need many
+// window lookups against the SAME signal — e.g. checkTajweedRules, which
+// does one lookup per rule occurrence. Re-running frameSignal from scratch
+// per lookup (the previous behavior of energyProfileForWindow) means a
+// continuous multi-ayah recitation with N rule occurrences re-frames the
+// entire recording N times just to read a few frames each time; this lets
+// that framing happen once and be sliced per rule instead.
+export function buildEnergyFrameCache(samples, sampleRate) {
   const { frames, hopSize } = frameSignal(samples, sampleRate);
-  const hopSec = hopSize / sampleRate;
+  return { frames, hopSec: hopSize / sampleRate };
+}
+
+// Same lookup as energyProfileForWindow, reading from an already-built
+// cache (see buildEnergyFrameCache) instead of re-framing the signal.
+export function energyProfileForCachedWindow(cache, startSec, endSec) {
+  const { frames, hopSec } = cache;
   const { startFrame, endFrame } = frameWindowBounds(hopSec, startSec, endSec, frames.length);
   const energyDb = [];
   for (let i = startFrame; i <= endFrame; i++) {
     if (frames[i]) energyDb.push(toDb(rms(frames[i])));
   }
   return { energyDb, hopSec };
+}
+
+// Extracts a per-frame energy (dB) slice for a single arbitrary
+// [startSec, endSec] window. For callers that need only one or a few
+// lookups against a signal, this one-shot form is simplest; callers doing
+// many lookups against the same signal (see checkTajweedRules) should use
+// buildEnergyFrameCache + energyProfileForCachedWindow instead, so the
+// signal is only framed once.
+export function energyProfileForWindow(samples, sampleRate, startSec, endSec) {
+  return energyProfileForCachedWindow(buildEnergyFrameCache(samples, sampleRate), startSec, endSec);
 }
 
 // Reference-side counterpart to energyProfileForWindow. Reads from the

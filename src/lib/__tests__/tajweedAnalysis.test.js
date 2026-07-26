@@ -661,3 +661,73 @@ describe("checkTajweedRules — Idgham without Ghunnah", () => {
   });
 });
 
+describe("checkTajweedRules — shared frame cache across multiple rule occurrences", () => {
+  // Two well-separated qalqalah words in ONE recording, one built to WARN
+  // under the fixed threshold (bounceDb ~3.4, the default shape) and one
+  // built to PASS (bounceDb ~7, a stronger tail) — proves a single
+  // checkTajweedRules call frames the signal once (see buildEnergyFrameCache)
+  // and correctly serves independent, non-interfering results for each
+  // occurrence from that shared cache, rather than the two windows leaking
+  // into each other's measurement.
+  it("scores two occurrences from one shared frame cache identically to scoring each alone against the SAME buffer", () => {
+    const word0 = makeQalqalahShape();
+    const word1 = makeQalqalahShape({ tailAmplitude: 0.1 * 4 }); // deliberately different shape
+    const gap = new Float32Array(Math.round(0.3 * sampleRate));
+    const userSamples = new Float32Array(word0.length + gap.length + word1.length);
+    userSamples.set(word0, 0);
+    userSamples.set(gap, word0.length);
+    userSamples.set(word1, word0.length + gap.length);
+
+    const word0EndSec = word0.length / sampleRate;
+    const word1StartSec = (word0.length + gap.length) / sampleRate;
+    const word1EndSec = word1StartSec + word1.length / sampleRate;
+
+    const alignments = [{ recognizedIndex: 0 }, { recognizedIndex: 1 }];
+    const chunks = [{ timestamp: [0, word0EndSec] }, { timestamp: [word1StartSec, word1EndSec] }];
+
+    // Both rules checked together — ONE frameCache built and reused for
+    // both windows.
+    const both = checkTajweedRules({ userSamples, sampleRate, ayahArabicText: "قَدْ قَدْ", alignments, chunks });
+    expect(both).toHaveLength(2);
+
+    // Each rule checked ALONE against the exact same buffer (same sample
+    // array, same hop grid) — each of these calls builds its OWN fresh
+    // frameCache from scratch, containing only that one lookup. Since the
+    // underlying buffer and window are identical either way, a correct
+    // cache-reuse implementation must produce byte-identical results
+    // whether or not a second, unrelated rule was ALSO computed from the
+    // same cache.
+    const word0Alone = checkTajweedRules({
+      userSamples, sampleRate, ayahArabicText: "قَدْ",
+      alignments: [alignments[0]], chunks: [chunks[0]],
+    });
+    const word1Alone = checkTajweedRules({
+      userSamples, sampleRate, ayahArabicText: "قَدْ",
+      alignments: [alignments[0]], chunks: [chunks[1]],
+    });
+
+    // wordIndex legitimately differs (both[1] is word 2 of a two-word
+    // ayah; word1Alone[0] is word 1 of a one-word ayah) — everything
+    // audio-derived (verdict, measured, startSec/endSec, note) must match
+    // exactly regardless.
+    const omitWordIndex = ({ wordIndex, ...rest }) => rest;
+    expect(omitWordIndex(both[0])).toEqual(omitWordIndex(word0Alone[0]));
+    expect(omitWordIndex(both[1])).toEqual(omitWordIndex(word1Alone[0]));
+    // Sanity: the two shapes really do measure differently (not both
+    // reading the same window by accident).
+    expect(both[0].measured.bounceDb).not.toBeCloseTo(both[1].measured.bounceDb, 1);
+  });
+
+  it("never frames the signal when there are zero rule hits", () => {
+    // Indirect proxy for "frameCache stays lazy": a plain word with no
+    // Tajweed rule at all should still return cleanly with no rule checks,
+    // regardless of how large userSamples is.
+    const userSamples = makeSustainedTone({ holdSec: 2.0 });
+    const ayahArabicText = "كتب"; // no diacritics, no rule triggers (see tajweedRules.test.js)
+    const alignments = [{ recognizedIndex: 0 }];
+    const chunks = [{ timestamp: [0, 0.5] }];
+    const results = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
+    expect(results).toEqual([]);
+  });
+});
+

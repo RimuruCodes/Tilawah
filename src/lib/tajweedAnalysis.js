@@ -1,5 +1,5 @@
 import { findTajweedRules } from "@/lib/tajweedRules";
-import { energyProfileForWindow, energyProfileForRefWindow } from "@/lib/audioAnalysis";
+import { buildEnergyFrameCache, energyProfileForCachedWindow, energyProfileForRefWindow } from "@/lib/audioAnalysis";
 import { getQuaWordWindowSec } from "@/lib/quaReferenceData";
 
 const DIACRITICS_RE = /[\u064B-\u0652\u0670\u0653]/g;
@@ -332,6 +332,12 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
   const { hits, words } = findTajweedRules(ayahArabicText);
   const avgWordDur = averageWordDuration(alignments, chunks);
   const results = [];
+  // Framed lazily, once, on the first rule that actually needs it — many
+  // ayahs have zero rule hits, and framing the whole signal for nothing
+  // would be its own waste. Every rule after the first reuses this same
+  // cache instead of re-framing userSamples from scratch (see
+  // buildEnergyFrameCache in audioAnalysis.js).
+  let frameCache = null;
 
   for (const rule of hits) {
     const word = words[rule.wordIndex];
@@ -369,7 +375,8 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
       continue;
     }
 
-    const { energyDb } = energyProfileForWindow(userSamples, sampleRate, window.startSec, window.endSec);
+    if (!frameCache) frameCache = buildEnergyFrameCache(userSamples, sampleRate);
+    const { energyDb } = energyProfileForCachedWindow(frameCache, window.startSec, window.endSec);
     if (energyDb.length < 2) {
       results.push({
         ...rule,
