@@ -44,16 +44,26 @@ export function withTimeout(promise, ms, label) {
 // Fetches + decodes the reference reciter's audio for one ayah. Returns
 // null (rather than throwing) if it's unavailable, so callers can fall
 // back gracefully instead of crashing the whole analysis.
+//
+// The real reason for a failure here is logged (not just swallowed): a
+// prior version's bare `catch { return null }` made a genuinely-missing
+// file, a CORS failure, a timeout, and a one-off network blip completely
+// indistinguishable from each other after the fact — a real report (2026-07,
+// Abdul Basit / Surah 75 / Ayah 1) turned out to be unreproducible (the URL,
+// CORS, and file were all confirmed fine directly), and there was no trail
+// to say whether it was transient or not. This doesn't change the fallback
+// behavior at all — the caller still just gets null either way.
 async function fetchAyahSamples(reciterFolder, surahNumber, ayahNumber) {
+  const url = getAudioUrl(reciterFolder, surahNumber, ayahNumber);
   try {
-    const url = getAudioUrl(reciterFolder, surahNumber, ayahNumber);
     const arrayBuffer = await fetchArrayBuffer(url);
     return await withTimeout(
       decodeToMonoSamples(arrayBuffer, TARGET_SAMPLE_RATE),
       30_000,
       "Decoding reference audio"
     );
-  } catch {
+  } catch (err) {
+    recordLifecycleEvent("reference-fetch-error", `${reciterFolder} ${surahNumber}:${ayahNumber} (${url}): ${describeError(err)}`);
     return null;
   }
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   withTimeout,
   runTajweedAnalysis,
@@ -6,8 +6,11 @@ import {
   describeAsrFailureForUser,
   describeAsrFailureForLog,
   estimateReferenceWordTiming,
+  analyzeSingleAyahRecitation,
 } from "@/lib/recitationService";
 import { setAsrEnabled, setAsrBusy } from "@/lib/asrEngine";
+import * as audioAnalysis from "@/lib/audioAnalysis";
+import * as lifecycleDebug from "@/lib/lifecycleDebug";
 
 // The analysis pipeline bounds every await with withTimeout because audio
 // decode and the ASR worker can hang forever without throwing (observed on
@@ -71,6 +74,41 @@ describe("ASR failure reasons", () => {
     );
     expect(describeAsrFailureForLog({ code: "empty-transcript", detail: "" })).toBe("empty-transcript");
     expect(describeAsrFailureForLog(null)).toBe("no reason recorded");
+  });
+});
+
+// A real report (2026-07: Abdul Basit / Surah 75 / Ayah 1) that turned out
+// to be unreproducible — the URL, CORS, and file were all confirmed fine
+// directly — exposed that a reference-fetch failure was previously logged
+// nowhere at all (a bare `catch { return null }`), so there was no way to
+// tell a genuinely-missing file apart from a timeout, a CORS failure, or a
+// one-off network blip after the fact. This pins that the real error now
+// survives into the lifecycle log, without changing the fallback behavior.
+describe("reference-fetch failure logging (analyzeSingleAyahRecitation)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("logs the real error via recordLifecycleEvent and still falls back to recording-quality-only", async () => {
+    vi.spyOn(audioAnalysis, "fetchArrayBuffer").mockRejectedValue(new Error("Failed to fetch reference audio (404)"));
+    const recordSpy = vi.spyOn(lifecycleDebug, "recordLifecycleEvent");
+
+    const userSamples = new Float32Array(16000); // 1s of silence @16kHz — content doesn't matter here
+    const result = await analyzeSingleAyahRecitation({
+      userSamples,
+      reciterFolder: "Abdul_Basit_Murattal_192kbps",
+      surahNumber: 75,
+      ayahNumber: 1,
+    });
+
+    // Fallback behavior is unchanged: still degrades to a recording-quality-only result.
+    expect(result.referenceAvailable).toBe(false);
+
+    const call = recordSpy.mock.calls.find(([type]) => type === "reference-fetch-error");
+    expect(call).toBeDefined();
+    expect(call[1]).toContain("Abdul_Basit_Murattal_192kbps");
+    expect(call[1]).toContain("75:1");
+    expect(call[1]).toContain("404");
   });
 });
 
