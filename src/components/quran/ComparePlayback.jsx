@@ -178,6 +178,13 @@ export default function ComparePlayback({
       setRefPlayingIndex(i);
       setRefTime(0);
       const ref = new Audio(referenceUrls[i]);
+      // See AudioPlayer.jsx's identical comment: without this, this
+      // no-cors playback request poisons the service worker's runtime
+      // cache with an opaque response for this everyayah.com URL, breaking
+      // any later cors-mode fetch() of the same URL (Voice Comparison's
+      // reference-audio scoring) with a "net::ERR_FAILED"/"Failed to
+      // fetch" the app can't recover from until that cache entry expires.
+      ref.crossOrigin = "anonymous";
       refAudioRef.current = ref;
       ref.volume = focus === "reference" ? LOUD : QUIET;
       ref.ontimeupdate = () => setRefTime(ref.currentTime);

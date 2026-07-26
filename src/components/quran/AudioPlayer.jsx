@@ -149,6 +149,19 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
 
   useEffect(() => {
     const audio = new Audio();
+    // Without this, the browser fetches everyayah.com audio as a no-cors
+    // request and the service worker's runtime cache (vite.config.js,
+    // CacheFirst on everyayah.com, cacheableResponse statuses [0, 200])
+    // stores the resulting OPAQUE response. A later cors-mode fetch() for
+    // the same URL (Voice Comparison's reference-audio scoring, see
+    // audioAnalysis.js's fetchArrayBuffer) then gets served that cached
+    // opaque entry — which the Fetch spec forbids for a non-no-cors
+    // request, failing with "net::ERR_FAILED" / "TypeError: Failed to
+    // fetch" for an ayah that's actually perfectly fetchable. everyayah.com
+    // sends Access-Control-Allow-Origin: * reliably, so requesting CORS
+    // here makes every cached entry for these URLs fully readable
+    // regardless of which code path fetches it first.
+    audio.crossOrigin = "anonymous";
     audioRef.current = audio;
     audio.volume = volume / 100;
 
