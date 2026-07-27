@@ -16,6 +16,7 @@ import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import Home from '@/pages/Home';
+import Landing from '@/pages/Landing';
 import QuranIndex from '@/pages/QuranIndex';
 import SurahReader from '@/pages/SurahReader';
 
@@ -42,6 +43,23 @@ const AppShell = () => {
     <div className={immersive ? '' : 'pb-[calc(3.75rem+env(safe-area-inset-bottom))]'}>
       <Outlet />
       {!immersive && <BottomTabBar />}
+    </div>
+  );
+};
+
+// "/" is the one route that must render something for a signed-out visitor
+// instead of bouncing straight to /login (2026-07: real user report — they
+// "felt pushed" into an account before understanding what the app does).
+// isLoadingAuth is already resolved by the time this renders — AuthenticatedApp
+// below doesn't mount the route tree at all until then — so no separate
+// loading state is needed here.
+const RootRoute = () => {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) return <Landing />;
+  return (
+    <div className="pb-[calc(3.75rem+env(safe-area-inset-bottom))]">
+      <Home />
+      <BottomTabBar />
     </div>
   );
 };
@@ -91,9 +109,9 @@ const AuthenticatedApp = () => {
             them BEFORE creating an account or paying. */}
         <Route path="/privacy" element={<PageTransition><Privacy /></PageTransition>} />
         <Route path="/terms" element={<PageTransition><Terms /></PageTransition>} />
+        <Route path="/" element={<PageTransition><RootRoute /></PageTransition>} />
         <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
           <Route element={<AppShell />}>
-            <Route path="/" element={<PageTransition><Home /></PageTransition>} />
             <Route path="/quran" element={<PageTransition><QuranIndex /></PageTransition>} />
             <Route path="/hadith" element={<PageTransition><Hadith /></PageTransition>} />
             <Route path="/surah/:number" element={<PageTransition><SurahReader /></PageTransition>} />
