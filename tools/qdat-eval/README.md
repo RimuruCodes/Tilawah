@@ -44,12 +44,12 @@ npx vite-node tools/qdat-eval/tune-thresholds-ref.mjs
 ## Other tools in this folder
 
 - `probe-models.mjs` — checks candidate ASR repos for what the app needs:
-  loadable encoder+decoder, Arabic forcing, and word-level timestamps.
-  Finding (2026-07): **no public ONNX conversion of
-  `tarteel-ai/whisper-base-ar-quran` supports word timestamps** (none were
-  exported with `output_attentions`), so the app's "accurate" slot uses
-  `onnx-community/whisper-base_timestamped` (generic multilingual base)
-  until a proper conversion is hosted.
+  loadable encoder+decoder, Arabic forcing, and word-level timestamps. As of
+  2026-07 the app's "accurate" slot uses a real from-scratch export (see
+  "Converting the Quran-tuned model yourself" below); this script's `REPOS`
+  list is pre-existing candidates from before that export, kept for
+  regression-checking new community conversions, not the model currently
+  shipping.
 - `bench-decoding.mjs` — greedy vs `num_beams` decoding. Finding:
   transformers.js v4 does not implement real beam search for Whisper —
   passing `num_beams` produces byte-identical transcripts at identical
@@ -74,21 +74,84 @@ npx vite-node tools/qdat-eval/tune-thresholds-ref.mjs
 
 ## Converting the Quran-tuned model yourself
 
-To get a Quran-tuned model with word timestamps, export
-`tarteel-ai/whisper-base-ar-quran` with attention outputs (transformers.js
-conversion script, pinned at v3.3.3 — see `convert.py` +
-`convert-requirements.txt` in this folder):
+`tarteel-ai/whisper-base-ar-quran` with word timestamps is exported and
+hosted at `An0xity/whisper-base-ar-quran-onnx-timestamped` (currently
+`ASR_MODELS.accurate` / `ASR_MODEL_OPTIONS.accurate`). If it ever needs
+re-exporting (different quantization, upstream weight update, etc.), the
+transformers.js conversion script (`convert.py`, pinned at v3.3.3) needs two
+sibling files it doesn't ship with on its own —
+`tools/qdat-eval/onnx_convert/{quantize.py,extra/whisper.py}`, pulled from
+the same tag — and, as of 2026-07, three fixes beyond just running it that
+took real debugging time to find. Skipping any one of them produces a
+model that *loads* but breaks partway through generation, which is a much
+harder failure to notice than an outright load error:
+
+1. **`transformers` must stay below 4.43.0.** From 4.43 on, optimum adds a
+   `cache_position` decoder input ([PR #31166](https://github.com/huggingface/transformers/pull/31166))
+   that this project's `@huggingface/transformers` (currently 4.2.0) has no
+   code path to supply — session creation fails outright with `Missing the
+   following inputs: cache_position`. `convert-requirements.txt` pins
+   `4.42.4`, the last minor below that boundary that's still within
+   optimum 1.23.3's supported range.
+2. **`torch` must be a version with the legacy (non-dynamo) ONNX exporter.**
+   `convert-requirements.txt` doesn't pin `torch` directly, so pip resolves
+   whatever's compatible — as of 2026-07 that pulled in `torch` 2.13, whose
+   `torch.onnx.export` now *requires* `onnxscript` (absent from
+   `convert-requirements.txt`) and, once that's installed, still hits a
+   Windows-console Unicode crash printing "✅" during tracing and an
+   external-data cleanup bug afterward. `torch==2.5.1+cpu` avoids all three
+   by using the older exporter path these tools were actually built against.
+3. **Must pass `--skip_onnxslim`.** With `output_attentions`, onnxslim's
+   graph simplification pass (run by `convert.py` by default) miswires the
+   position-embedding offset computation in the merged decoder graph — it
+   replaces a dynamic `Gather` over the real past-cache length with an
+   unrelated constant borrowed from decoder layer 0's self-attention block,
+   found by diffing the ONNX graph node-by-node against a plain export
+   (no `output_attentions`) of matching architecture, which worked fine.
+   Generation runs for a few tokens on the traced dummy length, then fails
+   with `Slice ... Starts must be a 1-D array` once real generation moves
+   past whatever length was used at trace time. This looks like a genuine
+   onnxslim bug scoped to the cross-attention-output export path, not
+   something specific to this model.
 
 ```bash
 python -m venv venv && venv/Scripts/pip install -r convert-requirements.txt
-venv/Scripts/python convert.py --model_id tarteel-ai/whisper-base-ar-quran \
-  --output_attentions --quantize --output_parent_dir converted
+venv/Scripts/python -m onnx_convert.convert --model_id tarteel-ai/whisper-base-ar-quran \
+  --task automatic-speech-recognition-with-past --output_attentions \
+  --skip_onnxslim --quantize --output_parent_dir converted
 ```
 
-Upload the resulting folder to a Hugging Face repo, then point
-`ASR_MODELS.accurate` (src/workers/asrWorker.js) and `ASR_MODEL_OPTIONS`
-(src/lib/asrEngine.js) at it. `src/lib/whisperGenerationPatch.js` fills in
-the multilingual metadata these exports tend to drop.
+`convert.py`'s own generation-config step (its final step) also fails here —
+`tarteel-ai/whisper-base-ar-quran` has no `generation_config.json` of its own
+(404 on the Hub) — so it needs finishing by hand: load
+`GenerationConfig.from_pretrained("openai/whisper-base")` (verified
+architecturally identical fine-tune base), set `.alignment_heads` via
+`onnx_convert.extra.whisper.get_alignment_heads(config)`, and
+`.save_pretrained(output_model_folder)`. Baking it in at export time this way
+means no client-side patch is needed for this specific model —
+`src/lib/whisperGenerationPatch.js` still exists for other community exports
+that ship incomplete configs, but is a no-op for this one (guarded by
+`if (gc.lang_to_id) return`).
+
+Only the files the app actually loads need uploading: the config/tokenizer
+JSON files, `generation_config.json`, and the `q8`-quantized
+`onnx/encoder_model_quantized.onnx` + `onnx/decoder_model_merged_quantized.onnx`
+(the only dtype `asrWorker.js` requests — transformers.js loads
+`decoder_model_merged`, not the separate pre-merge `decoder_model.onnx` /
+`decoder_with_past_model.onnx`, and the other quantization variants
+`--quantize` produces go unused). Verify against the real pipeline before
+trusting an export, not just that files exist — the bugs above all produce
+onnx files that *look* complete:
+
+```js
+import { pipeline, env } from "@huggingface/transformers";
+env.allowLocalModels = true; env.allowRemoteModels = false;
+env.localModelPath = "tools/qdat-eval/converted";
+const asr = await pipeline("automatic-speech-recognition",
+  "tarteel-ai/whisper-base-ar-quran",
+  { dtype: "q8", local_files_only: true });
+const res = await asr(audio, { language: "arabic", task: "transcribe", return_timestamps: "word" });
+```
 
 ## Results (2026-07, model: onnx-community/whisper-base_timestamped, 1,466 recordings)
 
@@ -165,6 +228,112 @@ QDAT has no Qalqalah or Idgham-without-Ghunnah labels, so
 `qalqalahRefRatioFactor`/`qalqalahRefMinDb` and
 `idghamNoGhunnahTransientDb`/`idghamNoGhunnahRefToleranceFactor` remain
 hand-picked, same limitation as the threshold-mode table.
+
+## Phase 1: spectral (frequency-based) Ghunnah/Ikhfa detection (2026-07)
+
+Duration and RMS energy (the existing Ghunnah/Ikhfa check) can't distinguish
+"a genuine nasal hum happened here" from "any sound was just held a bit
+long" — both look identical on those two measurements. Two spectral
+candidates were implemented (`frameSpectralFeatures` in `audioAnalysis.js`,
+via a hand-rolled FFT — deterministic DSP, not a trained model) and
+validated against the same QDAT data as an ADDITION alongside the existing
+check, never replacing it:
+
+- **Low/high-band energy ratio** (dB): low band 150-1000 Hz (where a nasal
+  murmur concentrates), high band 1000-4000 Hz (oral vowel/consonant
+  energy), compared against the recording's own average ratio (a
+  self-relative baseline, matching how every other threshold in this file
+  compares against the user's own average word duration rather than a fixed
+  physical constant — phone mic frequency response varies too much
+  device-to-device for an absolute cutoff to be safe).
+- **Spectral centroid** (Hz): energy-weighted mean frequency, same
+  self-relative comparison.
+
+**Performance** (`bench-spectral-features.mjs`, synthetic 5-minute
+Continuous-Recitation-length recording, 80 rule occurrences): the
+per-occurrence spectral computation is cheap (~1.5ms/occurrence vs
+~0.1ms/occurrence for the existing check), but the recording-wide baseline
+(walking every frame once per recording) cost ~780ms — 0.3% of a 5-minute
+recording's real time, negligible in absolute terms, but ~127x the existing
+approach's total cost and worth knowing about if this is ever revisited for
+tighter mobile budgets.
+
+**QDAT validation** (`tune-thresholds-spectral.mjs`, same 1,466 recordings,
+same tune/holdout split):
+
+| Rule | Existing (duration/energy) | Band-ratio (tuned) | Centroid (tuned) | Always-pass baseline |
+|---|---|---|---|---|
+| Ghunnah | 80.0% | 41.0% | 41.6% | 81.1% |
+| Ikhfa | 54.2% | 48.0% | 45.5% | 51.8% |
+
+**Neither candidate helps — both are worse than the existing check, and
+both are worse than the always-pass baseline.** A quick diagnostic breakdown
+of the raw measurements by label (mean low/high ratio for correctly- vs
+incorrectly-labeled occurrences) shows the band-ratio's separation is also
+in the OPPOSITE direction from the physical hypothesis — correctly-labeled
+occurrences average a *lower* low/high ratio than the recording's own
+baseline, not higher — and the effect size is small relative to noise (~1 dB
+mean difference against a ~2.5 dB standard deviation). Spectral centroid
+shows essentially no separation at all (~1.03-1.05 for both labels).
+
+The likely reason isn't that the underlying acoustic theory is wrong, but a
+methodological confound specific to this validation: QDAT's fragment
+(«قَالُوا۟ لَا عِلْمَ لَنَآ إِنَّكَ أَنتَ عَلَّٰمُ ٱلْغُيُوبِ») is itself dense with other
+nasal sounds (عِلْمَ, أَنتَ, عَلَّٰمُ) — so the "recording's own baseline" isn't a
+clean "typical oral sound" reference the way it would be for a
+nasal-sparser passage; it's already partly nasal-influenced. This is a
+plausible explanation, not a proven one — untested further, since chasing
+it is out of scope for this phase.
+
+**Verdict: do not adopt.** Ghunnah/Ikhfa stay on the existing duration/energy
+check, and their `weak-signal` validation-tier tags stay as they are — this
+is a real, negative result, not a failure to find one. The spectral
+primitives (`frameSpectralFeatures`, `spectralProfileForCachedWindow`,
+`recordingSpectralBaseline` in `audioAnalysis.js`, unit-tested in
+`audioAnalysis.test.js`) are kept as general-purpose, validated DSP
+utilities — not wired into `checkTajweedRules` (removed after this result,
+since it was pure added cost for zero verdict benefit) — because Qalqalah's
+planned phonetically-grounded refinement (broadband noise-burst detection)
+is expected to need the same FFT infrastructure.
+
+## Phase 3: phonetically-grounded Qalqalah refinement (2026-07)
+
+Qalqalah's check was a blunt "energy rose in the tail" test — which can't
+tell a genuine plosive release burst apart from a person just reciting
+louder. A real release burst is a short, BROADBAND (noise-like) transient;
+a louder tonal sound (a vowel, a sustained note) stays tonal regardless of
+loudness. Spectral flatness (`frameSpectralFlatness`/
+`flatnessProfileForCachedWindow` in `audioAnalysis.js`, reusing the same FFT
+infrastructure built for Phase 1) — near 0 for tonal signals, near 1 for
+broadband ones — distinguishes them. The verdict now requires BOTH the
+existing energy rise (`bounceDb`) AND a genuine flatness rise in the tail
+(`qalqalahBurstFlatnessRise`, new `TAJWEED_THRESHOLDS` constant) — applied
+in both threshold and reference-anchored modes, since the burst check is a
+property of the user's own window, independent of which baseline the
+energy comparison uses.
+
+**No labeled data exists for Qalqalah** (QDAT has none), so this can't be
+QDAT-validated the way Phases 1-2 were. Validated instead via synthetic
+audio (`tajweedAnalysis.test.js`, "Qalqalah spectral burst refinement"):
+a genuine broadband burst passes; a plain louder TONE with the *exact same*
+energy rise as the passing case — the false positive the old check could
+not tell apart from a real bounce — now correctly warns. This required
+updating the shared `makeQalqalahShape` test fixture itself: it previously
+used a louder pure tone for its tail (i.e., it was the false-positive case
+all along), so the fixture now uses genuine broadband noise, RMS-matched
+(scaled by √1.5) to produce numerically equivalent `bounceDb` values to the
+original — all ~12 pre-existing Qalqalah tests pass unchanged, since they
+were really testing the energy/reference-anchoring logic, not tonality.
+
+**Qalqalah's validation-tier tag stays `unvalidated`** — spectral precision
+is not the same as real labeled validation, and no amount of phonetic
+rigor changes that without actual data (enforced by a direct test on
+`TAJWEED_RULE_DEFINITIONS.qalqalah.validation.status`).
+
+Idgham without Ghunnah shares the identical tail-transient logic (checking
+for the transient's *absence* rather than presence) and would likely
+benefit from the same refinement — out of scope for this phase, which was
+Qalqalah-only, but a natural follow-up.
 
 ## Honesty notes
 

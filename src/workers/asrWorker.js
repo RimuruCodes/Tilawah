@@ -19,17 +19,21 @@ if (env?.backends?.onnx?.wasm) {
 }
 
 // Word-level timestamps (which the Tajweed windowing depends on) require a
-// decoder exported with cross-attention outputs. As of 2026-07 NO public
-// ONNX conversion of tarteel-ai/whisper-base-ar-quran has that export —
-// every one fails at transcription time (verified in
-// tools/qdat-eval/probe-models.mjs), including the An0xity repo previously
-// referenced here, which shipped an encoder only and couldn't even load.
-// Until a Quran-tuned timestamped conversion is hosted (see the qdat-eval
-// README for the conversion recipe), the accurate slot uses the official
-// timestamped export of generic multilingual whisper-base.
+// decoder exported with cross-attention outputs. As of 2026-07 this is a
+// real, from-scratch export of tarteel-ai/whisper-base-ar-quran (encoder +
+// decoder + decoder-with-past, generation_config baked in at export time —
+// see tools/qdat-eval/README.md "Converting the Quran-tuned model yourself"
+// for the recipe and the exact toolchain pitfalls it took to get a working
+// build). This replaces both the earlier generic-model fallback and an
+// even earlier An0xity export that shipped an encoder only and couldn't
+// even load — that name is reused here for the same HF account, now with a
+// real decoder.
 export const ASR_MODELS = {
   fast: { id: "Xenova/whisper-tiny", label: "Fast (smaller download, generic Arabic)" },
-  accurate: { id: "onnx-community/whisper-base_timestamped", label: "More accurate (larger download, generic Arabic)" },
+  accurate: {
+    id: "An0xity/whisper-base-ar-quran-onnx-timestamped",
+    label: "More accurate (larger download, Quran-tuned Arabic)",
+  },
 };
 
 const transcribers = new Map(); // modelId -> pipeline promise

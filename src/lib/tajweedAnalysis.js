@@ -1,5 +1,12 @@
 import { findTajweedRules } from "@/lib/tajweedRules";
-import { buildEnergyFrameCache, energyProfileForCachedWindow, energyProfileForRefWindow, analyzeSingle, pitchStdSemitones } from "@/lib/audioAnalysis";
+import {
+  buildEnergyFrameCache,
+  energyProfileForCachedWindow,
+  energyProfileForRefWindow,
+  analyzeSingle,
+  pitchStdSemitones,
+  flatnessProfileForCachedWindow,
+} from "@/lib/audioAnalysis";
 import { getQuaWordWindowSec } from "@/lib/quaReferenceData";
 import { RECITER_STYLE_PROFILES } from "@/lib/reciterStyleProfiles";
 
@@ -280,6 +287,15 @@ export const TAJWEED_THRESHOLDS = {
   // dB the window's tail peak must rise above its mean energy to count as
   // an audible Qalqalah bounce.
   qalqalahBounceDb: 4,
+  // How much higher the tail's peak spectral flatness must be than the
+  // body's own typical flatness (both 0..1, so this is a plain delta, not
+  // actually a dB value despite matching this section's naming style) to
+  // count as a genuine broadband release burst rather than just a louder
+  // tonal sound (2026-07, Phase 3 — see tools/qdat-eval/README.md). Hand-
+  // picked like qalqalahBounceDb: no labeled data exists to validate this
+  // against either — verified instead via synthetic burst/no-burst/false-
+  // rise unit tests in tajweedAnalysis.test.js.
+  qalqalahBurstFlatnessRise: 0.15,
   // dB above which a tail energy rise reads as an audible released
   // stop rather than a smooth merge — the mirror image of
   // qalqalahBounceDb, used by Idgham without Ghunnah's absence-of-release
@@ -491,6 +507,21 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
       const tailMax = Math.max(...energyDb.slice(tailStart));
       const bounceDb = tailMax - meanDb;
 
+      // Phonetically-grounded refinement (2026-07, Phase 3 — see
+      // tools/qdat-eval/README.md): a genuine Qalqalah release is a short,
+      // BROADBAND noise transient, not just a louder tonal sound — duration/
+      // energy alone can't tell those apart (a sustained loud vowel passes
+      // the energy check above just as easily as a real bounce). Spectral
+      // flatness (0 = tonal, 1 = broadband/noise-like) can. Computed once
+      // here (mode-independent — it's a property of the user's own window
+      // regardless of which baseline the energy comparison below uses).
+      const flatnessProfile = flatnessProfileForCachedWindow(frameCache, sampleRate, window.startSec, window.endSec);
+      const flatTailStart = Math.floor(flatnessProfile.length * 0.6);
+      const tailFlatness = flatnessProfile.length ? Math.max(...flatnessProfile.slice(flatTailStart)) : 0;
+      const bodyFlatness = flatTailStart > 0 ? flatnessProfile.slice(0, flatTailStart).reduce((a, b) => a + b, 0) / flatTailStart : 0;
+      const flatnessRise = tailFlatness - bodyFlatness;
+      const hasBurst = flatnessRise >= TAJWEED_THRESHOLDS.qalqalahBurstFlatnessRise;
+
       let verdict;
       let measured;
       if (refEnergyDb) {
@@ -499,14 +530,14 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
         const refBounceDb = refTailMax - refMeanDb;
         if (refBounceDb >= TAJWEED_THRESHOLDS.qalqalahRefMinDb) {
           const hasBounce = bounceDb >= refBounceDb * TAJWEED_THRESHOLDS.qalqalahRefRatioFactor;
-          verdict = hasBounce ? "pass" : "warn";
-          measured = { mode: refMode, bounceDb, refBounceDb };
+          verdict = hasBounce && hasBurst ? "pass" : "warn";
+          measured = { mode: refMode, bounceDb, refBounceDb, flatnessRise };
         }
       }
       if (!measured) {
         const hasBounce = bounceDb > TAJWEED_THRESHOLDS.qalqalahBounceDb;
-        verdict = hasBounce ? "pass" : "warn";
-        measured = { mode: "threshold", bounceDb };
+        verdict = hasBounce && hasBurst ? "pass" : "warn";
+        measured = { mode: "threshold", bounceDb, flatnessRise };
       }
       results.push({ ...rule, word, letter, verdict, ...window, measured, note: buildRuleNote(rule, verdict, { word, letter }) });
     } else if (rule.ruleType === "idgham_no_ghunnah") {

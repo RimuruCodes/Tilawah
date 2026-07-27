@@ -6,11 +6,13 @@ import { describeMemoryCheckpoint } from "@/lib/memoryLedger";
 const MODEL_PREF_KEY = "qc_asr_model_pref"; // "fast" | "accurate"
 
 // Keep ids in sync with ASR_MODELS in src/workers/asrWorker.js (see the
-// comment there for why the accurate slot is currently generic whisper-base
-// rather than a Quran fine-tune).
+// comment there for the accurate slot's conversion recipe).
 export const ASR_MODEL_OPTIONS = {
   fast: { id: "Xenova/whisper-tiny", label: "Fast (~40MB, generic Arabic, less accurate)" },
-  accurate: { id: "onnx-community/whisper-base_timestamped", label: "More accurate (~80MB, recommended)" },
+  accurate: {
+    id: "An0xity/whisper-base-ar-quran-onnx-timestamped",
+    label: "More accurate (~75MB, Quran-tuned, recommended)",
+  },
 };
 
 // Default model for devices with no saved preference: phones and

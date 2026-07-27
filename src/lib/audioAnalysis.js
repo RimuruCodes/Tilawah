@@ -699,6 +699,210 @@ export function energyProfileForWindow(samples, sampleRate, startSec, endSec) {
   return energyProfileForCachedWindow(buildEnergyFrameCache(samples, sampleRate), startSec, endSec);
 }
 
+// --- Spectral shape features (Ghunnah/Ikhfa research, 2026-07) ---
+//
+// Duration and RMS energy (above) can't distinguish "a genuine nasal hum
+// happened here" from "any sound was just held a bit long" — both look
+// identical on those two measurements. A real nasal murmur has a distinct
+// SPECTRAL shape instead: energy concentrated in a low-frequency nasal
+// formant (~250-450 Hz) with the nasal cavity's anti-resonance damping
+// energy in the 1-3 kHz range where oral vowels/consonants carry their
+// F2/F3 or frication energy. These two features capture that shape,
+// deterministically (a hand-rolled FFT, no trained model) — see
+// tools/qdat-eval/README.md for the QDAT validation of whether either one
+// actually helps Ghunnah/Ikhfa verdicts beyond the existing duration/energy
+// check, which they are added ALONGSIDE, not in place of.
+
+// In-place iterative radix-2 Cooley-Tukey FFT. `re`/`im` length must be a
+// power of two (callers zero-pad; every frame in this codebase already is
+// one — 32ms at 16kHz is exactly 512 samples — so padding is a no-op in
+// practice, just a safety net if framing parameters ever change).
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      [re[i], re[j]] = [re[j], re[i]];
+      [im[i], im[j]] = [im[j], im[i]];
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len;
+    const wRe = Math.cos(ang);
+    const wIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let curRe = 1;
+      let curIm = 0;
+      const half = len / 2;
+      for (let k = 0; k < half; k++) {
+        const uRe = re[i + k];
+        const uIm = im[i + k];
+        const vRe = re[i + k + half] * curRe - im[i + k + half] * curIm;
+        const vIm = re[i + k + half] * curIm + im[i + k + half] * curRe;
+        re[i + k] = uRe + vRe;
+        im[i + k] = uIm + vIm;
+        re[i + k + half] = uRe - vRe;
+        im[i + k + half] = uIm - vIm;
+        const nextRe = curRe * wRe - curIm * wIm;
+        const nextIm = curRe * wIm + curIm * wRe;
+        curRe = nextRe;
+        curIm = nextIm;
+      }
+    }
+  }
+}
+
+function nextPow2(n) {
+  let p = 1;
+  while (p < n) p <<= 1;
+  return p;
+}
+
+// Cached per padded-length, since every frame in a given recording pads to
+// the same size — recomputing a Hann window per frame would be pure waste.
+const hannWindowCache = new Map();
+function hannWindow(n) {
+  let w = hannWindowCache.get(n);
+  if (!w) {
+    w = new Float32Array(n);
+    for (let i = 0; i < n; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1));
+    hannWindowCache.set(n, w);
+  }
+  return w;
+}
+
+// Magnitude spectrum (positive frequencies only) of one time-domain frame,
+// Hann-windowed (standard practice for spectral analysis — reduces leakage
+// from the frame's hard edges) and zero-padded to a power of two.
+function magnitudeSpectrum(frame, sampleRate) {
+  const n = nextPow2(frame.length);
+  const win = hannWindow(frame.length);
+  const re = new Float64Array(n);
+  const im = new Float64Array(n);
+  for (let i = 0; i < frame.length; i++) re[i] = frame[i] * win[i];
+  fft(re, im);
+  const bins = n / 2;
+  const mag = new Float64Array(bins);
+  for (let k = 0; k < bins; k++) mag[k] = Math.hypot(re[k], im[k]);
+  return { mag, binHz: sampleRate / n };
+}
+
+// Low/high-band energy ratio (dB) and spectral centroid (Hz) for one frame.
+// Band edges are standard acoustic-phonetics territory for nasal murmur
+// (low, ~250-450 Hz formant) vs. oral vowel/consonant energy (higher,
+// 1-4 kHz) — see the module-header comment above.
+const LOW_BAND_HZ = [150, 1000];
+const HIGH_BAND_HZ = [1000, 4000];
+const CENTROID_BAND_HZ = [80, 4000];
+
+function frameSpectralFeatures(frame, sampleRate) {
+  const { mag, binHz } = magnitudeSpectrum(frame, sampleRate);
+  let lowEnergy = 0;
+  let highEnergy = 0;
+  let centroidNum = 0;
+  let centroidDen = 0;
+  for (let k = 0; k < mag.length; k++) {
+    const hz = k * binHz;
+    const m = mag[k];
+    if (hz >= LOW_BAND_HZ[0] && hz < LOW_BAND_HZ[1]) lowEnergy += m * m;
+    if (hz >= HIGH_BAND_HZ[0] && hz < HIGH_BAND_HZ[1]) highEnergy += m * m;
+    if (hz >= CENTROID_BAND_HZ[0] && hz < CENTROID_BAND_HZ[1]) {
+      centroidNum += hz * m;
+      centroidDen += m;
+    }
+  }
+  const lowHighRatioDb = 10 * Math.log10(Math.max(lowEnergy, 1e-12) / Math.max(highEnergy, 1e-12));
+  const centroidHz = centroidDen > 0 ? centroidNum / centroidDen : null;
+  return { lowHighRatioDb, centroidHz };
+}
+
+// Per-frame spectral features over an arbitrary [startSec, endSec] window,
+// reading from the same frame cache energyProfileForCachedWindow uses (see
+// buildEnergyFrameCache) — no separate framing pass, no raw-audio retention
+// beyond what compareSamples/checkTajweedRules already keep in scope.
+export function spectralProfileForCachedWindow(cache, sampleRate, startSec, endSec) {
+  const { frames, hopSec } = cache;
+  const { startFrame, endFrame } = frameWindowBounds(hopSec, startSec, endSec, frames.length);
+  const lowHighRatioDb = [];
+  const centroidHz = [];
+  for (let i = startFrame; i <= endFrame; i++) {
+    if (!frames[i]) continue;
+    const f = frameSpectralFeatures(frames[i], sampleRate);
+    lowHighRatioDb.push(f.lowHighRatioDb);
+    if (f.centroidHz != null) centroidHz.push(f.centroidHz);
+  }
+  return { lowHighRatioDb, centroidHz };
+}
+
+// Spectral flatness (Wiener entropy): geometric mean / arithmetic mean of
+// the power spectrum. Near 0 for tonal/periodic signals (a vowel, a pure
+// tone), near 1 for broadband/noise-like signals — the defining acoustic-
+// phonetics signature of a plosive release burst (Qalqalah's "bounce",
+// 2026-07 Phase 3 — see tools/qdat-eval/README.md), distinct from a plain
+// loudness increase, which can be perfectly tonal (e.g. just reciting
+// louder) and would fool an energy-only check.
+function frameSpectralFlatness(frame, sampleRate) {
+  const { mag } = magnitudeSpectrum(frame, sampleRate);
+  let logSum = 0;
+  let sum = 0;
+  let n = 0;
+  for (let k = 1; k < mag.length; k++) { // skip the DC bin
+    const p = mag[k] * mag[k];
+    if (p <= 0) continue;
+    logSum += Math.log(p);
+    sum += p;
+    n++;
+  }
+  if (n === 0 || sum <= 0) return 0;
+  const geoMean = Math.exp(logSum / n);
+  const arithMean = sum / n;
+  return geoMean / arithMean;
+}
+
+// Per-frame spectral flatness over an arbitrary [startSec, endSec] window,
+// reading from the same frame cache energyProfileForCachedWindow uses —
+// same indexing, so a flatness array and an energyDb array built from the
+// same window line up frame-for-frame.
+export function flatnessProfileForCachedWindow(cache, sampleRate, startSec, endSec) {
+  const { frames, hopSec } = cache;
+  const { startFrame, endFrame } = frameWindowBounds(hopSec, startSec, endSec, frames.length);
+  const flatness = [];
+  for (let i = startFrame; i <= endFrame; i++) {
+    if (frames[i]) flatness.push(frameSpectralFlatness(frames[i], sampleRate));
+  }
+  return flatness;
+}
+
+// This recording's OWN typical spectral shape, as a self-relative baseline
+// (matching this codebase's existing convention of comparing against the
+// user's own average word duration, never a fixed absolute threshold —
+// phone mic frequency response varies too much device-to-device for an
+// absolute Hz/dB cutoff to be safe). Only voiced-ish frames count (same
+// "within dropDb of this recording's own peak" convention as
+// detectActivity), so silence/pauses don't dilute the baseline toward
+// broadband noise. Computed once per recording and cached by the caller
+// (see checkTajweedRules) — this walks every frame, so it's the more
+// expensive of the two new spectral functions; see the qdat-eval Phase 1
+// performance note for real numbers on a full recording.
+export function recordingSpectralBaseline(cache, sampleRate, dropDb = 32) {
+  const { frames } = cache;
+  const frameDb = frames.map((f) => (f ? toDb(rms(f)) : -100));
+  const maxDb = Math.max(...frameDb, -100);
+  const threshold = maxDb - dropDb;
+  const ratios = [];
+  const centroids = [];
+  for (let i = 0; i < frames.length; i++) {
+    if (!frames[i] || frameDb[i] <= threshold) continue;
+    const f = frameSpectralFeatures(frames[i], sampleRate);
+    ratios.push(f.lowHighRatioDb);
+    if (f.centroidHz != null) centroids.push(f.centroidHz);
+  }
+  const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
+  return { lowHighRatioDb: mean(ratios), centroidHz: mean(centroids) };
+}
+
 // Reference-side counterpart to energyProfileForWindow. Reads from the
 // small per-frame array retained in a `referenceAlignment` struct (see
 // compareSamples) instead of raw samples — by the time Tajweed rule

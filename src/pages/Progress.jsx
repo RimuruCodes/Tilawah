@@ -12,6 +12,38 @@ import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useSubscription } from "@/lib/SubscriptionContext";
 import { canAccessFeature, GATED_FEATURES } from "@/lib/entitlements";
 import { computeCurrentStreak } from "@/lib/streaks";
+import { TAJWEED_RULE_DEFINITIONS } from "@/lib/tajweedAnalysis";
+
+// Which TAJWEED_RULE_DEFINITIONS entry each chart category's validation
+// tier comes from. "madd" covers madd_natural/extended/obligatory, which
+// all share one validation tier (MADD_VALIDATION in tajweedAnalysis.js), so
+// any one of them is representative.
+const CATEGORY_TO_RULE_KEY = {
+  qalqalah: "qalqalah",
+  ghunnah: "ghunnah",
+  iqlab: "iqlab",
+  idgham_ghunnah: "idgham_ghunnah",
+  ikhfa: "ikhfa",
+  madd: "madd_natural",
+};
+
+// Same three-tier line treatment for every status but "validated" (solid,
+// unchanged) — dashing and dimming scale with how much evidence backs the
+// rule, so an unproven line can't visually pass as being as trustworthy as
+// Madd's real one (2026-07, Phase 4 — see tools/qdat-eval/README.md).
+const LINE_STYLE_BY_STATUS = {
+  validated: { strokeDasharray: undefined, strokeOpacity: 1 },
+  "weak-signal": { strokeDasharray: "6 4", strokeOpacity: 0.85 },
+  unvalidated: { strokeDasharray: "2 3", strokeOpacity: 0.65 },
+};
+
+// Identical wording to ValidationTag in TajweedResultsPanel.jsx — one voice
+// across the app for the same underlying tiers, not fresh copy invented
+// for the chart.
+function validationTagText(status) {
+  if (!status || status === "validated") return null;
+  return status === "weak-signal" ? "Weak signal" : "Not yet verified";
+}
 
 const TAJWEED_CATEGORIES = [
   { key: "qalqalah", label: "Qalqalah", color: "#38bdf8" },
@@ -20,7 +52,43 @@ const TAJWEED_CATEGORIES = [
   { key: "idgham_ghunnah", label: "Idgham", color: "#fb923c" },
   { key: "ikhfa", label: "Ikhfa", color: "#22d3ee" },
   { key: "madd", label: "Madd", color: "#34d399" },
-];
+].map((cat) => {
+  const validation = TAJWEED_RULE_DEFINITIONS[CATEGORY_TO_RULE_KEY[cat.key]]?.validation;
+  const status = validation?.status || "validated";
+  return {
+    ...cat,
+    tagText: validationTagText(status),
+    validationNote: validation?.note || null,
+    ...LINE_STYLE_BY_STATUS[status],
+  };
+});
+
+// Compact per-point breakdown (value + short tag, not the full note — the
+// full note lives on the legend's title/hover, matching how
+// TajweedResultsPanel puts it on the tag's title attribute rather than
+// inline, so the tooltip doesn't balloon into several paragraphs when
+// multiple unvalidated categories have data at the same point).
+function TajweedTrendTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8 }} className="p-2.5 text-xs space-y-1">
+      <p style={{ color: "#94a3b8" }}>Attempt #{label}</p>
+      {payload.map((entry) => {
+        const cat = TAJWEED_CATEGORIES.find((c) => c.key === entry.dataKey);
+        if (!cat || entry.value == null) return null;
+        return (
+          <div key={entry.dataKey} className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
+            <span className="text-slate-300">
+              {cat.label}: {entry.value}%
+              {cat.tagText && <span className="text-slate-500 italic"> ({cat.tagText})</span>}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function Progress() {
   const navigate = useNavigate();
@@ -177,25 +245,38 @@ export default function Progress() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="attempt" stroke="#64748b" fontSize={11} tickLine={false} label={{ value: "Attempt #", position: "insideBottom", offset: -3, fill: "#64748b", fontSize: 10 }} />
                   <YAxis domain={[0, 100]} stroke="#64748b" fontSize={11} tickLine={false} width={35} />
-                  <Tooltip
-                    contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }}
-                    labelStyle={{ color: "#94a3b8" }}
-                  />
-                  {TAJWEED_CATEGORIES.map(({ key, label, color }) => (
-                    <Line key={key} type="monotone" dataKey={key} name={label} stroke={color} strokeWidth={2} dot={false} connectNulls />
+                  <Tooltip content={<TajweedTrendTooltip />} />
+                  {TAJWEED_CATEGORIES.map(({ key, label, color, strokeDasharray, strokeOpacity }) => (
+                    <Line
+                      key={key}
+                      type="monotone"
+                      dataKey={key}
+                      name={label}
+                      stroke={color}
+                      strokeWidth={2}
+                      strokeDasharray={strokeDasharray}
+                      strokeOpacity={strokeOpacity}
+                      dot={false}
+                      connectNulls
+                    />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
-              <div className="flex items-center justify-center gap-4 mt-2">
-                {TAJWEED_CATEGORIES.map(({ key, label, color }) => (
-                  <div key={key} className="flex items-center gap-1.5">
+              <div className="flex items-center justify-center gap-4 mt-2 flex-wrap">
+                {TAJWEED_CATEGORIES.map(({ key, label, color, tagText, validationNote }) => (
+                  <div key={key} className="flex items-center gap-1.5" title={validationNote || undefined}>
                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                    <span className="text-[11px] text-slate-500">{label}</span>
+                    <span className={`text-[11px] ${tagText ? "text-slate-600 cursor-help" : "text-slate-500"}`}>
+                      {label}
+                      {tagText && <span className="italic"> · {tagText}</span>}
+                    </span>
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-slate-600 text-center mt-2">
+              <p className="text-[10px] text-slate-600 text-center mt-2 leading-relaxed">
                 Cumulative pass rate per rule as you practice — a rising line means that rule is improving.
+                <br />
+                Solid = validated against real labeled data · dashed = weak or unproven signal (hover a label for why).
               </p>
             </div>
           )}

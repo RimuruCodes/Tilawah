@@ -120,7 +120,7 @@ export const RECITERS = [
   { id: "ar.abdulbasit", name: "Abdul Basit Abdul Samad", folder: "Abdul_Basit_Murattal_192kbps" },
   { id: "ar.husary", name: "Mahmoud Khalil Al-Husary", folder: "Husary_128kbps" },
   { id: "ar.minshawi", name: "Mohamed Siddiq Al-Minshawi", folder: "Minshawy_Murattal_128kbps" },
-  { id: "ar.sudais", name: "Abdur-Rahman As-Sudais", folder: "Sudais_128kbps" }
+  { id: "ar.sudais", name: "Abdur-Rahman As-Sudais", folder: "Abdurrahmaan_As-Sudais_192kbps" }
 ];
 
 export function getAudioUrl(reciterFolder, surahNumber, ayahNumber) {

@@ -46,10 +46,18 @@ dist-ssr
 /tools/qdat-eval/transformersjs
 /tools/qdat-eval/features.json
 /tools/qdat-eval/features-ref.json
+/tools/qdat-eval/features-spectral.json
+/tools/qdat-eval/asr-sample-results.json
 /tools/qdat-eval/ref-audio-cache
 /tools/qdat-eval/reciter-profile-cache
 /tools/qdat-eval/build-profile-alafasy.log
 /tools/qdat-eval/extract-ref.log
+/tools/qdat-eval/extract-spectral.log
+/tools/qdat-eval/asr-sample-eval.log
+# The full ONNX export (~2.6GB, all quantization variants) -- the shipped
+# q8 files are hosted on Hugging Face (see README.md); only the conversion
+# scripts (onnx_convert/) are source.
+/tools/qdat-eval/converted
 __pycache__/
 *.pyc
 

@@ -1,4 +1,12 @@
-transformers[torch]==4.46.3
+# transformers must stay <4.43.0 (adds a cache_position decoder input this
+# project's @huggingface/transformers has no code path to supply) and torch
+# must be a version with the legacy, non-dynamo ONNX exporter (newer torch's
+# dynamo exporter needs onnxscript, which isn't pinned here, and hits other
+# issues besides). See README.md "Converting the Quran-tuned model yourself"
+# for what happens if either constraint is violated.
+transformers[torch]==4.42.4
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1
 onnxruntime==1.20.1
 optimum==1.23.3
 onnx==1.16.2

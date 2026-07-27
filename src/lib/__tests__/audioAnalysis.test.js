@@ -12,6 +12,8 @@ import {
   buildFeatures,
   analyzeSingle,
   pitchStdSemitones,
+  spectralProfileForCachedWindow,
+  recordingSpectralBaseline,
   TARGET_SAMPLE_RATE,
 } from "@/lib/audioAnalysis";
 
@@ -354,6 +356,53 @@ describe("energyProfileForRefWindow", () => {
   it("returns an empty profile when referenceAlignment has no energy array", () => {
     expect(energyProfileForRefWindow(null, 0, 1).energyDb).toEqual([]);
     expect(energyProfileForRefWindow({ refEnergyDb: [] }, 0, 1).energyDb).toEqual([]);
+  });
+});
+
+// Ghunnah/Ikhfa spectral-shape research (2026-07, Phase 1) — the core
+// physical claim being tested is direction, not exact values: a low-frequency
+// tone (standing in for a nasal murmur's concentrated low-band energy) must
+// score a HIGHER low/high ratio and a LOWER centroid than a high-frequency
+// tone (standing in for an oral vowel/consonant's higher-frequency energy).
+// Getting this backwards would silently corrupt every QDAT number in
+// tools/qdat-eval built on top of it, so it's worth pinning directly.
+describe("spectral shape features (Ghunnah/Ikhfa research)", () => {
+  function makePureTone(freq, { sampleRate = TARGET_SAMPLE_RATE, sec = 0.5, amplitude = 0.6 } = {}) {
+    const n = Math.round(sec * sampleRate);
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) out[i] = amplitude * Math.sin((2 * Math.PI * freq * i) / sampleRate);
+    return out;
+  }
+
+  it("a low-frequency tone scores a higher low/high band ratio than a high-frequency tone", () => {
+    const lowTone = makePureTone(300); // inside LOW_BAND_HZ (150-1000)
+    const highTone = makePureTone(2500); // inside HIGH_BAND_HZ (1000-4000)
+    const lowCache = buildEnergyFrameCache(lowTone, TARGET_SAMPLE_RATE);
+    const highCache = buildEnergyFrameCache(highTone, TARGET_SAMPLE_RATE);
+    const lowProfile = spectralProfileForCachedWindow(lowCache, TARGET_SAMPLE_RATE, 0, 0.5);
+    const highProfile = spectralProfileForCachedWindow(highCache, TARGET_SAMPLE_RATE, 0, 0.5);
+    const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+    expect(mean(lowProfile.lowHighRatioDb)).toBeGreaterThan(mean(highProfile.lowHighRatioDb) + 10);
+  });
+
+  it("a low-frequency tone has a lower spectral centroid than a high-frequency tone", () => {
+    const lowTone = makePureTone(300);
+    const highTone = makePureTone(2500);
+    const lowCache = buildEnergyFrameCache(lowTone, TARGET_SAMPLE_RATE);
+    const highCache = buildEnergyFrameCache(highTone, TARGET_SAMPLE_RATE);
+    const lowProfile = spectralProfileForCachedWindow(lowCache, TARGET_SAMPLE_RATE, 0, 0.5);
+    const highProfile = spectralProfileForCachedWindow(highCache, TARGET_SAMPLE_RATE, 0, 0.5);
+    const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+    expect(mean(lowProfile.centroidHz)).toBeLessThan(mean(highProfile.centroidHz));
+  });
+
+  it("recordingSpectralBaseline reads the same low tone as its own baseline (self-consistency)", () => {
+    const lowTone = makePureTone(300, { sec: 1.0 });
+    const cache = buildEnergyFrameCache(lowTone, TARGET_SAMPLE_RATE);
+    const baseline = recordingSpectralBaseline(cache, TARGET_SAMPLE_RATE);
+    const windowProfile = spectralProfileForCachedWindow(cache, TARGET_SAMPLE_RATE, 0.2, 0.8);
+    const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+    expect(baseline.lowHighRatioDb).toBeCloseTo(mean(windowProfile.lowHighRatioDb), 0);
   });
 });
 

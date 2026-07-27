@@ -15,15 +15,50 @@ import { TARGET_SAMPLE_RATE, buildFeatures } from "@/lib/audioAnalysis";
 
 const sampleRate = TARGET_SAMPLE_RATE;
 
-// Qalqalah release-bounce shape: a quiet body followed by a sharp
-// dB-rising tail. Also the exact acoustic signature Idgham without
-// Ghunnah's absence-of-release check looks for — just interpreted
-// oppositely (a bounce here is a warn, not a pass). The 1.78x amplitude
-// ratio was picked empirically (a scratch probe against the real
-// energyProfileForWindow/bounceDb math) to land bounceDb comfortably
-// between the reference floor (2dB) and the fixed threshold (4dB) —
-// around 3.4dB; 2.5x lands around 5.3dB, comfortably above it.
-function makeQalqalahShape({ bodySec = 0.35, tailSec = 0.25, bodyAmplitude = 0.1, tailAmplitude = bodyAmplitude * 1.78, freq = 150 } = {}) {
+// Deterministic pseudo-noise (uniform in [-1,1]) — same seeded-LCG pattern
+// as audioAnalysis.test.js's makeNoise, kept local here since this file
+// doesn't otherwise need it.
+function seededNoise(n, amplitude, seed) {
+  let s = seed;
+  const rand = () => {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    return (s / 0x7fffffff) * 2 - 1;
+  };
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = amplitude * rand();
+  return out;
+}
+
+// Qalqalah release-bounce shape: a quiet tonal body followed by a
+// genuinely BROADBAND (noise, not tonal) tail — a real plosive release is
+// a short noise transient, not just a louder tone (2026-07, Phase 3: see
+// tools/qdat-eval/README.md — a louder pure tone is exactly the false-
+// positive case the phonetically-grounded refinement exists to reject, so
+// this fixture needs real broadband content for "pass" cases to still
+// pass). `tailAmplitude` is scaled by sqrt(3/2) internally: uniform noise
+// of the same amplitude as a sine has a lower RMS (1/sqrt(3) vs 1/sqrt(2)
+// of amplitude), so this scaling keeps bounceDb numerically equivalent to
+// the original pure-tone version this fixture used before Phase 3 —
+// verified empirically against the real energyProfileForWindow/bounceDb
+// math. The 1.78x default ratio was likewise picked empirically to land
+// bounceDb comfortably between the reference floor (2dB) and the fixed
+// threshold (4dB) — around 3dB; 2.5x lands around 3.8dB, comfortably above it.
+function makeQalqalahShape({ bodySec = 0.35, tailSec = 0.25, bodyAmplitude = 0.1, tailAmplitude = bodyAmplitude * 1.78, freq = 150, seed = 7 } = {}) {
+  const bodyN = Math.round(bodySec * sampleRate);
+  const tailN = Math.round(tailSec * sampleRate);
+  const out = new Float32Array(bodyN + tailN);
+  for (let i = 0; i < bodyN; i++) out[i] = bodyAmplitude * Math.sin((2 * Math.PI * freq * i) / sampleRate);
+  const noise = seededNoise(tailN, tailAmplitude * Math.sqrt(1.5), seed);
+  for (let i = 0; i < tailN; i++) out[bodyN + i] = noise[i];
+  return out;
+}
+
+// The false-positive case the Phase 3 refinement exists to reject: a
+// LOUDER tail that stays perfectly TONAL (a real sine, not noise) — same
+// energy rise as makeQalqalahShape, but with none of a genuine burst's
+// broadband quality. A person just reciting louder produces this shape,
+// not a real Qalqalah bounce.
+function makeToneOnlyRise({ bodySec = 0.35, tailSec = 0.25, bodyAmplitude = 0.1, tailAmplitude = bodyAmplitude * 1.78, freq = 150 } = {}) {
   const bodyN = Math.round(bodySec * sampleRate);
   const tailN = Math.round(tailSec * sampleRate);
   const out = new Float32Array(bodyN + tailN);
@@ -872,6 +907,70 @@ describe("checkTajweedRules — shared frame cache across multiple rule occurren
     const chunks = [{ timestamp: [0, 0.5] }];
     const results = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
     expect(results).toEqual([]);
+  });
+});
+
+// Phase 3 (2026-07, see tools/qdat-eval/README.md): validates the
+// phonetically-grounded Qalqalah refinement using synthetic audio, since no
+// labeled data exists for this rule (QDAT has no Qalqalah examples). The
+// core claim under test: a genuine broadband release burst passes, but a
+// plain LOUDER TONE with the exact same energy rise — the false positive
+// the old duration/energy-only check couldn't tell apart from a real
+// bounce — now correctly warns.
+describe("checkTajweedRules — Qalqalah spectral burst refinement (Phase 3)", () => {
+  function singleWordSetup(userSamples) {
+    return {
+      userSamples,
+      sampleRate,
+      ayahArabicText: "قَدْ",
+      alignments: [{ recognizedIndex: 0 }],
+      chunks: [{ timestamp: [0, userSamples.length / sampleRate] }],
+    };
+  }
+
+  // A stronger tail (4x body amplitude, matching the "clear pass" shape
+  // already used elsewhere in this file — see the shared-frame-cache test's
+  // word1) puts bounceDb comfortably above the fixed 4dB threshold, so
+  // these tests isolate the NEW flatness condition rather than sitting near
+  // the energy threshold's own boundary.
+  const STRONG_TAIL = { tailAmplitude: 0.1 * 4 };
+
+  it("passes for a genuine broadband release burst", () => {
+    const userSamples = makeQalqalahShape(STRONG_TAIL);
+    const results = checkTajweedRules(singleWordSetup(userSamples));
+    const qalqalah = results.find((c) => c.ruleType === "qalqalah");
+    expect(qalqalah.measured.bounceDb).toBeGreaterThan(TAJWEED_THRESHOLDS.qalqalahBounceDb);
+    expect(qalqalah.measured.flatnessRise).toBeGreaterThanOrEqual(TAJWEED_THRESHOLDS.qalqalahBurstFlatnessRise);
+    expect(qalqalah.verdict).toBe("pass");
+  });
+
+  it("warns for a plain louder TONE with the same energy rise as the passing burst — the false positive this refinement exists to catch", () => {
+    // Same bodyAmplitude/tailAmplitude/bounceDb-producing shape as the
+    // passing case above, but the tail stays perfectly tonal (a sine, not
+    // noise) — exactly what a person just reciting louder produces, with
+    // no real percussive release. The OLD duration/energy-only check could
+    // not tell this apart from a genuine bounce.
+    const userSamples = makeToneOnlyRise(STRONG_TAIL);
+    const results = checkTajweedRules(singleWordSetup(userSamples));
+    const qalqalah = results.find((c) => c.ruleType === "qalqalah");
+    // The energy-rise condition alone is satisfied (proving this really is
+    // the "same bounceDb, no real burst" case, not just a quieter tail)...
+    expect(qalqalah.measured.bounceDb).toBeGreaterThan(TAJWEED_THRESHOLDS.qalqalahBounceDb);
+    // ...but the spectral-flatness condition is not, so the verdict must warn.
+    expect(qalqalah.measured.flatnessRise).toBeLessThan(TAJWEED_THRESHOLDS.qalqalahBurstFlatnessRise);
+    expect(qalqalah.verdict).toBe("warn");
+  });
+
+  it("warns when there's no energy rise at all (flat tone throughout, no tail)", () => {
+    const userSamples = makeSustainedTone({ holdSec: 0.6 });
+    const results = checkTajweedRules(singleWordSetup(userSamples));
+    const qalqalah = results.find((c) => c.ruleType === "qalqalah");
+    expect(qalqalah.measured.bounceDb).toBeLessThan(TAJWEED_THRESHOLDS.qalqalahBounceDb);
+    expect(qalqalah.verdict).toBe("warn");
+  });
+
+  it("Qalqalah stays tagged 'unvalidated' in the UI — spectral precision isn't the same as real labeled validation", () => {
+    expect(TAJWEED_RULE_DEFINITIONS.qalqalah.validation.status).toBe("unvalidated");
   });
 });
 
