@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, Square, Play, Pause, RotateCcw, Send, Loader2, AlertTriangle, Upload } from "lucide-react";
+import { Mic, Square, Play, Pause, RotateCcw, Send, Loader2, AlertTriangle, Upload, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { analyzeSingleAyahRecitation, persistRecitationResult, revertRecitationResult, runTajweedAnalysis, decodeUserRecording, assessRecitationConfidence, attachTajweedToLogs, getLastAsrFailure, describeAsrFailureForUser, describeAsrFailureForLog, escalateAnalysis } from "@/lib/recitationService";
 import { getEscalationBudgetMs, describeEscalationOutcome } from "@/lib/escalation";
@@ -37,6 +37,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
   const [tajweedPending, setTajweedPending] = useState(false);
   const [escalating, setEscalating] = useState(false);
   const [escalationNote, setEscalationNote] = useState(null);
+  const [scoreUpdateInfo, setScoreUpdateInfo] = useState(null); // { from, to } | null — a background re-score changed the displayed number
   const [celebration, setCelebration] = useState(null);
   const runSeqRef = useRef(0); // invalidates background Tajweed work from a previous run/reset
   const mediaRecorderRef = useRef(null);
@@ -98,6 +99,19 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
     return () => { cancelled = true; };
   }, [open, ayah, reciterFolder, surahNumber]);
 
+  // TEMP (score-change investigation): the main score display reads
+  // analysisResult.score directly — this logs every time that object
+  // changes, tagged with which code path set it (_scoreSource, added at
+  // each setAnalysisResult call site below), so a reported "the score
+  // changed on its own" can be traced to the exact cause instead of
+  // inferred from timing. Remove once the investigation is resolved.
+  useEffect(() => {
+    if (!analysisResult) return;
+    const detail = `score=${analysisResult.score} source=${analysisResult._scoreSource || "unknown"} referenceAvailable=${analysisResult.referenceAvailable}`;
+    console.log(`[tilawah] analysisResult render: ${detail}`);
+    recordLifecycleEvent("score-render", detail);
+  }, [analysisResult]);
+
   const resetState = () => {
     runSeqRef.current++; // orphan any in-flight background Tajweed UI updates
     setState("idle");
@@ -116,6 +130,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
     setConfidence(null);
     setEscalating(false);
     setEscalationNote(null);
+    setScoreUpdateInfo(null);
     setCelebration(null);
     chunksRef.current = [];
     if (timerRef.current) clearInterval(timerRef.current);
@@ -247,7 +262,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
         surahNumber,
         ayahNumber: ayah.number,
       });
-      setAnalysisResult(dspResult);
+      setAnalysisResult({ ...dspResult, _scoreSource: "initial-analysis" });
     } catch (err) {
       console.error(err);
       // Persist the real reason: "something went wrong" alone made failures
@@ -387,10 +402,19 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
         setModelProgress(null);
         if (esc?.improved) {
           const scoreChanged = esc.dspResult !== dspResult;
-          setAnalysisResult(esc.dspResult);
+          const scoreNumberChanged = scoreChanged && esc.dspResult.score !== dspResult.score;
+          setAnalysisResult({ ...esc.dspResult, _scoreSource: "escalation" });
           setTajweedResult(esc.tajweedResult);
           setConfidence(assessRecitationConfidence({ dspResult: esc.dspResult, tajweedResult: esc.tajweedResult }));
           setEscalationNote(describeEscalationOutcome(true));
+          // A silent number swap is exactly what looked like a bug when a
+          // background re-score (e.g. the reference audio finally loading
+          // after an earlier fetch failure) landed while someone was
+          // reading their result — make the change explicit and visible
+          // rather than a one-line, easy-to-miss note under the fold.
+          if (scoreNumberChanged) {
+            setScoreUpdateInfo({ from: dspResult.score, to: esc.dspResult.score });
+          }
           // Keep the stored attempt honest: a changed score is reverted +
           // re-persisted (streak math stays correct); a Tajweed-only change
           // just re-attaches.
@@ -642,6 +666,20 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                       {analysisResult.score}
                     </span>
                   </div>
+                  {scoreUpdateInfo && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-3 flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-3 py-2 text-left"
+                      role="status"
+                    >
+                      <RefreshCw className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      <p className="text-xs text-emerald-300">
+                        Score updated: {scoreUpdateInfo.from} → {scoreUpdateInfo.to}. The reference audio loaded after all, so
+                        this is now a real comparison against the reciter instead of a recording-quality estimate.
+                      </p>
+                    </motion.div>
+                  )}
                   {!analysisResult.referenceAvailable && (
                     <p className="mt-2 text-xs text-amber-400/80">Reference audio unavailable — recording-quality score only</p>
                   )}
