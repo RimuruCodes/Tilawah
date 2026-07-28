@@ -840,6 +840,53 @@ describe("checkTajweedRules — Idgham without Ghunnah", () => {
   });
 });
 
+// Phase 2 review-cycle (2026-07, see tools/qdat-eval/README.md): the same
+// spectral-burst refinement Qalqalah got, applied in the opposite
+// direction. The false positive this fixes: a plain louder TONE (no real
+// release) in an otherwise-smooth glide, which the old duration/energy-only
+// check could not tell apart from a genuine released stop.
+describe("checkTajweedRules — Idgham without Ghunnah spectral-burst refinement (Phase 2 review cycle)", () => {
+  const ayahArabicText = "مِن رَّبِّهِمْ";
+  const alignments = [{ recognizedIndex: 0 }, { recognizedIndex: 1 }];
+  const chunks = [{ timestamp: [0, 0.4] }, { timestamp: [0.45, 1.0] }];
+  const STRONG_TAIL = { tailAmplitude: 0.1 * 4 };
+
+  it("still warns for a genuine broadband release (real burst, not just louder)", () => {
+    const userSamples = makeQalqalahShape(STRONG_TAIL);
+    const results = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
+    const idgham = results.find((c) => c.ruleType === "idgham_no_ghunnah");
+    expect(idgham.measured.transientDb).toBeGreaterThan(TAJWEED_THRESHOLDS.idghamNoGhunnahTransientDb);
+    expect(idgham.measured.flatnessRise).toBeGreaterThanOrEqual(TAJWEED_THRESHOLDS.qalqalahBurstFlatnessRise);
+    expect(idgham.verdict).toBe("warn");
+  });
+
+  it("now passes for a plain louder TONE with the same energy rise as the warning case — the false positive this refinement exists to catch", () => {
+    // Same bodyAmplitude/tailAmplitude/transientDb-producing shape as the
+    // warning case above, but the tail stays perfectly tonal (a sine, not
+    // noise) — a natural loudness bump in an otherwise-smooth glide, not a
+    // real released stop.
+    const userSamples = makeToneOnlyRise(STRONG_TAIL);
+    const results = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks });
+    const idgham = results.find((c) => c.ruleType === "idgham_no_ghunnah");
+    // The energy-rise condition alone is satisfied (proving this really is
+    // the "same transientDb, no real burst" case)...
+    expect(idgham.measured.transientDb).toBeGreaterThan(TAJWEED_THRESHOLDS.idghamNoGhunnahTransientDb);
+    // ...but the spectral-flatness condition is not, so the verdict must
+    // now pass instead of (incorrectly) warning.
+    expect(idgham.measured.flatnessRise).toBeLessThan(TAJWEED_THRESHOLDS.qalqalahBurstFlatnessRise);
+    expect(idgham.verdict).toBe("pass");
+  });
+
+  it("reference-anchored: a plain louder tone still passes even when it would exceed the reference's own transient ceiling", () => {
+    const userSamples = makeToneOnlyRise(STRONG_TAIL);
+    const referenceAlignment = makeIdentityReferenceAlignment(makeQalqalahShape()); // reference's own (smaller) real transient
+    const results = checkTajweedRules({ userSamples, sampleRate, ayahArabicText, alignments, chunks, referenceAlignment });
+    const idgham = results.find((c) => c.ruleType === "idgham_no_ghunnah");
+    expect(idgham.measured.mode).toBe("reference");
+    expect(idgham.verdict).toBe("pass");
+  });
+});
+
 describe("checkTajweedRules — shared frame cache across multiple rule occurrences", () => {
   // Two well-separated qalqalah words in ONE recording, one built to WARN
   // under the fixed threshold (bounceDb ~3.4, the default shape) and one

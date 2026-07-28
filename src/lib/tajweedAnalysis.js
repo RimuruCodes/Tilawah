@@ -405,6 +405,21 @@ function buildRuleNote(rule, verdict, { word, letter, actualCounts, expectedCoun
   return `The elongation in ${w} sounded shorter than expected${countsNote}.${ratioNote} Try holding the vowel sound noticeably longer — for Madd, think of it as adding extra beats to the vowel rather than letting it clip short.`;
 }
 
+// Shared by Qalqalah (checking for a genuine release burst) and Idgham
+// without Ghunnah (checking for the ABSENCE of one — see below) — both
+// rules hinge on the exact same acoustic question: did a short, BROADBAND
+// noise transient happen in this window's tail, not just a louder tonal
+// moment? (2026-07, Phase 3/Phase-2-review-cycle — see
+// tools/qdat-eval/README.md.) A single shared helper avoids computing this
+// twice with two chances to drift out of sync.
+function computeBurstFlatnessRise(frameCache, sampleRate, window) {
+  const flatnessProfile = flatnessProfileForCachedWindow(frameCache, sampleRate, window.startSec, window.endSec);
+  const flatTailStart = Math.floor(flatnessProfile.length * 0.6);
+  const tailFlatness = flatnessProfile.length ? Math.max(...flatnessProfile.slice(flatTailStart)) : 0;
+  const bodyFlatness = flatTailStart > 0 ? flatnessProfile.slice(0, flatTailStart).reduce((a, b) => a + b, 0) / flatTailStart : 0;
+  return tailFlatness - bodyFlatness;
+}
+
 // Runs the acoustically-checkable Tajweed rules — Qalqalah, Madd, and the
 // nasal-hold family (Ghunnah, Iqlab, Idgham with Ghunnah, Ikhfa) — against
 // the user's actual recorded audio, using ASR word timestamps to locate
@@ -515,11 +530,7 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
       // flatness (0 = tonal, 1 = broadband/noise-like) can. Computed once
       // here (mode-independent — it's a property of the user's own window
       // regardless of which baseline the energy comparison below uses).
-      const flatnessProfile = flatnessProfileForCachedWindow(frameCache, sampleRate, window.startSec, window.endSec);
-      const flatTailStart = Math.floor(flatnessProfile.length * 0.6);
-      const tailFlatness = flatnessProfile.length ? Math.max(...flatnessProfile.slice(flatTailStart)) : 0;
-      const bodyFlatness = flatTailStart > 0 ? flatnessProfile.slice(0, flatTailStart).reduce((a, b) => a + b, 0) / flatTailStart : 0;
-      const flatnessRise = tailFlatness - bodyFlatness;
+      const flatnessRise = computeBurstFlatnessRise(frameCache, sampleRate, window);
       const hasBurst = flatnessRise >= TAJWEED_THRESHOLDS.qalqalahBurstFlatnessRise;
 
       let verdict;
@@ -549,6 +560,15 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
       const tailMax = Math.max(...energyDb.slice(tailStart));
       const transientDb = tailMax - meanDb;
 
+      // Same phonetically-grounded refinement as Qalqalah, applied in the
+      // opposite direction (2026-07 review-cycle Phase 2): a genuine
+      // release is a broadband transient, so a "release detected" verdict
+      // now also requires the same spectral-flatness burst signal — a
+      // plain louder (but still tonal) moment in an otherwise-smooth glide
+      // no longer wrongly reads as "a release happened".
+      const flatnessRise = computeBurstFlatnessRise(frameCache, sampleRate, window);
+      const hasBurst = flatnessRise >= TAJWEED_THRESHOLDS.qalqalahBurstFlatnessRise;
+
       let verdict;
       let measured;
       if (refEnergyDb) {
@@ -556,13 +576,13 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
         const refTailMax = Math.max(...refEnergyDb.slice(refTailStart));
         const refTransientDb = refTailMax - refMeanDb;
         const ceiling = Math.max(TAJWEED_THRESHOLDS.idghamNoGhunnahTransientDb, refTransientDb * TAJWEED_THRESHOLDS.idghamNoGhunnahRefToleranceFactor);
-        const hasReleaseTransient = transientDb >= ceiling;
+        const hasReleaseTransient = transientDb >= ceiling && hasBurst;
         verdict = hasReleaseTransient ? "warn" : "pass";
-        measured = { mode: refMode, transientDb, refTransientDb };
+        measured = { mode: refMode, transientDb, refTransientDb, flatnessRise };
       } else {
-        const hasReleaseTransient = transientDb > TAJWEED_THRESHOLDS.idghamNoGhunnahTransientDb;
+        const hasReleaseTransient = transientDb > TAJWEED_THRESHOLDS.idghamNoGhunnahTransientDb && hasBurst;
         verdict = hasReleaseTransient ? "warn" : "pass";
-        measured = { mode: "threshold", transientDb };
+        measured = { mode: "threshold", transientDb, flatnessRise };
       }
       results.push({ ...rule, word, letter, verdict, ...window, measured, note: buildRuleNote(rule, verdict, { word, letter }) });
     } else if (NASAL_HOLD_RULE_TYPES.has(rule.ruleType)) {

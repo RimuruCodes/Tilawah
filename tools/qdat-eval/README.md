@@ -335,6 +335,76 @@ for the transient's *absence* rather than presence) and would likely
 benefit from the same refinement — out of scope for this phase, which was
 Qalqalah-only, but a natural follow-up.
 
+## Phase 2 review cycle (2026-07): idgham_no_ghunnah gets the same refinement
+
+Applied the identical spectral-flatness burst check to `idgham_no_ghunnah`
+(shared via a new `computeBurstFlatnessRise` helper, so Qalqalah and Idgham
+without Ghunnah can't drift out of sync) — a "release detected" verdict now
+also requires a genuine broadband transient, not just a louder tonal
+moment. Validated the same way: existing tests (which already happened to
+use the post-Phase-3 broadband `makeQalqalahShape` fixture) passed
+unchanged, and new synthetic tests confirm the specific false positive this
+fixes — a plain louder tone with the *same* energy rise as a genuine
+release now correctly passes instead of warning, in both threshold and
+reference-anchored mode. Stays tagged `unvalidated` — no labeled data
+exists for this rule either, same limitation as Qalqalah.
+
+## QUA update-checking (2026-07, Phase 2 review cycle)
+
+`check-qua-updates.mjs` — a small, manually-triggered check for whether
+QUA has published reciter coverage that could expand ground-truth Tajweed
+timing beyond Husary/Minshawi. Queries the public
+`hetchyy/quranic-universal-ayahs` Hugging Face mirror's real
+datasets-server API (no auth, no download) and diffs against Tilawah's
+roster. **Only flags candidates** — never auto-validates; adding a reciter
+to `quaReferenceData.js` still requires the same offline
+cross-correlation check Husary/Minshawi passed.
+
+Real result as of 2026-07: **Sudais is not present in this 36-reciter HF
+mirror.** Note this mirror is a curated subset of QUA's much larger claimed
+catalog (1,213 reciters per their GitHub README) — "not found here" means
+"not in this easily-queryable subset yet," not a definitive "QUA has
+nothing for Sudais anywhere." Alafasy and Abdul Basit are reported as
+already-decided (closed/pending respectively) and explicitly not re-opened
+by this tool. No `check_updates.py`-style tool actually exists in QUA's own
+repo (checked `/scripts` directly) — this script is Tilawah's own answer to
+that gap, not a wrapper around an upstream one.
+
+## Broader-dataset research: MuazAhmad7/Surah_Ikhlas-Labeled_Dataset (2026-07, Phase 2 review cycle)
+
+Downloaded and hands-on inspected (all 1,506 rows, via the real HF
+datasets-server API — audio decoding hit an unrelated Windows/torchcodec
+native-library issue, worked around by reading label metadata directly,
+which is all this inspection needed) the one real lead from the broader-
+dataset research above. More promising than the initial page-scrape
+suggested, but not a clean drop-in replacement for QDAT's rigor:
+
+- **823 of 851 "error" rows (97%) specifically mention قلقلة (Qalqalah)**
+  in `error_explanation` — far more Qalqalah-focused than expected.
+- But labels are confirmed **per-recording** (a whole verse), not
+  per-occurrence: `error_location` is often a comma-separated list of
+  *several* words (e.g. `"قُلْ, هُوَ, اللَّهُ, أَحَدٌ"`), not a single pinned
+  position — QDAT's fragment-relative labels don't have this ambiguity.
+- `error_type`/`error_explanation` have real data-quality noise: literal
+  duplicate tag concatenation (`"تجويد, تجويد, تجويد, تجويد"`), inconsistent
+  whitespace — a less rigorously-curated label set than QDAT's.
+- `error_count`'s meaning is unclear from the data alone (values like 5 for
+  a verse with exactly one Qalqalah letter don't correspond to "number of
+  occurrences") — would need the dataset creator's own documentation to
+  use reliably, which isn't published.
+- Only verses 1, 3, and 4 of Al-Ikhlas actually contain a Qalqalah letter
+  (verse 2, اللَّهُ الصَّمَدُ, has none) — consistent with the error_location
+  distribution, so the data is internally coherent, just not built as a
+  ready-made per-occurrence validation set.
+
+**Conclusion: a real, moderate-effort follow-up opportunity, not a clean
+yes or a clean no.** Using it properly would need filtering to
+Qalqalah-mentioning rows, resolving the multi-word location ambiguity, and
+building an extraction script analogous to `extract-features.mjs` —
+meaningfully more integration work than QDAT needed. Not built as part of
+this review cycle; the ~682MB local dataset cache is sitting in the venv's
+Hugging Face cache if this is picked up as its own follow-up later.
+
 ## Honesty notes
 
 - QDAT's label distribution is skewed (e.g. ~81% of Ghunnah labels are
