@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { BookOpen, Mic, ShieldCheck, ScrollText, Sparkles, LogIn } from "lucide-react";
 import { motion } from "framer-motion";
+import CountdownTimer from "@/components/CountdownTimer";
 
 // Shown at "/" to anyone not signed in (see RootRoute in App.jsx) — the
 // entry point people actually land on before this existed, they were
@@ -49,6 +50,18 @@ export default function Landing() {
               Log in
             </Link>
           </div>
+        </motion.div>
+
+        {/* App Store countdown — a supporting detail, deliberately not the
+            most visually dominant element on the page (the hero above stays
+            the focal point). Calm, no urgency/scarcity language. */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="max-w-sm mx-auto"
+        >
+          <CountdownTimer />
         </motion.div>
 
         {/* Feature grid */}
