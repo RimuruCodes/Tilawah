@@ -602,7 +602,7 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                       max={ayahs?.length || 1}
                       value={uploadAyahCount}
                       onChange={(e) => setUploadAyahCount(clamp(parseInt(e.target.value, 10) || 1, 1, ayahs?.length || 1))}
-                      className="w-16 text-center bg-slate-900 border border-slate-700 rounded-lg py-1 text-white text-sm"
+                      className="w-16 text-center bg-slate-900 border border-slate-700 rounded-xl py-1 text-white text-sm"
                     />
                   </label>
                   <button
@@ -738,7 +738,7 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                       value={overrideCount}
                       onChange={(e) => setOverrideCount(e.target.value)}
                       aria-label={`Number of ayahs you actually recited, between 1 and ${ayahs?.length || 1}`}
-                      className="w-20 text-center bg-slate-900 border border-slate-700 rounded-lg py-1.5 text-white text-sm"
+                      className="w-20 text-center bg-slate-900 border border-slate-700 rounded-xl py-1.5 text-white text-sm"
                     />
                     <button
                       onClick={handleOverrideSubmit}

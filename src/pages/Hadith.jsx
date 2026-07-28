@@ -14,6 +14,9 @@ export default function Hadith() {
   const [openBook, setOpenBook] = useState(null); // {number, name} | null
   const [entries, setEntries] = useState(null);
   const [loadError, setLoadError] = useState("");
+  // Bumped by the retry button to force the book/topic effects below to
+  // re-run without touching their own cancellation-guard logic.
+  const [retryTick, setRetryTick] = useState(0);
   const [bookFilter, setBookFilter] = useState("");
   const [mode, setMode] = useState("browse"); // browse | search | topics | duas
   const [duaCategory, setDuaCategory] = useState("daily");
@@ -52,7 +55,7 @@ export default function Hadith() {
       .then((data) => { if (!cancelled) setEntries(data); })
       .catch((err) => { if (!cancelled) setLoadError(err.message || "Couldn't load this book — check your connection and try again."); });
     return () => { cancelled = true; };
-  }, [collectionId, openBook]);
+  }, [collectionId, openBook, retryTick]);
 
   // Load the books mapped to the active topic (Topics mode) — each is a
   // real, already-cited Bukhari/Muslim book fetched through the same
@@ -75,7 +78,7 @@ export default function Hadith() {
       .catch((err) => { if (!cancelled) setLoadError(err.message || "Couldn't load this topic — check your connection and try again."); })
       .finally(() => { if (!cancelled) setTopicLoading(false); });
     return () => { cancelled = true; };
-  }, [mode, activeTopic]);
+  }, [mode, activeTopic, retryTick]);
 
   const switchCollection = (id) => {
     setCollectionId(id);
@@ -84,6 +87,15 @@ export default function Hadith() {
     setSearchResults(null);
     setSearchQuery("");
     setMode("browse");
+  };
+
+  const retryLoad = () => {
+    setLoadError("");
+    if (mode === "search") {
+      runSearch();
+    } else {
+      setRetryTick((t) => t + 1);
+    }
   };
 
   const runSearch = async () => {
@@ -159,7 +171,13 @@ export default function Hadith() {
         {loadError && (
           <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/20 rounded-xl p-3">
             <AlertTriangle className="w-4 h-4 text-orange-400 flex-shrink-0" />
-            <p className="text-xs text-orange-300">{loadError}</p>
+            <p className="text-xs text-orange-300 flex-1">{loadError}</p>
+            <button
+              onClick={retryLoad}
+              className="px-3 py-1.5 rounded-xl bg-orange-500/20 text-orange-300 text-xs font-medium hover:bg-orange-500/30 transition-colors flex-shrink-0"
+            >
+              Try again
+            </button>
           </div>
         )}
 
@@ -340,7 +358,7 @@ export default function Hadith() {
                   onClick={() => setOpenBook(book)}
                   className="w-full flex items-center gap-3 rounded-xl bg-slate-900/50 border border-slate-700/20 hover:border-slate-600/40 transition-colors p-3 text-left"
                 >
-                  <span className="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 text-xs font-medium flex items-center justify-center flex-shrink-0">
+                  <span className="w-8 h-8 rounded-xl bg-slate-800 text-slate-400 text-xs font-medium flex items-center justify-center flex-shrink-0">
                     {book.number}
                   </span>
                   <span className="flex-1 text-sm text-slate-200 truncate">{book.name}</span>
@@ -440,7 +458,7 @@ function HadithCard({ hadith, collectionName, accent, onClick }) {
       <p className="text-sm text-slate-300 leading-relaxed line-clamp-4">{hadith.english}</p>
       <div className="flex items-center gap-2 pt-1">
         <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${style.badge}`}>Sahih</span>
-        <p className="text-[11px] text-slate-500">
+        <p className="text-xs text-slate-500">
           {collectionName} {hadith.number}
           <span className="text-slate-600"> · source collection's grading</span>
         </p>

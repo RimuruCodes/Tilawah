@@ -234,10 +234,11 @@ export default function Progress() {
               <p className="text-slate-600 text-xs mt-1">See your Qalqalah, Ghunnah, and Madd pass-rate trend over time — tap to unlock</p>
             </button>
           ) : tajweedTrend.length < 2 ? (
-            <div className="text-center py-10 bg-slate-900/30 rounded-2xl border border-slate-700/20">
-              <p className="text-slate-500 text-sm">Not enough Tajweed-checked recitations yet</p>
-              <p className="text-slate-600 text-xs mt-1">Keep practicing single-ayah recitation to see your Qalqalah, Ghunnah, and Madd trends here</p>
-            </div>
+            <EmptyState
+              icon={TrendingUp}
+              title="Not enough Tajweed-checked recitations yet"
+              message="Keep practicing single-ayah recitation to see your Qalqalah, Ghunnah, and Madd trends here"
+            />
           ) : (
             <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4">
               <ResponsiveContainer width="100%" height={220}>

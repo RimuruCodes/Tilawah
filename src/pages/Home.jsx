@@ -5,11 +5,13 @@ import { getHijriDate } from "@/lib/hijri";
 import { JUZ_AMMA_PLAN } from "@/lib/recitationPlans";
 import { useAuth } from "@/lib/AuthContext";
 import { motion } from "framer-motion";
-import { Heart, Loader2, HelpCircle } from "lucide-react";
+import { Loader2, HelpCircle } from "lucide-react";
 import { computeCurrentStreak } from "@/lib/streaks";
 import StreakDisplay from "@/components/quran/StreakDisplay";
 import WeeklyHeatmap from "@/components/quran/WeeklyHeatmap";
 import SupportModal from "@/components/quran/SupportModal";
+import IconButton from "@/components/IconButton";
+import SupportButton from "@/components/SupportButton";
 import TutorialModal, { hasSeenTutorial } from "@/components/TutorialModal";
 import { ContinueRecitingCard, AyahOfTheDayCard, HadithOfTheDayCard, RamadanCard, PlanCard } from "@/components/home/DashboardCards";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -106,22 +108,13 @@ export default function Home() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button
+            <IconButton
+              icon={HelpCircle}
+              label="How does the AI scoring work?"
+              variant="neutral"
               onClick={() => setTutorialOpen(true)}
-              className="p-2.5 rounded-xl bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors border border-slate-700/30"
-              title="How does the AI scoring work?"
-              aria-label="How does the AI scoring work?"
-            >
-              <HelpCircle className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setSupportOpen(true)}
-              className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors border border-amber-500/20"
-              title="Support the App"
-              aria-label="Support the App"
-            >
-              <Heart className="w-5 h-5" />
-            </button>
+            />
+            <SupportButton onClick={() => setSupportOpen(true)} />
           </div>
         </header>
 

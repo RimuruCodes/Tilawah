@@ -7,6 +7,7 @@ import { useSubscription } from "@/lib/SubscriptionContext";
 import { describeSubscription } from "@/lib/entitlements";
 import { openBillingPortalUrl, deleteSubscriberAccount } from "@/lib/subscriptionApi";
 import { RecitationLog, MemorizationProgress, DailyStreak, FeedbackReport, RecitationPlanState, exportUserData, importUserData } from "@/lib/localDb";
+import IconButton from "@/components/IconButton";
 // Removes every localStorage key for one account's on-device data + its sync
 // marker, after the server-side account has already been deleted.
 function clearLocalUserData(userId) {
@@ -192,13 +193,13 @@ export default function Settings() {
     <div className="min-h-screen bg-slate-950">
       <div className="max-w-2xl mx-auto px-4 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] space-y-8">
         <div className="flex items-center gap-3">
-          <button
+          <IconButton
+            icon={ArrowLeft}
+            label="Go back"
+            variant="ghost"
             onClick={() => navigate(-1)}
-            aria-label="Go back"
-            className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
+            className="p-2 min-h-[44px] min-w-[44px]"
+          />
           <h1 className="text-2xl font-bold text-white">Settings</h1>
         </div>
 

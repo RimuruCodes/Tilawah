@@ -4,11 +4,13 @@ import { defaultShowTranslation } from "@/lib/arabicComfort";
 import { getArabicTextScale } from "@/lib/arabicTextSize";
 import { MemorizationProgress, RecitationLog } from "@/lib/localDb";
 import { motion } from "framer-motion";
-import { ArrowLeft, Eye, EyeOff, Languages, Loader2, BookOpen, ChevronLeft, ChevronRight, Heart, Mic } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Languages, Loader2, BookOpen, ChevronLeft, ChevronRight, Mic } from "lucide-react";
 import { SURAHS, RECITERS, fetchSurahText } from "@/lib/quranData";
 import { findTajweedRules } from "@/lib/tajweedRules";
 import AyahDisplay from "@/components/quran/AyahDisplay";
 import EmptyState from "@/components/EmptyState";
+import IconButton from "@/components/IconButton";
+import SupportButton from "@/components/SupportButton";
 import AudioPlayer from "@/components/quran/AudioPlayer";
 import SupportModal from "@/components/quran/SupportModal";
 import UpgradeModal from "@/components/quran/UpgradeModal";
@@ -185,40 +187,31 @@ export default function SurahReader() {
             <span className="text-sm">All Surahs</span>
           </button>
           <div className="flex items-center gap-2">
-            <button
+            <IconButton
+              icon={Languages}
+              label={showTranslation ? "Hide translation" : "Show translation"}
+              pressed={showTranslation}
+              activeColor="emerald"
               onClick={() => setShowTranslation(!showTranslation)}
-              className={`p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-colors ${showTranslation ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800/50 text-slate-500'}`}
-              title={showTranslation ? "Hide translation" : "Show translation"}
-              aria-label={showTranslation ? "Hide translation" : "Show translation"}
-              aria-pressed={showTranslation}
-            >
-              <Languages className="w-4 h-4" />
-            </button>
-            <button
+              className="p-2 min-h-[44px] min-w-[44px]"
+            />
+            <IconButton
+              icon={hideMode ? EyeOff : Eye}
+              label={hideMode ? "Disable memorization mode" : "Enable memorization mode"}
+              pressed={hideMode}
+              activeColor="amber"
               onClick={() => setHideMode(!hideMode)}
-              className={`p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-colors ${hideMode ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800/50 text-slate-500'}`}
-              title={hideMode ? "Disable memorization mode" : "Enable memorization mode"}
-              aria-label={hideMode ? "Disable memorization mode" : "Enable memorization mode"}
-              aria-pressed={hideMode}
-            >
-              {hideMode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+              className="p-2 min-h-[44px] min-w-[44px]"
+            />
             <button
               onClick={handleContinuousClick}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors border border-emerald-500/20 text-sm font-medium"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors border border-emerald-500/20 text-sm font-medium"
               title="Recite the entire Surah"
             >
               <Mic className="w-4 h-4" />
               Recite All
             </button>
-            <button
-              onClick={() => setSupportOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500 text-slate-900 font-semibold text-sm hover:bg-amber-400 transition-colors shadow-sm shadow-amber-500/20"
-              title="Support the App"
-            >
-              <Heart className="w-4 h-4" />
-              Donate
-            </button>
+            <SupportButton onClick={() => setSupportOpen(true)} />
           </div>
         </div>
 
