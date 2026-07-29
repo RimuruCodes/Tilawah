@@ -1,4 +1,4 @@
-import { findTajweedRules } from "@/lib/tajweedRules";
+import { findTajweedRules, splitAyahIntoWords } from "@/lib/tajweedRules";
 import {
   buildEnergyFrameCache,
   energyProfileForCachedWindow,
@@ -16,8 +16,28 @@ const DIACRITICS_RE = /[\u064B-\u0652\u0670\u0653]/g;
 const TATWEEL_RE = /\u0640/g;
 const NON_ARABIC_LETTER_RE = /[^\u0621-\u064A]/g; // strips punctuation, latin, digits
 
+// Alif wasla (U+0671, e.g. the alif in Uthmani-script "Allah") is a real
+// long-vowel letter in the Uthmani script, not a decorative mark — but it
+// falls outside NON_ARABIC_LETTER_RE's keep range, so it was being
+// silently deleted instead of normalized to a plain alif like the other
+// alif variants below (verified against real ASR output: "ٱللَّهُ"/
+// "ٱلْكِتَٰبَ" consistently transcribe with a full alif, e.g. "اللَّهُ").
+//
+// Superscript/dagger alif (U+0670, a compact Quranic stand-in for a long
+// vowel, e.g. in "haadhaa") is deliberately NOT included here, even though
+// it looks like the same situation: real Whisper output confirmed it is
+// NOT reliably restored to a full alif the way alif wasla is — "إِلَٰهَ"
+// transcribes as "إِلَهَ" (no second alif), matching a real, well-known
+// Arabic spelling convention (إله/هذا/ذلك and a handful of others keep the
+// short compact form even in ordinary, non-Uthmani script) that a blanket
+// regex can't distinguish from the "كِتَٰبَ"-style words that DO get a full
+// alif. Left as a diacritic to strip, its original behavior, rather than
+// guess wrong on the exception words. Must run BEFORE DIACRITICS_RE.
+const ALIF_WASLA_RE = /ٱ/g;
+
 export function normalizeArabic(word) {
   return word
+    .replace(ALIF_WASLA_RE, "ا")
     .replace(DIACRITICS_RE, "")
     .replace(TATWEEL_RE, "")
     .replace(NON_ARABIC_LETTER_RE, "")
@@ -752,7 +772,7 @@ function computeStyleMatchScore(ruleChecks, reciterStyleProfile, userSamples, sa
 // Full pipeline: ASR transcription result + expected ayah text -> word word
 // alignment, word-correctness feedback, and Tajweed rule checks.
 export function analyzeTajweedFromTranscription({ asrResult, ayahArabicText, userSamples, sampleRate, referenceAlignment = null, quaContext = null, reciterFolder = null }) {
-  const expectedWordsOriginal = ayahArabicText.trim().split(/\s+/).filter(Boolean);
+  const expectedWordsOriginal = splitAyahIntoWords(ayahArabicText);
   const expectedWords = expectedWordsOriginal.map(normalizeArabic);
   const chunks = asrResult?.chunks || [];
   const recognizedWords = chunks.map((c) => normalizeArabic((c.text || "").trim()));

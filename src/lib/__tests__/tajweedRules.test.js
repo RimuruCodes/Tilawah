@@ -9,6 +9,26 @@ describe("splitAyahIntoWords", () => {
       "الرَّحْمَٰنِ",
     ]);
   });
+
+  // ASR investigation (2026-07): the quran-uthmani API text includes waqf/
+  // pause-guidance marks (ۚ ۖ ۗ ۙ ۘ, and the sajdah sign ۩) as their own
+  // whitespace-separated tokens — recitation guidance, never something a
+  // reciter actually says. A naive split counted these as "expected words"
+  // that speech recognition can never match, guaranteeing a false "missed
+  // word" every time (verified: ~93% of all "missed word" classifications
+  // across a 150-ayah validation sample were these marks, not real ASR
+  // misses). They must never appear in the returned word list.
+  it("filters out waqf/pause marks and the sajdah sign — they are not words", () => {
+    expect(splitAyahIntoWords("ٱللَّهُ لَآ إِلَٰهَ إِلَّا هُوَ ۚ ٱلْحَىُّ")).toEqual([
+      "ٱللَّهُ",
+      "لَآ",
+      "إِلَٰهَ",
+      "إِلَّا",
+      "هُوَ",
+      "ٱلْحَىُّ",
+    ]);
+    expect(splitAyahIntoWords("مَن ذَا ٱلَّذِى يَشْفَعُ ۩")).toEqual(["مَن", "ذَا", "ٱلَّذِى", "يَشْفَعُ"]);
+  });
 });
 
 describe("baseLetterCharIndexes", () => {

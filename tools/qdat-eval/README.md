@@ -422,3 +422,100 @@ Hugging Face cache if this is picked up as its own follow-up later.
   the shared nasal threshold + the Ikhfa proxy above — there is no direct
   Iqlab measurement anywhere in these numbers.
 - QDAT has no Qalqalah labels; `qalqalahBounceDb` stays hand-picked.
+
+## ASR accuracy on real, imperfect speech (2026-07)
+
+Investigation into whether the Quran-tuned ASR (`An0xity/whisper-base-ar-quran-onnx-timestamped`)
+accurately transcribes a real learner's actual mistakes, not just
+already-correct professional recitation — every validation before this had
+only ever used clean, correct reciter audio for both sides of the
+comparison.
+
+### Phase 1 — real and constructed mistake audio
+
+Built two test sets (`fetch-asr-error-testset.mjs`, `build-spliced-testset.mjs`,
+run via `run-asr-error-testset.mjs`):
+- **7 real human recordings** from `MuazAhmad7/Surah_Ikhlas-Labeled_Dataset`,
+  each with a real annotator's explanation of a genuine Tajweed mistake
+  (Qalqalah, makhraj, sukoon, hamzat-wasl errors), plus 4 "correct" controls
+  from the same dataset.
+- **5 constructed splice cases** (skipped word, swapped word order,
+  shortened/dropped Madd, inserted hesitation pause, a non-speech sound) —
+  built from Husary's professional recitation of Al-Ikhlas 1 using QUA's
+  real word-level timestamps as precise cut points, so every word segment
+  is genuine recorded speech; only the edit is artificial.
+
+**Findings:**
+- On genuine word-substitution mistakes, the model does **not** autocorrect
+  to canonical text: a swapped word order ("قُلْ هُوَ أَحَدٌ اللَّهُ") transcribed
+  exactly as said, not the canonical order; a skipped word ("هُوَ" cut out)
+  produced "قُلْ لِلَّهُ أَحَدٌ", not the canonical text with the word
+  hallucinated back in; two real recordings with an annotated Qalqalah-Dal
+  defect transcribed "يَلِتْ"/"يُولَتْ" (Dal→Ta), not the canonical spelling.
+- On prosody/duration-only mistakes (dropped Madd, a hesitation pause, a
+  spliced-in non-speech sound), the transcript came out canonical regardless
+  — expected, since word-level ASR can't represent "how long a vowel was
+  held," which is exactly why this app already routes those checks to the
+  separate DSP/energy-analysis pathway rather than ASR text.
+- A distinct risk found along the way: both "correct" controls for Al-Ikhlas
+  verse 4 mistranscribed **كُفُوًا**, and the verse-3 control mistranscribed
+  **يَلِدْ** as "يَلِتْ" — the model has real word-specific transcription
+  weaknesses that fire even on entirely correct recitation, a different and
+  more actionable risk than canonical-text bias.
+
+### Phase 2 — canonical-text bias
+
+**Closed as a genuine negative result.** The Phase 1 data directly answers
+this: no case was found where the model forced canonical spelling over a
+real, deviating input — both the real mislabeled recordings and the
+constructed splices came back reflecting what was actually said. No fix
+needed for this specific concern.
+
+### Finding-3 follow-up — is the word-weakness broad or narrow?
+
+Reused the existing 150-(ayah,reciter) broad-ASR-validation corpus
+(all correct, professional audio) to check whether كُفُوًا/يَلِدْ's
+mistranscription was an isolated quirk or a wider pattern
+(`find-systematic-weak-words.mjs`). Answer: **mostly isolated** — but the
+investigation surfaced two much bigger, unrelated bugs in the app's own
+word-comparison code, not the ASR:
+
+1. **Waqf/pause marks were being tokenized as expected words** (major).
+   The `quran-uthmani` API text includes recitation-guidance marks (ۚ ۖ ۗ ۙ
+   ۘ, the sajdah sign ۩) as their own whitespace-separated tokens. Since
+   speech recognition can never "say" a punctuation mark, every occurrence
+   was unconditionally reported as a missed word — real, user-facing
+   feedback like `Word 8 ("ۚ") wasn't clearly picked up...` for a symbol
+   that was never meant to be spoken. Measured against the 150-pair corpus:
+   97 of 1678 expected "words" (5.8%) were these marks, and they accounted
+   for **93% of every "missed" classification** (104 of 111 total). Ayat
+   al-Kursi (2:255) alone has 8 waqf marks among its 58 tokens. **Fixed**:
+   `splitAyahIntoWords` (`tajweedRules.js`) now filters out any token with
+   zero real Arabic letters, and `tajweedAnalysis.js`/`recitationService.js`/
+   `ayahWindowMatching.js` all route through this one shared function
+   instead of their own duplicated raw splits, so rule `wordIndex` values
+   stay consistent with the filtered word list everywhere. Verified against
+   the real production functions: missed-word count on the corpus dropped
+   104 → 7, with the remaining 7 all genuine words.
+2. **Alif wasla (ٱ, U+0671) wasn't normalized like other alif variants**
+   (minor). It's a real long-vowel letter in the Uthmani script, not a
+   decorative mark, but fell outside `normalizeArabic`'s keep range and was
+   silently deleted — verified against real ASR output that it should map
+   to a plain alif (`"ٱللَّهُ"` consistently transcribes as `"اللَّهُ"`).
+   **Fixed**, isolated effect on the same corpus: 17 of 1678 word
+   occurrences moved from "shaky" to "clean" (40 → 23), zero regressions.
+   **Caught and corrected during this work**: an initial version of this
+   fix also converted superscript/dagger alif (ٰ, U+0670) the same way,
+   which broke an existing unit test — real ASR output for `"إِلَٰهَ"`
+   confirmed it stays `"إِلَهَ"` (no second alif), matching a genuine,
+   well-known Arabic spelling exception (إله/هذا/ذلك and a few others keep
+   the compact form even outside Uthmani script) that a blanket regex can't
+   distinguish from words like `"كِتَٰبَ"` that do get a full alif restored.
+   Left as the original diacritic-strip behavior rather than guess wrong on
+   the exception words — a real example of the test suite catching an
+   overreach before it shipped.
+
+Verification scripts: `verify-production-fixes.mjs` (waqf-mark filtering,
+against the real shipped functions) and `verify-alif-wasla-isolated.mjs`
+(alif-wasla fix, isolated from the waqf-mark change). Both re-run against
+`asr-sample-results.json` (gitignored — regenerate via `asr-sample-eval.mjs`).

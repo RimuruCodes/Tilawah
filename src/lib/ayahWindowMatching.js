@@ -13,6 +13,7 @@
 //  2. pickBestAyahCount — the recording's duration vs. cumulative
 //     reference durations (always available, used as the fallback).
 import { normalizeArabic, alignWords } from "@/lib/tajweedAnalysis";
+import { splitAyahIntoWords } from "@/lib/tajweedRules";
 
 // How well the best candidate must explain the transcript before the
 // transcript method is trusted over duration matching. Garbled audio and
@@ -40,7 +41,7 @@ export function pickAyahCountFromTranscript({ transcriptText, ayahTexts, taggedC
   }
 
   const ayahWords = ayahTexts.map((text) =>
-    (text || "").split(/\s+/).map(normalizeArabic).filter(Boolean)
+    splitAyahIntoWords(text || "").map(normalizeArabic).filter(Boolean)
   );
 
   const minCount = Math.max(1, taggedCount - searchMargin);

@@ -109,6 +109,29 @@ describe("normalizeArabic", () => {
     expect(normalizeArabic("الرحيم.")).toBe("الرحيم");
     expect(normalizeArabic("word123")).toBe("");
   });
+
+  // ASR investigation (2026-07): alif wasla (ٱ, U+0671) is a real long-vowel
+  // letter in the Uthmani script — verified against real ASR output
+  // ("ٱللَّهُ"/"ٱلْكِتَٰبَ" consistently transcribe with a full alif, e.g.
+  // "اللَّهُ"/"الكتاب") — so it must normalize the same as an ordinary alif,
+  // not vanish the way a decorative mark would.
+  it("normalizes alif wasla (ٱ) to a plain alif, matching ordinary-spelling ASR output", () => {
+    expect(normalizeArabic("ٱللَّهُ")).toBe(normalizeArabic("اللَّهُ"));
+    expect(normalizeArabic("ٱلْكِتَٰبَ")).not.toBe("");
+    expect(normalizeArabic("ٱلْكِتَٰبَ").startsWith("ال")).toBe(true);
+  });
+
+  // Deliberately NOT the same fix as alif wasla, even though both are
+  // Quranic-specific marks that could look like the same bug: real ASR
+  // output for "إِلَٰهَ" (dagger alif, U+0670) came back as "إِلَهَ" — no
+  // second alif — matching a real, well-known Arabic spelling convention
+  // (إله/هذا/ذلك and a few others keep the compact form even outside
+  // Uthmani script) that a blanket regex can't tell apart from words like
+  // "كِتَٰبَ" that DO get a full alif. This pins that the existing
+  // diacritic-strip behavior for U+0670 is intentionally unchanged.
+  it("still strips dagger/superscript alif (ٰ) as a diacritic — a real ASR-verified exception, not an oversight", () => {
+    expect(normalizeArabic("إِلَٰهَ")).toBe("اله");
+  });
 });
 
 describe("levenshtein / wordSimilarity", () => {

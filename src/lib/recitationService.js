@@ -11,6 +11,7 @@ import { RecitationLog, DailyStreak } from "@/lib/localDb";
 import { ensureAsrModelLoaded, transcribeAudio, resetAsrWorker, getAsrModelPreference, ASR_MODEL_OPTIONS, isIosWebKit, isAsrEnabled, isAsrBusy, setAsrBusy } from "@/lib/asrEngine";
 import { planEscalations, budgetAllows } from "@/lib/escalation";
 import { analyzeTajweedFromTranscription, summarizeTajweedChecks, alignWords, buildWordTimings, normalizeArabic } from "@/lib/tajweedAnalysis";
+import { splitAyahIntoWords } from "@/lib/tajweedRules";
 import { getCachedWordTimings, setCachedWordTimings } from "@/lib/wordTimingCache";
 import { getStoredCalibration } from "@/lib/micCalibration";
 import { pickBestAyahCount, pickAyahCountFromTranscript } from "@/lib/ayahWindowMatching";
@@ -525,7 +526,7 @@ export async function estimateReferenceWordTiming({ reciterFolder, surahNumber, 
     return { words: null, reason: "transcription-failed" };
   }
 
-  const expectedWords = ayahArabicText.trim().split(/\s+/).filter(Boolean).map(normalizeArabic);
+  const expectedWords = splitAyahIntoWords(ayahArabicText).map(normalizeArabic);
   const recognizedWords = asrResult.chunks.map((c) => normalizeArabic((c.text || "").trim()));
   const alignments = alignWords(expectedWords, recognizedWords);
   const words = buildWordTimings(alignments, asrResult.chunks);
