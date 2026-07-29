@@ -519,3 +519,72 @@ Verification scripts: `verify-production-fixes.mjs` (waqf-mark filtering,
 against the real shipped functions) and `verify-alif-wasla-isolated.mjs`
 (alif-wasla fix, isolated from the waqf-mark change). Both re-run against
 `asr-sample-results.json` (gitignored — regenerate via `asr-sample-eval.mjs`).
+
+### Phase 3 — decoding parameters beyond beam search
+
+Beam search was already conclusively ruled out in an earlier investigation
+(a non-functional no-op in this transformers.js version). Checked whether
+`temperature`, `compression_ratio_threshold`, `logprob_threshold`, or
+`condition_on_previous_text` were real, usable levers instead — verified
+against the actual installed source (`@huggingface/transformers` 4.2.0),
+the same way beam search's status was confirmed rather than assumed.
+
+**All four are dead ends, for two different reasons:**
+- `compression_ratio_threshold`, `logprob_threshold`, `condition_on_previous_text`
+  don't exist as recognized `GenerationConfig` fields at all — the config
+  constructor does `Object.assign(this, pick(config, Object.getOwnPropertyNames(this)))`,
+  which silently drops anything not already a declared class field. None of
+  these three names appear anywhere in `generation/configuration_utils.js`.
+- `temperature` is real and wired up (`TemperatureLogitsWarper`), but it
+  only has any effect when `do_sample: true` is also set (this app uses
+  greedy decoding), and the actual Whisper "fallback" behavior — decode,
+  check quality, retry at a different temperature if bad — was never
+  implemented: `_call_whisper` in `pipelines/automatic-speech-recognition.js`
+  calls `generate()` exactly once per chunk, no retry loop at all.
+- Checked one level deeper since a confidence-based reject/retry is exactly
+  what `logprob_threshold` would need: the base `generate()` does compute a
+  cumulative per-sequence log-probability internally
+  (`modeling_utils.js:998-1005`, real code), but it's never returned — the
+  return object literally has `// TODO: // scores, // logits,` in the
+  library's own source (`modeling_utils.js:1054-1063`). Dead end at the
+  library's lowest level, not just a missing config knob.
+
+No code changes. Nothing to build here.
+
+### Phase 4 — does the existing noise-reduction DSP help or hurt ASR?
+
+`reduceNoise` (`audioAnalysis.js`) runs before ASR whenever a device has a
+calibrated noise floor (`decodeUserRecording` in `recitationService.js` —
+the same decoded buffer feeds both the acoustic score and ASR). Ran the
+real-audio half of the Finding-3 test corpus (the 7 real labeled-error
+recordings + 4 correct controls — the 5 spliced cases were excluded here,
+since one of them turned out to need a synthetic all-zero silence segment
+whose estimated noise floor, ~-160dB, doesn't correspond to any real
+calibration scenario) through the ASR both raw and after noise reduction,
+using each file's own bottom-10th-percentile frame energy as a realistic
+per-file floor estimate (`test-noise-reduction-effect.mjs`).
+
+**Mixed result, not a clean helps/hurts:**
+- 1 real regression on unmodified human audio at a realistic floor
+  (-43.3dB): a mostly-correct transcript ("قَلْ هُوَ اللَّهُ أَحَدٌ") became
+  gibberish for its first two words ("خَلُّ وَالْغَافُ أَحَدٌ") after noise
+  reduction.
+- 1 improvement (-48.5dB floor): "لَوْ" corrected to "لَهُ", closer to
+  canonical.
+- The rest of the real-audio corpus (9 of 11 files, including all 4 correct
+  controls) were unaffected.
+
+**Conclusion: flagged as a real, moderate-confidence caution — not acted
+on.** The sample is small (11 real-audio files, 1 clear regression), and
+noise reduction is already gated behind explicit user calibration, not
+applied to everyone by default, so this doesn't justify a DSP change on
+its own. Treat "noise reduction is safe for ASR" as an open question, not
+a settled assumption, until a larger sample is checked.
+
+**Open follow-up (not urgent, not yet done):** re-run this same raw-vs-
+noise-reduced comparison over the broader 150-(ayah,reciter) validation
+corpus (real audio only) to find out whether the `error_v1a_0`-style
+severe corruption is roughly 1-in-16, or genuinely rare — before deciding
+whether "just a caution" remains the right answer or the noise gate needs
+an actual safeguard (e.g. comparing raw vs. reduced transcription
+confidence and falling back to raw when reduction looks like it hurt).

@@ -60,6 +60,7 @@ dist-ssr
 /tools/qdat-eval/asr-spliced-testset.json
 /tools/qdat-eval/asr-error-testset-results.json
 /tools/qdat-eval/systematic-weak-words.json
+/tools/qdat-eval/noise-reduction-effect-results.json
 # The full ONNX export (~2.6GB, all quantization variants) -- the shipped
 # q8 files are hosted on Hugging Face (see README.md); only the conversion
 # scripts (onnx_convert/) are source.
