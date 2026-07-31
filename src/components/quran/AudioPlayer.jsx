@@ -7,7 +7,7 @@ import { RECITERS, getAudioUrl } from "@/lib/quranData";
 import { getQuaWordWindowsForAyah } from "@/lib/quaReferenceData";
 import { getCachedWordTimings } from "@/lib/wordTimingCache";
 import { estimateReferenceWordTiming } from "@/lib/recitationService";
-import { isAsrEnabled } from "@/lib/asrEngine";
+import { isAsrEnabled, isIosWebKit } from "@/lib/asrEngine";
 import { findActiveWord } from "@/hooks/useWordHighlight";
 import { buildLetterTimings } from "@/lib/letterTiming";
 
@@ -17,14 +17,19 @@ function getStoredFollowAlong() {
   return localStorage.getItem(FOLLOW_ALONG_KEY) === "on";
 }
 
-// Android's WebView fails to recomposite a sticky/fixed element correctly
-// while content changes underneath it (e.g. ayah auto-advance during
-// playback) whenever that element has ANY non-opaque background, leaving
-// ghosted stale content bleeding through. Verified on-device: a translateZ/
-// will-change compositing-layer hint doesn't fix it, and dropping just the
-// blur (keeping bg-slate-900/95) doesn't either — only a fully opaque
-// background sidesteps the bug.
-const IS_NATIVE = Capacitor.isNativePlatform();
+// A sticky element fails to recomposite correctly while content changes
+// underneath it (e.g. ayah auto-advance during playback) whenever that
+// element has ANY non-opaque background, leaving ghosted stale content
+// bleeding through — verified on-device: a translateZ/will-change
+// compositing-layer hint doesn't fix it, and dropping just the blur
+// (keeping bg-slate-900/95) doesn't either, only a fully opaque background
+// sidesteps the bug. Originally found on Android's native WebView, but
+// confirmed via real WebKit (iPhone profile) against the live production
+// site that it also reproduces — as an outright page crash, not just
+// ghosting — on iOS, in BOTH the native app AND the plain web browser
+// (Chrome-for-iOS is WebKit under the hood too; Apple mandates it). So the
+// real risk population is "WebKit-family engine", not "native wrapper".
+const IS_RISKY_ENGINE = Capacitor.isNativePlatform() || isIosWebKit();
 
 export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWordHighlight, selectedReciter, onReciterChange }) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -329,7 +334,7 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
   };
 
   return (
-    <div className={`${IS_NATIVE ? "bg-slate-900" : "bg-slate-900/80 backdrop-blur-xl"} border border-slate-700/50 rounded-2xl p-4 space-y-3`}>
+    <div className={`${IS_RISKY_ENGINE ? "bg-slate-900" : "bg-slate-900/80 backdrop-blur-xl"} border border-slate-700/50 rounded-2xl p-4 space-y-3`}>
       <div className="flex items-center justify-between gap-4">
         <Select value={selectedReciter} onValueChange={onReciterChange}>
           <SelectTrigger aria-label="Choose reciter" className="flex-1 min-w-0 max-w-56 bg-slate-800/50 border-slate-700 text-sm text-slate-300 h-9">

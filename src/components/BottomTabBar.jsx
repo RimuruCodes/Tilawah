@@ -5,6 +5,7 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
+import { isIosWebKit } from "@/lib/asrEngine";
 import { Home, BookOpen, ScrollText, BarChart3, Settings2 } from "lucide-react";
 
 const TABS = [
@@ -15,16 +16,18 @@ const TABS = [
   { to: "/settings", label: "Settings", icon: Settings2 },
 ];
 
-// See the matching comment in AudioPlayer.jsx: Android's WebView ghosts stale
-// content through this fixed bar on scroll/content change whenever it has
-// any non-opaque background; only a fully opaque background on native fixes it.
-const IS_NATIVE = Capacitor.isNativePlatform();
+// See the matching comment in AudioPlayer.jsx: a sticky/fixed element ghosts
+// stale content through it on scroll/content change whenever it has any
+// non-opaque background — confirmed on Android's native WebView AND, via
+// real WebKit against the live production site, on iOS in both the native
+// app and the plain web browser (any WebKit-family engine, not just native).
+const IS_RISKY_ENGINE = Capacitor.isNativePlatform() || isIosWebKit();
 
 export default function BottomTabBar() {
   return (
     <nav
       aria-label="Primary"
-      className={`fixed bottom-0 inset-x-0 z-40 border-t border-slate-800/80 ${IS_NATIVE ? "bg-slate-950" : "bg-slate-950/90 backdrop-blur-lg"} pb-[env(safe-area-inset-bottom)]`}
+      className={`fixed bottom-0 inset-x-0 z-40 border-t border-slate-800/80 ${IS_RISKY_ENGINE ? "bg-slate-950" : "bg-slate-950/90 backdrop-blur-lg"} pb-[env(safe-area-inset-bottom)]`}
     >
       <div className="max-w-2xl mx-auto grid grid-cols-5">
         {TABS.map(({ to, label, icon: Icon, end }) => (
