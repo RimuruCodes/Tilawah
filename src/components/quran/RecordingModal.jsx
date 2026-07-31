@@ -73,6 +73,20 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
     }
   }, [open]);
 
+  // Recorded/uploaded audio is exposed to <audio>/playback via an object
+  // URL (URL.createObjectURL), which keeps its backing Blob's memory alive
+  // in the browser until explicitly revoked — clearing the `audioUrl`
+  // React state does NOT release it. Keyed to `audioUrl` itself (not a
+  // manual call at every creation site) so React's own cleanup-before-next-
+  // run semantics revoke the previous URL the instant it's replaced by a
+  // new take, and the final one on unmount — covers every path (re-record,
+  // reset, file upload, closing the modal) from one place.
+  useEffect(() => {
+    return () => {
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+    };
+  }, [audioUrl]);
+
   // TEMP (mobile reload diagnosis): stamp every state change into the
   // persisted lifecycle log so a post-reload log shows exactly where the
   // session died. Remove with lifecycleDebug.js.

@@ -168,13 +168,17 @@ export async function analyzeSingleAyahRecitation({ userSamples, reciterFolder, 
   let refSamples = await fetchAyahSamples(reciterFolder, surahNumber, ayahNumber);
   if (refSamples) {
     trackBuffer("reference-samples", refSamples.length * 4);
-    const result = compareSamples(userSamples, refSamples, TARGET_SAMPLE_RATE, { userNoiseFloorDb });
-    // Explicit dereference, not just scope expiry: the ASR model load (the
-    // memory spike) starts after this returns, and the ledger must be able
-    // to PROVE the reference audio was no longer referenced by then.
-    refSamples = null;
-    releaseBuffer("reference-samples");
-    return result;
+    try {
+      return compareSamples(userSamples, refSamples, TARGET_SAMPLE_RATE, { userNoiseFloorDb });
+    } finally {
+      // Explicit dereference, not just scope expiry: the ASR model load (the
+      // memory spike) starts after this returns, and the ledger must be able
+      // to PROVE the reference audio was no longer referenced by then. In a
+      // `finally` so a compareSamples throw can't leave the ledger falsely
+      // reporting this buffer as still held for the rest of the page session.
+      refSamples = null;
+      releaseBuffer("reference-samples");
+    }
   }
   return analyzeRecordingQualityOnly(userSamples, TARGET_SAMPLE_RATE, userNoiseFloorDb);
 }
@@ -266,15 +270,21 @@ export async function analyzeContinuousRecitation({
   const gapSamples = new Float32Array(Math.round(TARGET_SAMPLE_RATE * CONTINUOUS_GAP_SEC));
   let refSamples = joinAyahSamples(perAyahSamples.slice(0, resolvedCount), gapSamples);
 
-  const result = refSamples
-    ? compareSamples(userSamples, refSamples, TARGET_SAMPLE_RATE, { userNoiseFloorDb })
-    : analyzeRecordingQualityOnly(userSamples, TARGET_SAMPLE_RATE, userNoiseFloorDb);
-  // Explicit dereference, not just scope expiry: on a cold model the ASR
-  // session creation (the memory spike) starts after this returns, and the
-  // ledger must be able to PROVE the reference audio wasn't still held.
-  perAyahSamples = null;
-  refSamples = null;
-  releaseBuffer("reference-samples");
+  let result;
+  try {
+    result = refSamples
+      ? compareSamples(userSamples, refSamples, TARGET_SAMPLE_RATE, { userNoiseFloorDb })
+      : analyzeRecordingQualityOnly(userSamples, TARGET_SAMPLE_RATE, userNoiseFloorDb);
+  } finally {
+    // Explicit dereference, not just scope expiry: on a cold model the ASR
+    // session creation (the memory spike) starts after this returns, and the
+    // ledger must be able to PROVE the reference audio wasn't still held. In
+    // a `finally` so a compareSamples throw can't leave the ledger falsely
+    // reporting this buffer as still held for the rest of the page session.
+    perAyahSamples = null;
+    refSamples = null;
+    releaseBuffer("reference-samples");
+  }
   recordLifecycleEvent("dsp-complete", `score=${result.score} count=${resolvedCount} (${countMethod}); reference buffers dereferenced`);
 
   return { ...result, resolvedAyahCount: resolvedCount, taggedAyahCount: taggedCount, ayahCountCorrected: corrected, manualOverride, countMethod };
