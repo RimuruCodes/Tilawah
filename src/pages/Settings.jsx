@@ -16,7 +16,7 @@ function clearLocalUserData(userId) {
     .filter((k) => k.startsWith(`qc_data_${userId}_`) || k === `qc_sync_meta_${userId}`)
     .forEach((k) => localStorage.removeItem(k));
 }
-import { ASR_MODEL_OPTIONS, getAsrModelPreference, setAsrModelPreference, isAsrEnabled, setAsrEnabled } from "@/lib/asrEngine";
+import { ASR_MODEL_OPTIONS, getAsrModelPreference, setAsrModelPreference, isAsrEnabled, setAsrEnabled, isIosWebKit } from "@/lib/asrEngine";
 import { ESCALATION_BUDGETS, getEscalationBudgetId, setEscalationBudgetId } from "@/lib/escalation";
 import { isRamadanModeEnabled, setRamadanModeEnabled } from "@/lib/hijri";
 import { ARABIC_COMFORT_LEVELS, getArabicComfort, setArabicComfort } from "@/lib/arabicComfort";
@@ -344,6 +344,16 @@ export default function Settings() {
                 </button>
               ))}
             </div>
+            {isIosWebKit() && (
+              <p className="text-xs text-amber-400/90 flex items-start gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <span>
+                  "More accurate" is more likely to fail on iPhone/iPad due to a known device memory
+                  limitation. If it does, the app falls back to your acoustic score without word-level
+                  Tajweed detail rather than losing your result.
+                </span>
+              </p>
+            )}
           </div>
 
           <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">

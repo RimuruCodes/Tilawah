@@ -25,6 +25,8 @@ import {
   deadlineDelayForProgress,
   isSuspensionGap,
   stallReasonCode,
+  IOS_ACCURATE_INFERENCE_CEILING_MS,
+  isRiskyInference,
 } from "@/lib/asrWatchdog";
 
 // Rejects if the promise doesn't settle within `ms`. Every await in the
@@ -358,6 +360,13 @@ async function transcribeWithWatchdog(samples, onModelProgress, modelIdOverride)
   try {
     const audioSec = samples.length / TARGET_SAMPLE_RATE;
     const infCeilingMs = inferenceCeilingMs(audioSec);
+    const modelId = modelIdOverride || ASR_MODEL_OPTIONS[getAsrModelPreference()].id;
+    const riskyInference = isRiskyInference({
+      isIos: isIosWebKit(),
+      modelId,
+      accurateModelId: ASR_MODEL_OPTIONS.accurate.id,
+    });
+    const tightenedInfCeilingMs = riskyInference ? IOS_ACCURATE_INFERENCE_CEILING_MS : infCeilingMs;
     let deadline = Date.now() + infCeilingMs;
     let settled = false;
     let wentHidden = false;
@@ -366,7 +375,8 @@ async function transcribeWithWatchdog(samples, onModelProgress, modelIdOverride)
 
     recordLifecycleEvent(
       "asr-watchdog-armed",
-      `session-creation ${Math.round(ASR_LOAD_CEILING_MS / 1000)}s / inference ${Math.round(infCeilingMs / 1000)}s ceilings for ${audioSec.toFixed(0)}s of audio`
+      `session-creation ${Math.round(ASR_LOAD_CEILING_MS / 1000)}s / inference ${Math.round(tightenedInfCeilingMs / 1000)}s ceilings for ${audioSec.toFixed(0)}s of audio` +
+        (riskyInference ? " — tightened: iOS + accurate model is a known crash-prone combination" : "")
     );
 
     const work = (async () => {
@@ -377,7 +387,7 @@ async function transcribeWithWatchdog(samples, onModelProgress, modelIdOverride)
         deadline = Date.now() + deadlineDelayForProgress(pct, audioSec);
         onModelProgress?.(pct);
       }, modelIdOverride);
-      deadline = Date.now() + infCeilingMs; // model resident; inference next (no progress events)
+      deadline = Date.now() + tightenedInfCeilingMs; // model resident; inference next (no progress events)
       return await transcribeAudio(samples, undefined, modelIdOverride);
     })().finally(() => { settled = true; });
 

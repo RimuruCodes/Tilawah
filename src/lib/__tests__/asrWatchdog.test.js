@@ -6,7 +6,12 @@ import {
   deadlineDelayForProgress,
   isSuspensionGap,
   stallReasonCode,
+  IOS_ACCURATE_INFERENCE_CEILING_MS,
+  isRiskyInference,
 } from "@/lib/asrWatchdog";
+
+const ACCURATE_ID = "An0xity/whisper-base-ar-quran-onnx-timestamped";
+const FAST_ID = "Xenova/whisper-tiny";
 
 describe("inferenceCeilingMs", () => {
   it("scales at 10x real-time, floored at 180s and capped at 360s", () => {
@@ -46,5 +51,25 @@ describe("stallReasonCode", () => {
     expect(stallReasonCode({ wentHidden: true, wasSuspended: true })).toBe("backgrounded-during-inference");
     expect(stallReasonCode({ wentHidden: false, wasSuspended: true })).toBe("suspended-during-inference");
     expect(stallReasonCode({ wentHidden: false, wasSuspended: false })).toBe("timed-out");
+  });
+});
+
+describe("isRiskyInference", () => {
+  it("flags only iOS + the accurate model — the one combination observed to crash", () => {
+    expect(isRiskyInference({ isIos: true, modelId: ACCURATE_ID, accurateModelId: ACCURATE_ID })).toBe(true);
+  });
+
+  it("never flags the fast model, on any device", () => {
+    expect(isRiskyInference({ isIos: true, modelId: FAST_ID, accurateModelId: ACCURATE_ID })).toBe(false);
+  });
+
+  it("never flags the accurate model off iOS (Android/desktop never showed this crash)", () => {
+    expect(isRiskyInference({ isIos: false, modelId: ACCURATE_ID, accurateModelId: ACCURATE_ID })).toBe(false);
+  });
+});
+
+describe("IOS_ACCURATE_INFERENCE_CEILING_MS", () => {
+  it("is far shorter than the normal audio-scaled inference ceiling, for any realistic recording", () => {
+    expect(IOS_ACCURATE_INFERENCE_CEILING_MS).toBeLessThan(inferenceCeilingMs(5)); // even the 180s floor
   });
 });
