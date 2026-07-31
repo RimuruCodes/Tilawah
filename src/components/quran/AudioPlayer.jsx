@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, RotateCcw, Captions, Loader2 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,6 +16,15 @@ const FOLLOW_ALONG_KEY = "qc_follow_along_enabled";
 function getStoredFollowAlong() {
   return localStorage.getItem(FOLLOW_ALONG_KEY) === "on";
 }
+
+// Android's WebView fails to recomposite a sticky/fixed element correctly
+// while content changes underneath it (e.g. ayah auto-advance during
+// playback) whenever that element has ANY non-opaque background, leaving
+// ghosted stale content bleeding through. Verified on-device: a translateZ/
+// will-change compositing-layer hint doesn't fix it, and dropping just the
+// blur (keeping bg-slate-900/95) doesn't either — only a fully opaque
+// background sidesteps the bug.
+const IS_NATIVE = Capacitor.isNativePlatform();
 
 export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWordHighlight, selectedReciter, onReciterChange }) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -319,7 +329,7 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
   };
 
   return (
-    <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-4 space-y-3">
+    <div className={`${IS_NATIVE ? "bg-slate-900" : "bg-slate-900/80 backdrop-blur-xl"} border border-slate-700/50 rounded-2xl p-4 space-y-3`}>
       <div className="flex items-center justify-between gap-4">
         <Select value={selectedReciter} onValueChange={onReciterChange}>
           <SelectTrigger aria-label="Choose reciter" className="flex-1 min-w-0 max-w-56 bg-slate-800/50 border-slate-700 text-sm text-slate-300 h-9">
