@@ -710,12 +710,8 @@ export function summarizeTajweedChecks(ruleChecks = []) {
 // Whisper repetition-loop artifact checkTajweedRules already guards
 // against). Never guesses a window for a word with no real timing.
 //
-// Shared by the user's own recording (analyzeTajweedFromTranscription
-// below, reusing the alignments/chunks it already computed — no extra ASR
-// work) and reference-audio ASR estimation (estimateReferenceWordTiming in
-// recitationService.js, which builds its own alignments from a separate
-// transcription of the reciter's audio) — one implementation for turning
-// "alignments + chunks" into playback-ready word timing, not two.
+// Used by the user's own recording (analyzeTajweedFromTranscription below),
+// reusing the alignments/chunks it already computed — no extra ASR work.
 export function buildWordTimings(alignments, chunks) {
   const timings = [];
   alignments.forEach((a, wordIndex) => {

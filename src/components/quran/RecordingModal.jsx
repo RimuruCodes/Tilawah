@@ -14,7 +14,6 @@ import WaveformTimeline from "@/components/quran/WaveformTimeline";
 import ComparePlayback from "@/components/quran/ComparePlayback";
 import { getAudioUrl } from "@/lib/quranData";
 import { getQuaWordWindowsForAyah } from "@/lib/quaReferenceData";
-import { getCachedWordTimings } from "@/lib/wordTimingCache";
 import MetricBadge from "@/components/quran/MetricBadge";
 import ResultFeedback from "@/components/quran/ResultFeedback";
 import CelebrationOverlay, { celebrationFor } from "@/components/quran/CelebrationOverlay";
@@ -94,23 +93,11 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
     setLifecyclePhase(open ? `single:${state}` : "idle");
   }, [state, open]);
 
-  // Reference-side follow-along data for this ayah — QUA first (free,
-  // synchronous), else whatever's already cached (free, async, never
-  // triggers new ASR). Resolved as soon as the ayah is known, independent
-  // of the recording flow's own state.
+  // Reference-side word data for this ayah, QUA ground truth only — resolved
+  // as soon as the ayah is known, independent of the recording flow's own
+  // state. Free and synchronous; never null if this reciter+ayah is covered.
   useEffect(() => {
-    if (!open || !ayah) { setCompareRefWords(null); return; }
-    let cancelled = false;
-    const qua = getQuaWordWindowsForAyah(reciterFolder, surahNumber, ayah.number);
-    if (qua) {
-      setCompareRefWords(qua);
-      return;
-    }
-    setCompareRefWords(null);
-    getCachedWordTimings(reciterFolder, surahNumber, ayah.number).then((cached) => {
-      if (!cancelled && cached?.words?.length) setCompareRefWords(cached.words);
-    });
-    return () => { cancelled = true; };
+    setCompareRefWords(open && ayah ? getQuaWordWindowsForAyah(reciterFolder, surahNumber, ayah.number) : null);
   }, [open, ayah, reciterFolder, surahNumber]);
 
   // TEMP (score-change investigation): the main score display reads

@@ -176,8 +176,9 @@ export function getQuaWordWindowSec(reciterFolder, surahNumber, ayahNumber, word
 // boundaries up front rather than one lookup per word. Same coordinate
 // system and 0-based `wordIndex` as getQuaWordWindowSec above. `confidence`
 // is always 1 — this IS the verified ground truth, not an estimate (see
-// estimateReferenceWordTiming in recitationService.js for the ASR-estimated
-// case, which reports its own per-word confidence honestly instead).
+// buildWordTimings in tajweedAnalysis.js for the ASR-estimated case, used
+// for the user's own recording, which reports its own per-word confidence
+// honestly instead).
 // Returns null (never an empty/partial array) whenever this (reciter,
 // ayah) isn't covered, so callers can tell "nothing to highlight" apart
 // from "an ayah with zero valid words".

@@ -23,10 +23,9 @@
 import { splitAyahIntoWords, baseLetterCharIndexes } from "@/lib/tajweedRules";
 
 // `wordTimings`: array of { wordIndex, startSec, endSec, confidence } — from
-// either getQuaWordWindowsForAyah (quaReferenceData.js) or
-// estimateReferenceWordTiming/buildWordTimings (recitationService.js /
-// tajweedAnalysis.js). Same shape either way, so this needs no reciter-
-// specific branch.
+// either getQuaWordWindowsForAyah (quaReferenceData.js, ground truth) or
+// buildWordTimings (tajweedAnalysis.js, ASR-estimated from the user's own
+// recording). Same shape either way, so this needs no source-specific branch.
 // `ayahArabicText`: the ayah's own text (already Basmalah-stripped by
 // fetchSurahText — see quranData.js), used only to know how many base
 // letters each word has.

@@ -102,23 +102,6 @@ export function isAsrModelWarm() {
   return modelWarm;
 }
 
-// True while ANY transcription is actively in flight — the recorded-audio
-// analysis flow (transcribeUserRecording), or the opt-in reference-audio
-// estimation for follow-along highlighting (estimateReferenceWordTiming).
-// The two must never run concurrently: each decodes/holds its own large
-// audio buffer alongside the ASR model, and overlapping them stacks memory
-// in exactly the way that's crashed mobile tabs before. Reference-audio
-// estimation is the lower-priority, opt-in, casual-listening-time one, so
-// it checks this and simply declines to start rather than queuing —
-// callers treat that exactly like "no data available", never an error.
-let asrBusy = false;
-export function isAsrBusy() {
-  return asrBusy;
-}
-export function setAsrBusy(busy) {
-  asrBusy = !!busy;
-}
-
 export function setAsrModelPreference(pref) {
   localStorage.setItem(MODEL_PREF_KEY, pref === "fast" ? "fast" : "accurate");
 }
