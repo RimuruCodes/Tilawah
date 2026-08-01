@@ -61,12 +61,42 @@ export async function requestLoginCode(email) {
   if (error) throw error;
 }
 
-// Step 2: exchanges the emailed code for a real session.
+// Step 2: exchanges the emailed code for a real session. Used ONLY by
+// UpgradeModal, where the email is already guaranteed (via an emailHash
+// check before the code is even sent) to match the account signed in on
+// this device — so the session this establishes is the same identity,
+// never a different one. Do NOT reuse this for a flow that lets the email
+// differ from the signed-in account (see restoreSubscriptionByEmail below
+// and its header comment for why that's a real hazard, not a style choice).
 export async function verifyLoginCode(email, code) {
   requireBackend();
   const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
   if (error) throw error;
   return data.session;
+}
+
+// "Restore purchase": verifies a subscription email that may be DIFFERENT
+// from the one this device is signed in as (see RestoreSubscriptionModal.jsx
+// — that's its whole point). Unlike verifyLoginCode, this never calls
+// supabase.auth.verifyOtp() on the client — doing so would establish a real
+// session for that other email on the app's one shared Supabase client,
+// silently swapping the caller's logged-in identity (the bug found in the
+// 2026-08-01 code audit; see restore-subscription Edge Function's header
+// comment for the full trace). Verification happens server-side instead,
+// via a throwaway client scoped to that single request; this call only ever
+// gets back plan/status/renewal fields, never a token, and the caller's own
+// session is untouched throughout. On success, the restored subscription's
+// entitlement is transferred to the CALLER's own account server-side.
+export async function restoreSubscriptionByEmail(email, code) {
+  requireBackend();
+  const { data, error } = await supabase.functions.invoke("restore-subscription", {
+    body: { email, token: code },
+  });
+  if (error) {
+    const detail = await error.context?.json?.().catch(() => null);
+    throw new Error(detail?.error || error.message || "That code didn't work — check it and try again.");
+  }
+  return data;
 }
 
 // Returns the caller's subscription row, or null if they've never

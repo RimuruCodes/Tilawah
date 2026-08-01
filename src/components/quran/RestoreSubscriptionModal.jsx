@@ -2,14 +2,8 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { RotateCcw, Loader2, CheckCircle2, Mail } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import {
-  requestLoginCode,
-  verifyLoginCode,
-  subscriberSignOut,
-  claimSubscriberSession,
-} from "@/lib/subscriptionApi";
+import { requestLoginCode, restoreSubscriptionByEmail } from "@/lib/subscriptionApi";
 import { useSubscription } from "@/lib/SubscriptionContext";
-import { useAuth } from "@/lib/AuthContext";
 import { isSubscriptionActive } from "@/lib/entitlements";
 
 // "Restore purchase": for an existing subscriber on a NEW device/browser.
@@ -17,19 +11,25 @@ import { isSubscriptionActive } from "@/lib/entitlements";
 // This is deliberately independent of the local-account email. A returning
 // subscriber first creates a local account (any email) to get past the app's
 // login wall — that local email need NOT be their subscription email. Here
-// they verify their actual SUBSCRIPTION email via a 6-digit code, which
-// re-establishes the Supabase session and unlocks paid features on this
-// device.
+// they verify their actual SUBSCRIPTION email via a 6-digit code.
 //
-// Why this is separate from UpgradeModal's OTP (which forces an email match):
-// letting the *subscribe* flow accept a mismatched email would re-open the
-// identity-desync bug — a Supabase session for one email attached to a local
-// account for another. Restore instead ties the restored session to whoever
-// is signed in locally right now (claimSubscriberSession), so the reconcile
-// logic still signs it out cleanly on logout or an account switch.
+// Why this is separate from UpgradeModal's OTP (which forces an email
+// match): letting this flow accept a mismatched email is the whole point,
+// which means it CANNOT verify that code the same way UpgradeModal does.
+// UpgradeModal's supabase.auth.verifyOtp() establishes a real session for
+// whatever email is entered — safe there only because the emailHash guard
+// already forces it to match the signed-in account. This flow has no such
+// guard, so verifying the same way would silently sign the caller into a
+// DIFFERENT person's account (a real bug found in the 2026-08-01 code
+// audit — the "reconcile" mechanism this comment used to claim protected
+// against that had zero call sites anywhere in the app). Fixed by moving
+// verification server-side (restoreSubscriptionByEmail -> the
+// restore-subscription Edge Function): the code is checked against the
+// restored email without ever creating a session for it, and that
+// subscription's entitlement is transferred to the CALLER's own account
+// instead. The caller's own session never changes throughout this flow.
 export default function RestoreSubscriptionModal({ open, onClose }) {
   const { refreshSubscription } = useSubscription();
-  const { user } = useAuth();
   const [step, setStep] = useState("email"); // email, code, done
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -64,18 +64,16 @@ export default function RestoreSubscriptionModal({ open, onClose }) {
     setBusy(true);
     setErrorMessage("");
     try {
-      await verifyLoginCode(email.trim(), code.trim());
-      // Tie the restored session to the local account active on this device
-      // so it reconciles away cleanly on logout / account switch.
-      claimSubscriberSession(user?.id);
+      // Verifies the code and transfers that email's subscription to the
+      // caller's own account entirely server-side — no session for the
+      // restored email is ever created on this device, so there's nothing
+      // to sign back out on the "no active subscription" path below.
+      await restoreSubscriptionByEmail(email.trim(), code.trim());
       const subscription = await refreshSubscription();
       if (isSubscriptionActive(subscription)) {
         setStep("done");
         return;
       }
-      // Verified an email that has no active subscription — don't leave a
-      // dangling Supabase session behind; sign it straight back out.
-      await subscriberSignOut();
       setErrorMessage("No active subscription was found for that email. If you subscribed with a different address, try that one.");
       setStep("email");
     } catch (err) {

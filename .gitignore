@@ -15,6 +15,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dist-restore-e2e
 *.local
 
 # Editor directories and files

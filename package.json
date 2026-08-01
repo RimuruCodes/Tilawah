@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:install": "node e2e/install-browsers.js",
+    "test:e2e:restore": "playwright test --config=playwright.config.restore-subscription.js",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
