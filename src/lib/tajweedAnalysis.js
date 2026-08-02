@@ -591,15 +591,31 @@ export function checkTajweedRules({ userSamples, sampleRate, ayahArabicText, ali
 
       let verdict;
       let measured;
+      // Only label/compute this as reference-anchored when the reference's
+      // own (scaled) transient actually exceeds the fixed floor — i.e. is
+      // the real binding constraint on the ceiling. When the floor would
+      // win regardless, this is functionally the threshold path (confirmed
+      // safe to correct: `mode` is read by tools/qdat-eval/tune-thresholds-
+      // ref.mjs to filter which records feed tuning, but only for madd/
+      // ghunnah/ikhfa — idgham_no_ghunnah has zero references anywhere in
+      // tools/qdat-eval, so no past tuning run depended on this label).
+      // Falling through to the exact threshold formula below (not just
+      // relabeling) also fixes a latent inconsistency at the boundary: the
+      // two branches previously used mismatched >= vs > comparisons, so a
+      // transientDb sitting exactly on the floor could get a different
+      // verdict depending on whether a reference happened to be supplied.
       if (refEnergyDb) {
         const refTailStart = Math.floor(refEnergyDb.length * 0.6);
         const refTailMax = Math.max(...refEnergyDb.slice(refTailStart));
         const refTransientDb = refTailMax - refMeanDb;
-        const ceiling = Math.max(TAJWEED_THRESHOLDS.idghamNoGhunnahTransientDb, refTransientDb * TAJWEED_THRESHOLDS.idghamNoGhunnahRefToleranceFactor);
-        const hasReleaseTransient = transientDb >= ceiling && hasBurst;
-        verdict = hasReleaseTransient ? "warn" : "pass";
-        measured = { mode: refMode, transientDb, refTransientDb, flatnessRise };
-      } else {
+        const refCeiling = refTransientDb * TAJWEED_THRESHOLDS.idghamNoGhunnahRefToleranceFactor;
+        if (refCeiling > TAJWEED_THRESHOLDS.idghamNoGhunnahTransientDb) {
+          const hasReleaseTransient = transientDb >= refCeiling && hasBurst;
+          verdict = hasReleaseTransient ? "warn" : "pass";
+          measured = { mode: refMode, transientDb, refTransientDb, flatnessRise };
+        }
+      }
+      if (!measured) {
         const hasReleaseTransient = transientDb > TAJWEED_THRESHOLDS.idghamNoGhunnahTransientDb && hasBurst;
         verdict = hasReleaseTransient ? "warn" : "pass";
         measured = { mode: "threshold", transientDb, flatnessRise };
