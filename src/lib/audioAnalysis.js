@@ -86,6 +86,26 @@ function toDb(value) {
   return 20 * Math.log10(Math.max(value, 1e-8));
 }
 
+// Stack-safe replacements for Math.max(...arr) / Math.min(...arr): the
+// spread form throws "Maximum call stack size exceeded" once arr grows
+// past roughly 125,000 elements (varies by engine — confirmed empirically
+// in this project's own Node/V8; likely lower on mobile WebKit). These
+// arrays are one entry per audio frame (12ms hop), so a continuous
+// multi-ayah recitation of ~25+ minutes reaches that — a real risk since
+// continuous mode has no recording-duration cap. `floor`/`ceil` mirror
+// Math.max(...arr, x)'s seed-value behavior; omit for plain Math.max/min
+// parity (empty array -> -Infinity / Infinity, same as the built-ins).
+function maxOf(arr, floor = -Infinity) {
+  let m = floor;
+  for (let i = 0; i < arr.length; i++) if (arr[i] > m) m = arr[i];
+  return m;
+}
+function minOf(arr, ceil = Infinity) {
+  let m = ceil;
+  for (let i = 0; i < arr.length; i++) if (arr[i] < m) m = arr[i];
+  return m;
+}
+
 // Autocorrelation-based pitch detection (classic approach, e.g. Chris
 // Wilson's pitch detector). Returns 0 when no plausible pitch is found.
 // Voicing gating (deciding whether the frame is loud enough to attempt
@@ -149,7 +169,7 @@ export function buildFeatures(samples, sampleRate) {
   for (let i = 0; i < frames.length; i++) {
     energyDb[i] = toDb(rms(frames[i]));
   }
-  const maxDb = Math.max(...energyDb, -100);
+  const maxDb = maxOf(energyDb, -100);
   const voicedGateDb = Math.max(maxDb - 30, -60);
   for (let i = 0; i < frames.length; i++) {
     pitchHz[i] = energyDb[i] > voicedGateDb ? detectPitch(frames[i], sampleRate) : 0;
@@ -182,7 +202,7 @@ export function reduceNoise(samples, sampleRate, { noiseFloorDb } = {}) {
   if (frames.length === 0) return samples;
 
   const frameDb = frames.map((f) => toDb(rms(f)));
-  const maxDb = Math.max(...frameDb);
+  const maxDb = maxOf(frameDb);
   // If the loudest frame isn't clearly above the floor, gating risks eating
   // real content (or there's simply nothing but noise) — do nothing.
   const MIN_HEADROOM_DB = 10;
@@ -244,7 +264,7 @@ export function reduceNoise(samples, sampleRate, { noiseFloorDb } = {}) {
 // prevents a noisy/quiet mic's background hiss from being misread as
 // speech, which the purely-relative threshold alone can't always catch.
 function detectActivity(energyDb, dropDb = 32, noiseFloorDb = null) {
-  const maxDb = Math.max(...energyDb, -100);
+  const maxDb = maxOf(energyDb, -100);
   let threshold = maxDb - dropDb;
   if (noiseFloorDb != null) {
     threshold = Math.max(threshold, noiseFloorDb + 6);
@@ -253,9 +273,15 @@ function detectActivity(energyDb, dropDb = 32, noiseFloorDb = null) {
 }
 
 function trimToActive(active) {
-  let start = active.findIndex(Boolean);
-  let end = active.length - 1 - [...active].reverse().findIndex(Boolean);
+  const start = active.findIndex(Boolean);
   if (start === -1) return { start: 0, end: -1 }; // fully silent
+  // A backward scan instead of [...active].reverse().findIndex(Boolean):
+  // that spread+reverse allocates a full copy of `active` on every call —
+  // one entry per audio frame, so for a long continuous recitation this is
+  // a real, avoidable allocation on the hot path (analyzeSingle runs it
+  // once per comparison).
+  let end = active.length - 1;
+  while (end > start && !active[end]) end--;
   return { start, end };
 }
 
@@ -460,6 +486,7 @@ function buildFeedback({ overall, durationRatio, alignmentScore, energyScore, pi
 
   if (energyScore != null) {
     if (energyScore < 45) notes.push("Where you emphasized/stressed syllables differed from the reference reciter.");
+    else if (energyScore >= 80) notes.push("Your emphasis and stress on syllables closely matched the reference reciter.");
   }
 
   if (overall >= 90) notes.unshift("Excellent — a very close acoustic match to the reference recitation.");
@@ -529,6 +556,19 @@ export function compareSamples(userSamples, refSamples, sampleRate = TARGET_SAMP
       feedback: ["No speech was detected in your recording — make sure your microphone is working and try again."],
       referenceAlignment: null,
     };
+  }
+
+  // The reference decoded successfully as bytes, but has no usable voiced
+  // content (a corrupted/truncated fetch, or an empty/near-silent source
+  // file) — this is symmetric to the user-silence guard above, and without
+  // it every downstream ratio/comparison against a near-zero reference
+  // duration produces nonsense (confirmed directly: a 5s real recording
+  // against a 3s silent "reference" reported "recited about 9860% slower
+  // than the reference"). Falls back to quality-only scoring, honest about
+  // there being no usable reference to compare against, matching this
+  // module's philosophy of never inventing a comparison it can't back up.
+  if (ref.isSilent || ref.durationSec < 0.35) {
+    return analyzeRecordingQualityOnly(userSamples, sampleRate, userNoiseFloorDb);
   }
 
   // Trim both to their active (voiced) region before comparing shape.
@@ -889,7 +929,7 @@ export function flatnessProfileForCachedWindow(cache, sampleRate, startSec, endS
 export function recordingSpectralBaseline(cache, sampleRate, dropDb = 32) {
   const { frames } = cache;
   const frameDb = frames.map((f) => (f ? toDb(rms(f)) : -100));
-  const maxDb = Math.max(...frameDb, -100);
+  const maxDb = maxOf(frameDb, -100);
   const threshold = maxDb - dropDb;
   const ratios = [];
   const centroids = [];
@@ -989,8 +1029,8 @@ export function getVisualizationEnvelope(samples, sampleRate = TARGET_SAMPLE_RAT
     return { points: [], hopSec, durationSec, pointDurationSec: durationSec };
   }
 
-  const floorDb = Math.min(...energyDb);
-  const ceilDb = Math.max(...energyDb);
+  const floorDb = minOf(energyDb);
+  const ceilDb = maxOf(energyDb);
   const range = Math.max(ceilDb - floorDb, 1e-6);
   const normalized = energyDb.map((db) => clamp((db - floorDb) / range, 0, 1));
   const points = downsample(normalized, Math.min(maxPoints, normalized.length));

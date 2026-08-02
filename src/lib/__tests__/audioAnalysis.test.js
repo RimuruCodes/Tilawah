@@ -14,6 +14,8 @@ import {
   pitchStdSemitones,
   spectralProfileForCachedWindow,
   recordingSpectralBaseline,
+  flatnessProfileForCachedWindow,
+  getVisualizationEnvelope,
   TARGET_SAMPLE_RATE,
 } from "@/lib/audioAnalysis";
 
@@ -109,12 +111,43 @@ describe("compareSamples", () => {
     expect(result.referenceAvailable).toBe(true);
   });
 
+  // buildFeedback praises alignmentScore/pitchScore at >=80 but, until this
+  // fix, silently skipped the same treatment for energyScore — an
+  // accidental omission (there's no reason emphasis/energy matching should
+  // be treated differently), not a deliberate asymmetry. An identical
+  // signal against itself scores 100 on all three, so this pins all three
+  // praise messages appearing together.
+  it("praises energy/emphasis matching at a high score, same as alignment and pitch", () => {
+    const signal = makeToneBurst({ toneSec: 1.2, amplitude: 0.5 });
+    const result = compareSamples(signal, signal, TARGET_SAMPLE_RATE);
+    expect(result.energyScore).toBeGreaterThanOrEqual(80);
+    expect(result.feedback.join(" ")).toMatch(/emphasis and stress.*closely matched/i);
+  });
+
   it("scores a silent recording as 0 even with a valid reference", () => {
     const reference = makeToneBurst({ toneSec: 1.0 });
     const result = compareSamples(makeSilence(1.5), reference, TARGET_SAMPLE_RATE);
     expect(result.score).toBe(0);
     expect(result.feedback[0]).toMatch(/no speech/i);
     expect(result.referenceAlignment).toBeNull();
+  });
+
+  // Symmetric case to the one above: a decoded-but-unusable REFERENCE (a
+  // corrupted/truncated fetch, or a near-silent source file) must not
+  // silently poison the comparison. Before the fix, a real 5s recording
+  // against a 3s silent "reference" produced durationRatio=99.6 and the
+  // feedback string "You recited about 9860% slower than the reference" —
+  // confirmed directly, not just reasoned about. It must instead fall back
+  // to honest quality-only scoring, exactly like no reference being
+  // available at all.
+  it("falls back to quality-only scoring when the reference is silent/degenerate, instead of nonsense ratios", () => {
+    const user = makeToneBurst({ toneSec: 2.0, amplitude: 0.5 });
+    const degenerateReference = makeSilence(3);
+    const result = compareSamples(user, degenerateReference, TARGET_SAMPLE_RATE);
+    expect(result.referenceAvailable).toBe(false);
+    expect(result.durationRatio).toBeUndefined();
+    expect(result.feedback.join(" ")).not.toMatch(/% slower| % faster/);
+    expect(result.feedback[0]).toMatch(/no matching reference/i);
   });
 
   it("penalizes a much shorter recording than the reference (pacing mismatch)", () => {
@@ -404,6 +437,23 @@ describe("spectral shape features (Ghunnah/Ikhfa research)", () => {
     const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
     expect(baseline.lowHighRatioDb).toBeCloseTo(mean(windowProfile.lowHighRatioDb), 0);
   });
+
+  // flatnessProfileForCachedWindow (Qalqalah's burst-detection signal, see
+  // computeBurstFlatnessRise in tajweedAnalysis.js) had no direct test
+  // coverage anywhere in the codebase before this — verified correct here,
+  // not just assumed, on the same physical basis its own header comment
+  // states: near 0 for a tonal/periodic signal, near 1 for broadband noise.
+  it("scores a pure tone near-zero flatness and broadband noise much higher", () => {
+    const tone = makePureTone(300, { sec: 0.5 });
+    const noise = makeNoise(Math.round(0.5 * TARGET_SAMPLE_RATE), 0.6, 42);
+    const toneCache = buildEnergyFrameCache(tone, TARGET_SAMPLE_RATE);
+    const noiseCache = buildEnergyFrameCache(noise, TARGET_SAMPLE_RATE);
+    const toneFlatness = flatnessProfileForCachedWindow(toneCache, TARGET_SAMPLE_RATE, 0, 0.5);
+    const noiseFlatness = flatnessProfileForCachedWindow(noiseCache, TARGET_SAMPLE_RATE, 0, 0.5);
+    const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+    expect(mean(toneFlatness)).toBeLessThan(0.05);
+    expect(mean(noiseFlatness)).toBeGreaterThan(mean(toneFlatness) + 0.3);
+  });
 });
 
 // ---- Noise reduction (calibration-driven soft noise gate) --------------
@@ -503,5 +553,26 @@ describe("reduceNoise (calibration-driven soft noise gate)", () => {
     for (let i = 0; i < signal.length; i++) {
       expect(Math.abs(out[i])).toBeLessThanOrEqual(Math.abs(signal[i]) + 1e-9);
     }
+  });
+});
+
+describe("long-recording stack safety", () => {
+  // Math.max(...arr) / Math.min(...arr) throws "Maximum call stack size
+  // exceeded" once arr crosses roughly 125,000 elements (engine-dependent —
+  // confirmed empirically in this project's own Node/V8 at ~130,000; likely
+  // lower on mobile WebKit). These per-frame arrays have one entry per 12ms
+  // hop, so a continuous multi-ayah recitation of ~25+ minutes reaches that
+  // — a real risk, since continuous mode has no recording-duration cap.
+  // Uses silence (not a tone) so buildFeatures' relative voicing gate skips
+  // per-frame pitch detection for every frame, keeping this fast despite
+  // the ~150,000-frame array.
+  it("buildFeatures/analyzeSingle/getVisualizationEnvelope/reduceNoise/recordingSpectralBaseline don't throw on a ~30-minute recording", () => {
+    const longSilence = makeSilence(1800); // 30 min -> ~150,000 frames at a 12ms hop
+    expect(() => buildFeatures(longSilence, TARGET_SAMPLE_RATE)).not.toThrow();
+    expect(() => analyzeSingle(longSilence, TARGET_SAMPLE_RATE)).not.toThrow();
+    expect(() => getVisualizationEnvelope(longSilence, TARGET_SAMPLE_RATE)).not.toThrow();
+    expect(() => reduceNoise(longSilence, TARGET_SAMPLE_RATE, { noiseFloorDb: -50 })).not.toThrow();
+    const cache = buildEnergyFrameCache(longSilence, TARGET_SAMPLE_RATE);
+    expect(() => recordingSpectralBaseline(cache, TARGET_SAMPLE_RATE)).not.toThrow();
   });
 });
