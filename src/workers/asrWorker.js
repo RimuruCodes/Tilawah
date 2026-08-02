@@ -8,6 +8,7 @@
 // checkpoint as a lighter-weight fallback.
 import { pipeline, env } from "@huggingface/transformers";
 import { patchWhisperGenerationConfig } from "@/lib/whisperGenerationPatch";
+import { createModelCache } from "@/lib/asrModelCache";
 
 // Single-threaded WASM, explicitly: the threaded build pre-allocates
 // per-thread stacks and SharedArrayBuffer memory up front — fixed overhead
@@ -35,8 +36,6 @@ export const ASR_MODELS = {
     label: "More accurate (larger download, Quran-tuned Arabic)",
   },
 };
-
-const transcribers = new Map(); // modelId -> pipeline promise
 
 // Diagnostic breadcrumbs relayed to the main thread's persisted lifecycle
 // log (workers can't touch localStorage) — a tab killed during session
@@ -81,87 +80,105 @@ async function detectDevice(allowWebGpu) {
   return "wasm";
 }
 
-function getTranscriber(modelId, onProgress, allowWebGpu) {
-  if (!transcribers.has(modelId)) {
-    // Only ONE model may live in memory at a time: switching models
-    // (Settings) used to leave the previous pipeline loaded alongside the
-    // new one — a guaranteed OOM on memory-constrained devices. Dispose
-    // any other model before loading this one. (Repeated analyses of the
-    // same model reuse the cached pipeline — no per-recording growth.)
-    for (const [otherId, otherPromise] of transcribers) {
-      transcribers.delete(otherId);
-      otherPromise.then((t) => t?.dispose?.()).catch(() => {});
-    }
-    const progress_callback = (data) => {
-      if (data?.status === "progress" && typeof data.progress === "number") {
-        onProgress?.(Math.round(data.progress));
-      }
-    };
-    // WASM needs two workarounds, both verified against onnxruntime-web's
-    // "Missing required scale ... MatMulNBits" session-creation failure:
-    // the 8-bit export (same dtype the offline eval harness validated), and
-    // graph optimization capped at "basic" — the extended-level
-    // DQ->MatMulNBits fusion misfires on these quantized weights.
-    //
-    // The remaining options all trade inference speed for a lower peak at
-    // session creation, which is where memory-tight tabs die:
-    //  - enableCpuMemArena=false: the arena grows in doubling chunks and
-    //    over-reserves; direct allocation tracks actual need.
-    //  - enableMemPattern=false: pattern planning pre-allocates the
-    //    inferred peak up front instead of incrementally.
-    //  - disable_prepacking: prepacking keeps a SECOND, kernel-shaped copy
-    //    of MatMul weights alongside the originals.
-    //  - use_device_allocator_for_initializers: weights bypass the arena
-    //    so they can't trigger an oversized arena growth.
-    const wasmOptions = {
-      device: "wasm",
-      dtype: "q8",
-      session_options: {
-        graphOptimizationLevel: "basic",
-        enableCpuMemArena: false,
-        enableMemPattern: false,
-        extra: {
-          session: {
-            disable_prepacking: "1",
-            use_device_allocator_for_initializers: "1",
-          },
-        },
+// WASM needs two workarounds, both verified against onnxruntime-web's
+// "Missing required scale ... MatMulNBits" session-creation failure: the
+// 8-bit export (same dtype the offline eval harness validated), and graph
+// optimization capped at "basic" — the extended-level DQ->MatMulNBits
+// fusion misfires on these quantized weights.
+//
+// The remaining options all trade inference speed for a lower peak at
+// session creation, which is where memory-tight tabs die:
+//  - enableCpuMemArena=false: the arena grows in doubling chunks and
+//    over-reserves; direct allocation tracks actual need.
+//  - enableMemPattern=false: pattern planning pre-allocates the inferred
+//    peak up front instead of incrementally.
+//  - disable_prepacking: prepacking keeps a SECOND, kernel-shaped copy of
+//    MatMul weights alongside the originals.
+//  - use_device_allocator_for_initializers: weights bypass the arena so
+//    they can't trigger an oversized arena growth.
+const wasmOptions = {
+  device: "wasm",
+  dtype: "q8",
+  session_options: {
+    graphOptimizationLevel: "basic",
+    enableCpuMemArena: false,
+    enableMemPattern: false,
+    extra: {
+      session: {
+        disable_prepacking: "1",
+        use_device_allocator_for_initializers: "1",
       },
-    };
-    const load = async () => {
-      const device = await detectDevice(allowWebGpu);
-      // Last words before the spike: which execution provider + dtype is
-      // about to create the session, and the heap where measurable.
-      postDiag(
-        device === "wasm"
-          ? `execution provider: wasm (dtype q8, 1 thread, arena+prepacking off); ${heapNote()}`
-          : `execution provider: webgpu (dtype fp32 — transformers.js default for webgpu); ${heapNote()}`
-      );
-      try {
-        const options = device === "wasm" ? wasmOptions : { device };
-        return await pipeline("automatic-speech-recognition", modelId, { ...options, progress_callback });
-      } catch (err) {
-        // Even with an adapter, webgpu session creation can still fail
-        // (driver quirks, out-of-memory) — WASM is the reliable floor.
-        if (device !== "wasm") {
-          postDiag(`webgpu session creation failed (${err?.message || err}) — retrying on wasm`);
-          return await pipeline("automatic-speech-recognition", modelId, { ...wasmOptions, progress_callback });
-        }
-        throw err;
-      }
-    };
-    transcribers.set(
-      modelId,
-      load().then((transcriber) => {
-        patchWhisperGenerationConfig(transcriber);
-        return transcriber;
-      }).catch((err) => {
-        transcribers.delete(modelId); // allow retry on next call
-        throw err;
-      })
-    );
+    },
+  },
+};
+
+// The actual "how to load model X" logic — the impure half of what used to
+// be one large getTranscriber function. Separated (2026-08-01 code audit)
+// from the cache/eviction mechanics below (see asrModelCache.js) so the
+// caching logic itself is unit-testable without a real Worker, real model
+// downloads, or real timers.
+async function loadTranscriber(modelId, onProgress, allowWebGpu) {
+  const progress_callback = (data) => {
+    if (data?.status === "progress" && typeof data.progress === "number") {
+      onProgress?.(Math.round(data.progress));
+    }
+  };
+  const device = await detectDevice(allowWebGpu);
+  // Last words before the spike: which execution provider + dtype is about
+  // to create the session, and the heap where measurable.
+  postDiag(
+    device === "wasm"
+      ? `execution provider: wasm (dtype q8, 1 thread, arena+prepacking off); ${heapNote()}`
+      : `execution provider: webgpu (dtype fp32 — transformers.js default for webgpu); ${heapNote()}`
+  );
+  let transcriber;
+  try {
+    const options = device === "wasm" ? wasmOptions : { device };
+    transcriber = await pipeline("automatic-speech-recognition", modelId, { ...options, progress_callback });
+  } catch (err) {
+    // Even with an adapter, webgpu session creation can still fail (driver
+    // quirks, out-of-memory) — WASM is the reliable floor.
+    if (device === "wasm") throw err;
+    postDiag(`webgpu session creation failed (${err?.message || err}) — retrying on wasm`);
+    transcriber = await pipeline("automatic-speech-recognition", modelId, { ...wasmOptions, progress_callback });
   }
-  return transcribers.get(modelId);
+  patchWhisperGenerationConfig(transcriber);
+  return transcriber;
+}
+
+// Only ONE model may live in memory at a time: switching models (Settings)
+// used to leave the previous pipeline loaded alongside the new one — a
+// guaranteed OOM on memory-constrained devices. createModelCache evicts
+// every other cached entry whenever a new modelId is requested. (Repeated
+// analyses of the same model reuse the cached pipeline — no per-recording
+// growth.)
+//
+// RACE CONDITION FOUND AND FIXED (2026-08-01 code audit + same-day
+// follow-up — see asrModelCache.js and asrModelCache.test.js): eviction
+// alone isn't safe to dispose on. Concretely: caller A requests model X
+// (starts loading); the main-thread flow that started A gets abandoned
+// (e.g. user backs out of a recording); the user changes their model
+// preference in Settings; caller B then requests model Y on this same
+// singleton worker. Naively, B's request would evict X the moment X's load
+// completes — racing directly against A's own dangling `await` on that
+// same X instance trying to actually run inference on it. Fixed via
+// reference counting in asrModelCache.js: every getTranscriber() call MUST
+// be matched by a modelCache.release(modelId) call once that caller is
+// done (success OR failure — see the finally blocks below) — an evicted
+// model is only actually disposed once its active-user count reaches zero,
+// never the instant a newer request's load resolves. Proven fixed, not
+// just plausible: asrModelCache.test.js's race test failed against the
+// pre-fix code with the exact predicted error, and passes now.
+//
+// (escalateAsrUpgrade in recitationService.js still separately calls
+// resetAsrWorker() — a full worker teardown — before loading a second
+// model for its own reasons: that's the deliberate, heavier-handed
+// cleanup for the one place the app INTENTIONALLY switches models
+// mid-session, not a substitute for this fix.)
+const modelCache = createModelCache(loadTranscriber);
+
+function getTranscriber(modelId, onProgress, allowWebGpu) {
+  return modelCache.get(modelId, onProgress, allowWebGpu);
 }
 
 self.onmessage = async (event) => {
@@ -176,6 +193,12 @@ self.onmessage = async (event) => {
       self.postMessage({ id, type: "loaded" });
     } catch (err) {
       self.postMessage({ id, type: "error", message: err?.message || String(err) });
+    } finally {
+      // Must run on every path — success, error, doesn't matter — or this
+      // call's claim on modelId never releases and an evicted-but-still-
+      // referenced model leaks its wasm memory forever instead of ever
+      // being disposed (see asrModelCache.js).
+      modelCache.release(modelId);
     }
     return;
   }
@@ -204,6 +227,8 @@ self.onmessage = async (event) => {
       self.postMessage({ id, type: "result", result });
     } catch (err) {
       self.postMessage({ id, type: "error", message: err?.message || String(err) });
+    } finally {
+      modelCache.release(modelId);
     }
   }
 };
