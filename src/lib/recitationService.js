@@ -183,6 +183,43 @@ export async function analyzeSingleAyahRecitation({ userSamples, reciterFolder, 
   return analyzeRecordingQualityOnly(userSamples, TARGET_SAMPLE_RATE, userNoiseFloorDb);
 }
 
+// Compares the user's recording against a SECOND reciter's reference audio
+// (Phase 3: multi-reciter comparison, capped at 2 reciters total) — purely
+// an additional acoustic-comparison score shown side-by-side with the
+// primary result. Deliberately a separate function rather than a parameter
+// added to analyzeSingleAyahRecitation, for two reasons:
+//  1. Every existing caller/test of analyzeSingleAyahRecitation stays
+//     completely unaffected — this is additive, not a modification to an
+//     already-shipped, already-tested code path.
+//  2. It enforces sequential-not-parallel reference handling by
+//     construction: callers MUST already have awaited
+//     analyzeSingleAyahRecitation to completion (whose own `finally`
+//     releases "reference-samples" before returning) before this function
+//     can even be called with the resolved userSamples. The two reference
+//     buffers are therefore never resident at once no matter how many
+//     reciters are compared -- see
+//     __tests__/recitationService.test.js's "peak reference-buffer memory"
+//     test, which asserts this directly via the trackBuffer/releaseBuffer
+//     ledger, not just that the feature works.
+//
+// Tajweed rule-checking is NOT extended to this second reciter (stays
+// anchored to the primary reciter's DTW alignment, unchanged) — this
+// result is acoustic-comparison-only (score/alignment/energy/pitch), same
+// scoring math as the primary comparison, no new formulas.
+export async function compareAgainstSecondReciter({ userSamples, reciterFolder, surahNumber, ayahNumber }) {
+  const userNoiseFloorDb = getStoredCalibration()?.noiseFloorDb ?? null;
+
+  let refSamples = await fetchAyahSamples(reciterFolder, surahNumber, ayahNumber);
+  if (!refSamples) return null; // no second card shown; caller keeps just the primary result
+  trackBuffer("reference-samples", refSamples.length * 4);
+  try {
+    return compareSamples(userSamples, refSamples, TARGET_SAMPLE_RATE, { userNoiseFloorDb });
+  } finally {
+    refSamples = null;
+    releaseBuffer("reference-samples");
+  }
+}
+
 // Analyzes a continuous, multi-ayah recording. Rather than trusting the
 // tapped ayah count outright (manual "Next Ayah" taps can easily drift
 // from the actual pace), the recited count is resolved from two signals:
@@ -560,6 +597,13 @@ export async function persistRecitationResult({ surahNumber, surahName, ayahs, r
       reciter_used: reciterName,
       duration_seconds: durationSeconds,
       tajweed_summary: tajweedSummary,
+      // Phase 6: previously computed live per-result and never persisted,
+      // so no Style Match history existed at all before this. null when
+      // Tajweed hasn't run yet at persist time (the common single-ayah
+      // case -- see attachTajweedToLogs below, which sets this once
+      // Tajweed actually completes in the background) or when this
+      // reciter has no style profile (reciterStyleProfiles.js).
+      style_match_score: tajweedResult?.styleMatchScore ?? null,
     });
     logIds.push(log.id);
   }
@@ -620,6 +664,7 @@ export async function attachTajweedToLogs({ logIds, feedback, tajweedResult }) {
     await RecitationLog.update(id, {
       ai_feedback: feedback.join("\n\n"),
       tajweed_summary: tajweedSummary,
+      style_match_score: tajweedResult?.styleMatchScore ?? null,
     });
   }
 }

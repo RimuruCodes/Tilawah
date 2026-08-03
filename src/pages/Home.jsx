@@ -14,7 +14,9 @@ import IconButton from "@/components/IconButton";
 import SupportButton from "@/components/SupportButton";
 import TutorialModal, { hasSeenTutorial } from "@/components/TutorialModal";
 import { ContinueRecitingCard, AyahOfTheDayCard, HadithOfTheDayCard, RamadanCard, PlanCard } from "@/components/home/DashboardCards";
+import CreateCustomPlanModal from "@/components/quran/CreateCustomPlanModal";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { getHomeLayout } from "@/lib/homeLayout";
 
 // Home is the daily-habit dashboard: resume practice, streak at a glance,
 // daily ayah + hadith. Browsing the full surah list lives on the Quran tab
@@ -27,6 +29,11 @@ export default function Home() {
   const { user } = useAuth();
   const [supportOpen, setSupportOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [createPlanOpen, setCreatePlanOpen] = useState(false);
+  // Read once per mount (Settings is the only place this changes; a fresh
+  // read there means the next time Home mounts already reflects it, same
+  // pattern as SurahReader's arabicScale).
+  const [homeLayout] = useState(getHomeLayout());
 
   useEffect(() => {
     if (user && !hasSeenTutorial(user.id)) {
@@ -56,6 +63,21 @@ export default function Home() {
     setPlanState(state);
   }, []);
 
+  // Phase 4: the custom plan definition rides along on the state record
+  // itself (custom_plan) rather than a separate collection -- it's already
+  // part of the existing exportable recitation_plans collection this way,
+  // no new backup/delete wiring needed. See PlanCard's `plan =
+  // planState.custom_plan || JUZ_AMMA_PLAN` resolution.
+  const startCustomPlan = useCallback(async (customPlan) => {
+    const state = await RecitationPlanState.create({
+      plan_id: customPlan.id,
+      started_date: new Date().toISOString(),
+      custom_plan: customPlan,
+    });
+    setPlanState(state);
+    setCreatePlanOpen(false);
+  }, []);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -72,18 +94,46 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+      <div className="min-h-screen bg-ink-bg flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-ink-accent animate-spin" />
       </div>
     );
   }
 
+  // One renderer per customizable card id (see homeLayout.js) — delay is
+  // derived from position so the stagger animation still reads correctly
+  // regardless of the user's chosen order, instead of a fixed per-card value.
+  const cardRenderers = {
+    continue: (delay) => <ContinueRecitingCard key="continue" lastLog={recitationLogs[0] || null} delay={delay} />,
+    streak: (delay) => (
+      <motion.div key="streak" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }}>
+        <StreakDisplay streaks={streaks} currentStreak={currentStreak} averageScore={averageScore} />
+      </motion.div>
+    ),
+    plan: (delay) => (
+      <PlanCard
+        key="plan"
+        planState={planState}
+        logs={recitationLogs}
+        onStart={startPlan}
+        onStartCustom={() => setCreatePlanOpen(true)}
+        delay={delay}
+      />
+    ),
+    weekly: (delay) => (
+      <motion.div key="weekly" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }}>
+        <WeeklyHeatmap streaks={streaks} />
+      </motion.div>
+    ),
+  };
+  const visibleCards = homeLayout.filter((c) => c.visible && cardRenderers[c.id]);
+
   return (
-    <div className="min-h-screen bg-slate-950 overscroll-none" {...touchHandlers}>
+    <div className="min-h-screen bg-ink-bg overscroll-none" {...touchHandlers}>
       <div className="max-w-2xl mx-auto px-4 pt-6 md:pt-10 pb-8 space-y-6">
         {(isRefreshing || pullDistance > 0) && (
           <div className="flex justify-center items-center" style={{ height: Math.max(pullDistance, isRefreshing ? 40 : 0) }}>
-            <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
+            <Loader2 className="w-6 h-6 text-ink-accent animate-spin" />
           </div>
         )}
 
@@ -93,17 +143,17 @@ export default function Home() {
             <motion.h1
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-3xl md:text-4xl font-bold text-white tracking-tight"
+              className="text-3xl md:text-4xl font-bold text-ink-text tracking-tight"
             >
-              <span className="bg-gradient-to-r from-emerald-400 to-emerald-200 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-ink-accent to-ink-accent/60 bg-clip-text text-transparent">
                 Quran
               </span>{" "}
-              <span className="text-white/80 font-light">Companion</span>
+              <span className="text-ink-text/80 font-light">Companion</span>
             </motion.h1>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-ink-text-3">
               {user?.full_name ? `Assalamu Alaikum, ${user.full_name}` : 'Read, Listen, Memorize, Perfect'}
             </p>
-            <p className="text-xs text-slate-600" title="Umm al-Qura calendar date">
+            <p className="text-xs text-ink-text-3" title="Umm al-Qura calendar date">
               {getHijriDate().formatted}
             </p>
           </div>
@@ -120,27 +170,26 @@ export default function Home() {
 
         {/* Daily-habit dashboard: resume practice, streak tiles (with the
             all-time average score folded in), daily inspiration. "Glance
-            and go" — detail lives in the reader and the Progress tab. */}
+            and go" — detail lives in the reader and the Progress tab.
+            RamadanCard and the Ayah/Hadith pair stay in a fixed position
+            (seasonal nudge + daily inspiration, not user-reorderable stat/
+            habit cards); the 4 cards in homeLayout.js render in the
+            user's chosen order/visibility around them. */}
         <RamadanCard delay={0} />
-        <ContinueRecitingCard lastLog={recitationLogs[0] || null} delay={0.05} />
-        <StreakDisplay streaks={streaks} currentStreak={currentStreak} averageScore={averageScore} />
-        <PlanCard planState={planState} logs={recitationLogs} onStart={startPlan} delay={0.1} />
+        {visibleCards.map((c, i) => cardRenderers[c.id](0.05 + i * 0.05))}
         <div className="grid gap-4 md:grid-cols-2">
           <AyahOfTheDayCard delay={0.15} />
           <HadithOfTheDayCard delay={0.2} />
         </div>
 
-        {/* Weekly Activity */}
-        <WeeklyHeatmap streaks={streaks} />
-
         {/* Footer */}
-        <footer className="py-6 border-t border-slate-800/50 space-y-4">
+        <footer className="py-6 border-t border-ink-border/50 space-y-4">
           <div className="flex items-center justify-center gap-6 text-sm">
-            <Link to="/about" className="text-slate-500 hover:text-emerald-400 transition-colors">About</Link>
-            <Link to="/contact" className="text-slate-500 hover:text-emerald-400 transition-colors">Contact</Link>
-            <Link to="/donate" className="text-slate-500 hover:text-emerald-400 transition-colors">Donate</Link>
+            <Link to="/about" className="text-ink-text-3 hover:text-ink-accent transition-colors">About</Link>
+            <Link to="/contact" className="text-ink-text-3 hover:text-ink-accent transition-colors">Contact</Link>
+            <Link to="/donate" className="text-ink-text-3 hover:text-ink-accent transition-colors">Donate</Link>
           </div>
-          <p className="text-xs text-slate-600 text-center">
+          <p className="text-xs text-ink-text-3 text-center">
             Built with ❤️ for the Ummah · Audio from EveryAyah.com · Text from Al Quran Cloud API
           </p>
         </footer>
@@ -148,6 +197,7 @@ export default function Home() {
 
       <SupportModal open={supportOpen} onClose={() => setSupportOpen(false)} />
       <TutorialModal open={tutorialOpen} onClose={() => setTutorialOpen(false)} userId={user?.id} />
+      <CreateCustomPlanModal open={createPlanOpen} onClose={() => setCreatePlanOpen(false)} onCreate={startCustomPlan} />
     </div>
   );
 }

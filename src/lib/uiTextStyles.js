@@ -15,7 +15,7 @@
 // text-[11px] is retired: found used interchangeably with text-xs for the
 // identical role on different screens — fold into text-xs going forward.
 
-export const CAPTION_TEXT = "text-xs text-slate-500";
+export const CAPTION_TEXT = "text-xs text-ink-text-3";
 export const MICRO_LABEL_TEXT = "text-[10px]"; // pair with your own color/weight per badge
 
 // --- Corner-radius tiers ---

@@ -8,6 +8,8 @@ import { getQuaWordWindowsForAyah } from "@/lib/quaReferenceData";
 import { isIosWebKit } from "@/lib/asrEngine";
 import { findActiveWord } from "@/hooks/useWordHighlight";
 import { buildLetterTimings } from "@/lib/letterTiming";
+import { getPlaybackRate } from "@/lib/playbackSpeed";
+import { getOfflineAudioBlob } from "@/lib/offlinePacks";
 
 // A sticky element fails to recomposite correctly while content changes
 // underneath it (e.g. ayah auto-advance during playback) whenever that
@@ -56,6 +58,15 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
   const currentAyahWordWindowsRef = useRef(null);
   const currentAyahLetterTimingsRef = useRef(null);
   const lastWordRef = useRef(null);
+  // Object URL currently assigned to audio.src when playing from a
+  // downloaded offline pack (see offlinePacks.js) — revoked whenever
+  // replaced or on unmount, so a long session doesn't leak one Object URL
+  // per ayah played. null whenever the current src is a plain remote URL.
+  const currentObjectUrlRef = useRef(null);
+  // Guards loadAyah's async offline-cache lookup against out-of-order
+  // completion (e.g. rapid skip-next taps): only the MOST RECENT call's
+  // result is ever applied to audio.src.
+  const loadSeqRef = useRef(0);
 
   useEffect(() => {
     ayahsRef.current = ayahs;
@@ -92,22 +103,47 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
     setHasWordHighlighting(!!quaWindows);
   }, []);
 
-  const loadAyah = useCallback((index) => {
+  // Async: checks a downloaded offline pack before falling back to the
+  // remote URL (see offlinePacks.js's header comment for why this is an
+  // explicit lookup here rather than relying on service-worker routing).
+  // The synchronous UI-state updates (loading indicator, ayah index,
+  // highlight callbacks) still happen immediately, before the await, so the
+  // player feels exactly as responsive as before this existed — only the
+  // actual audio.src assignment waits on the (normally very fast) cache
+  // lookup.
+  const loadAyah = useCallback(async (index) => {
     const list = ayahsRef.current;
     if (!list || index < 0 || index >= list.length) return;
     const ayah = list[index];
-    const url = getAudioUrl(reciterFolderRef.current, surahNumberRef.current, ayah.number);
+    const remoteUrl = getAudioUrl(reciterFolderRef.current, surahNumberRef.current, ayah.number);
+    if (!audioRef.current) return;
 
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = url;
-      setIsLoading(true);
-      setProgress(0);
-      setCurrentAyahIndex(index);
-      currentIndexRef.current = index;
-      onAyahHighlightRef.current?.(ayah.number);
-      primeWordHighlightForAyah(ayah.number);
+    const seq = ++loadSeqRef.current;
+    audioRef.current.pause();
+    setIsLoading(true);
+    setProgress(0);
+    setCurrentAyahIndex(index);
+    currentIndexRef.current = index;
+    onAyahHighlightRef.current?.(ayah.number);
+    primeWordHighlightForAyah(ayah.number);
+
+    const offlineBlob = await getOfflineAudioBlob(reciterFolderRef.current, surahNumberRef.current, ayah.number);
+    // A newer loadAyah call has since started (e.g. a rapid second skip
+    // tap) — abandon this one rather than clobber the newer src.
+    if (loadSeqRef.current !== seq || !audioRef.current) return;
+
+    if (currentObjectUrlRef.current) {
+      URL.revokeObjectURL(currentObjectUrlRef.current);
+      currentObjectUrlRef.current = null;
     }
+    const src = offlineBlob ? URL.createObjectURL(offlineBlob) : remoteUrl;
+    if (offlineBlob) currentObjectUrlRef.current = src;
+
+    audioRef.current.src = src;
+    // Defensive re-apply: some engines reset playbackRate on a src change,
+    // and this project has real cross-browser/WebKit quirks history —
+    // cheap enough to just always re-assert it here.
+    audioRef.current.playbackRate = getPlaybackRate();
   }, [primeWordHighlightForAyah]);
 
   useEffect(() => {
@@ -127,6 +163,7 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
     audio.crossOrigin = "anonymous";
     audioRef.current = audio;
     audio.volume = volume / 100;
+    audio.playbackRate = getPlaybackRate();
 
     audio.addEventListener('loadedmetadata', () => {
       setDuration(audio.duration);
@@ -141,17 +178,12 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
       const list = ayahsRef.current;
       const idx = currentIndexRef.current;
       if (list && idx < list.length - 1) {
-        const nextIdx = idx + 1;
-        const nextAyah = list[nextIdx];
-        const url = getAudioUrl(reciterFolderRef.current, surahNumberRef.current, nextAyah.number);
-        audio.src = url;
-        setCurrentAyahIndex(nextIdx);
-        currentIndexRef.current = nextIdx;
-        setProgress(0);
-        setIsLoading(true);
-        onAyahHighlightRef.current?.(nextAyah.number);
-        primeWordHighlightForAyah(nextAyah.number);
-        audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+        // Reuses loadAyah (declared above) rather than duplicating its
+        // offline-pack-lookup logic — auto-advance gets offline playback
+        // for free this way, not as a separately-maintained code path.
+        loadAyah(idx + 1).then(() => {
+          audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+        });
       } else {
         setIsPlaying(false);
       }
@@ -166,8 +198,12 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
       audio.pause();
       audio.src = '';
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (currentObjectUrlRef.current) {
+        URL.revokeObjectURL(currentObjectUrlRef.current);
+        currentObjectUrlRef.current = null;
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- primeWordHighlightForAyah has no deps, stable for the component's lifetime; re-subscribing this effect would tear down the <audio> element.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- primeWordHighlightForAyah/loadAyah have no deps beyond it, stable for the component's lifetime; re-subscribing this effect would tear down the <audio> element.
   }, []);
 
   useEffect(() => {
@@ -264,15 +300,15 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
   };
 
   return (
-    <div className={`${IS_RISKY_ENGINE ? "bg-slate-900" : "bg-slate-900/80 backdrop-blur-xl"} border border-slate-700/50 rounded-2xl p-4 space-y-3`}>
+    <div className={`${IS_RISKY_ENGINE ? "bg-ink-surface" : "bg-ink-surface/80 backdrop-blur-xl"} border border-ink-border/60 rounded-2xl p-4 space-y-3`}>
       <div className="flex items-center justify-between gap-4">
         <Select value={selectedReciter} onValueChange={onReciterChange}>
-          <SelectTrigger aria-label="Choose reciter" className="flex-1 min-w-0 max-w-56 bg-slate-800/50 border-slate-700 text-sm text-slate-300 h-9">
+          <SelectTrigger aria-label="Choose reciter" className="flex-1 min-w-0 max-w-56 bg-ink-surface-2/50 border-ink-border text-sm text-ink-text-2 h-9">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-slate-800 border-slate-700">
+          <SelectContent className="bg-ink-surface-2 border-ink-border">
             {RECITERS.map(r => (
-              <SelectItem key={r.id} value={r.id} className="text-slate-300 focus:bg-slate-700 focus:text-white">
+              <SelectItem key={r.id} value={r.id} className="text-ink-text-2 focus:bg-ink-border/50 focus:text-ink-text">
                 {r.name}
               </SelectItem>
             ))}
@@ -289,22 +325,22 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
           title={hasWordHighlighting ? "Word-level highlighting is available for this ayah" : "Word-level highlighting isn't available for this ayah"}
           className={`p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border flex-shrink-0 ${
             hasWordHighlighting
-              ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
-              : "bg-slate-800/50 border-slate-700 text-slate-600"
+              ? "bg-ink-accent/15 border-ink-accent/40 text-ink-accent"
+              : "bg-ink-surface-2/50 border-ink-border text-ink-text-3"
           }`}
         >
           <Captions className="w-4 h-4" />
         </span>
 
         {ayahs && (
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-ink-text-3">
             Ayah {ayahs[currentAyahIndex]?.number || 1} of {ayahs.length}
           </span>
         )}
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-[10px] text-slate-500 font-mono w-10 text-right">{formatTime(progress)}</span>
+        <span className="text-[10px] text-ink-text-3 font-mono w-10 text-right">{formatTime(progress)}</span>
         <div className="flex-1">
           <Slider
             label="Seek through the recitation audio"
@@ -320,12 +356,12 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
             className="cursor-pointer"
           />
         </div>
-        <span className="text-[10px] text-slate-500 font-mono w-10">{formatTime(duration)}</span>
+        <span className="text-[10px] text-ink-text-3 font-mono w-10">{formatTime(duration)}</span>
       </div>
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1">
-          <button onClick={() => setIsMuted(!isMuted)} aria-label={isMuted ? "Unmute" : "Mute"} className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white transition-colors">
+          <button onClick={() => setIsMuted(!isMuted)} aria-label={isMuted ? "Unmute" : "Mute"} className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-ink-text-2 hover:text-ink-text transition-colors">
             {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
           <div className="w-20">
@@ -341,27 +377,27 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
         </div>
 
         <div className="flex items-center gap-1">
-          <button onClick={restart} aria-label="Restart from first ayah" className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white transition-colors">
+          <button onClick={restart} aria-label="Restart from first ayah" className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-ink-text-2 hover:text-ink-text transition-colors">
             <RotateCcw className="w-4 h-4" />
           </button>
-          <button onClick={skipPrev} aria-label="Previous ayah" className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors">
+          <button onClick={skipPrev} aria-label="Previous ayah" className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-ink-text-2 hover:text-ink-text hover:bg-ink-surface-2/50 transition-colors">
             <SkipBack className="w-5 h-5" />
           </button>
           <button
             onClick={togglePlay}
             disabled={isLoading}
             aria-label={isPlaying ? "Pause" : "Play"}
-            className="p-3 rounded-xl bg-emerald-500 text-slate-900 hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/25 disabled:opacity-50"
+            className="p-3 rounded-xl bg-ink-accent text-ink-bg hover:brightness-110 transition-all shadow-ink disabled:opacity-50"
           >
             {isLoading ? (
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-ink-bg/30 border-t-ink-bg rounded-full animate-spin" />
             ) : isPlaying ? (
               <Pause className="w-5 h-5" />
             ) : (
               <Play className="w-5 h-5 ml-0.5" />
             )}
           </button>
-          <button onClick={skipNext} aria-label="Next ayah" className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors">
+          <button onClick={skipNext} aria-label="Next ayah" className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-ink-text-2 hover:text-ink-text hover:bg-ink-surface-2/50 transition-colors">
             <SkipForward className="w-5 h-5" />
           </button>
         </div>

@@ -1,12 +1,12 @@
 const VARIANTS = {
-  neutral: "bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-700/30",
-  accent: "bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20",
-  ghost: "text-slate-400 hover:text-white",
+  neutral: "bg-ink-surface-2/50 text-ink-text-2 hover:text-ink-text hover:bg-ink-surface-2 border border-ink-border/60",
+  accent: "bg-ink-gold/10 text-ink-gold hover:bg-ink-gold/20 border border-ink-gold/20",
+  ghost: "text-ink-text-2 hover:text-ink-text",
 };
 
 const ACTIVE_COLORS = {
-  emerald: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/20",
-  amber: "bg-amber-500/20 text-amber-400 border border-amber-500/20",
+  emerald: "bg-ink-accent/20 text-ink-accent border border-ink-accent/20",
+  amber: "bg-ink-gold/20 text-ink-gold border border-ink-gold/20",
 };
 
 // For icon-only actions (help, back, toggles). Labeled action buttons like

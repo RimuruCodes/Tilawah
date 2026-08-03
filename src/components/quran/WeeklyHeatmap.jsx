@@ -21,8 +21,8 @@ export default function WeeklyHeatmap({ streaks }) {
   const maxRecordings = Math.max(...last7Days.map(d => d.recordings), 1);
 
   return (
-    <div className="bg-slate-900/60 border border-slate-700/30 rounded-2xl p-5">
-      <h3 className="text-sm font-semibold text-slate-300 mb-4">This Week</h3>
+    <div className="bg-ink-surface/60 border border-ink-border/60 rounded-2xl p-5">
+      <h3 className="text-sm font-semibold text-ink-text-2 mb-4">This Week</h3>
       <div className="flex items-end gap-2 h-24">
         {last7Days.map((day, i) => {
           const height = day.recordings > 0 ? Math.max(20, (day.recordings / maxRecordings) * 100) : 8;
@@ -35,13 +35,13 @@ export default function WeeklyHeatmap({ streaks }) {
                 className={`w-full rounded-lg transition-colors ${
                   day.recordings > 0
                     ? day.isToday
-                      ? 'bg-emerald-500 shadow-sm shadow-emerald-500/30'
-                      : 'bg-emerald-500/40'
-                    : 'bg-slate-800'
+                      ? 'bg-ink-accent shadow-ink'
+                      : 'bg-ink-accent/40'
+                    : 'bg-ink-surface-2'
                 }`}
                 title={`${day.recordings} recordings${day.accuracy ? `, ${day.accuracy}% avg` : ''}`}
               />
-              <span className={`text-[10px] ${day.isToday ? 'text-emerald-400 font-semibold' : 'text-slate-500'}`}>
+              <span className={`text-[10px] ${day.isToday ? 'text-ink-accent font-semibold' : 'text-ink-text-3'}`}>
                 {day.day}
               </span>
             </div>

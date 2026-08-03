@@ -56,6 +56,11 @@ export const GATED_FEATURES = Object.freeze({
   CONTINUOUS_RECITATION: "continuousRecitation",
   TAJWEED_CHECKS: "tajweedChecks",
   TAJWEED_TRENDS: "tajweedTrends",
+  // Phase 5: gates STARTING a new download only — a pack already downloaded
+  // keeps playing offline even if the subscription later lapses (see
+  // offlinePacks.js's header comment for why: re-checking would require
+  // being online, which defeats the point of "offline").
+  OFFLINE_RECITER_PACKS: "offlineReciterPacks",
 });
 
 const GATED_FEATURE_KEYS = new Set(Object.values(GATED_FEATURES));

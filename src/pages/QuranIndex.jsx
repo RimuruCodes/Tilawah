@@ -58,27 +58,27 @@ export default function QuranIndex() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+      <div className="min-h-screen bg-ink-bg flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-ink-accent animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 overscroll-none" {...touchHandlers}>
+    <div className="min-h-screen bg-ink-bg overscroll-none" {...touchHandlers}>
       <div className="max-w-6xl mx-auto px-4 pt-6 pb-8 space-y-6">
         {(isRefreshing || pullDistance > 0) && (
           <div className="flex justify-center items-center" style={{ height: Math.max(pullDistance, isRefreshing ? 40 : 0) }}>
-            <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
+            <Loader2 className="w-6 h-6 text-ink-accent animate-spin" />
           </div>
         )}
 
         <header className="space-y-1">
           <div className="flex items-center gap-2">
-            <BookOpen className="w-6 h-6 text-emerald-400" />
-            <h1 className="text-2xl font-bold text-white">Quran</h1>
+            <BookOpen className="w-6 h-6 text-ink-accent" />
+            <h1 className="text-2xl font-bold text-ink-text">Quran</h1>
           </div>
-          <p className="text-xs text-slate-500">All 114 surahs — read, listen, memorize, recite.</p>
+          <p className="text-xs text-ink-text-3">All 114 surahs — read, listen, memorize, recite.</p>
         </header>
 
         {/* Milestone Progress */}
@@ -86,21 +86,21 @@ export default function QuranIndex() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-gradient-to-r from-emerald-900/20 to-slate-900/40 border border-emerald-500/10 rounded-2xl p-4 flex items-center gap-4"
+            className="bg-gradient-to-r from-ink-accent-soft to-ink-surface/40 border border-ink-accent/10 rounded-2xl p-4 flex items-center gap-4"
           >
             <span className="text-2xl">{nextMilestone.icon}</span>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-white">{nextMilestone.label}</span>
-                <span className="text-xs text-emerald-400">{totalMemorized}/{nextMilestone.count}</span>
+                <span className="text-sm font-medium text-ink-text">{nextMilestone.label}</span>
+                <span className="text-xs text-ink-accent">{totalMemorized}/{nextMilestone.count}</span>
               </div>
-              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-ink-surface-2 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-emerald-300 rounded-full transition-all duration-700"
+                  className="h-full bg-gradient-to-r from-ink-accent to-ink-accent/60 rounded-full transition-all duration-700"
                   style={{ width: `${Math.min(100, (totalMemorized / nextMilestone.count) * 100)}%` }}
                 />
               </div>
-              <p className="text-[10px] text-slate-500 mt-1">{nextMilestone.description}</p>
+              <p className="text-[10px] text-ink-text-3 mt-1">{nextMilestone.description}</p>
             </div>
           </motion.div>
         )}
@@ -108,13 +108,13 @@ export default function QuranIndex() {
         {/* Search & Filters */}
         <div className="space-y-3">
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-text-3" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search surahs by name, number, or meaning..."
-              className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-800/50 border border-slate-700/30 text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 transition-all text-sm"
+              className="w-full pl-11 pr-4 py-3 rounded-xl bg-ink-surface-2/50 border border-ink-border/60 text-ink-text placeholder:text-ink-text-3 focus:outline-none focus:border-ink-accent/40 focus:ring-1 focus:ring-ink-accent/20 transition-all text-sm"
             />
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -130,8 +130,8 @@ export default function QuranIndex() {
                 onClick={() => setFilter(f.key)}
                 className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
                   filter === f.key
-                    ? "bg-emerald-500 text-slate-900 shadow-sm shadow-emerald-500/20"
-                    : "bg-slate-800/50 text-slate-400 hover:text-slate-300 border border-slate-700/30"
+                    ? "bg-ink-accent text-ink-bg shadow-ink"
+                    : "bg-ink-surface-2/50 text-ink-text-2 hover:text-ink-text-2/80 border border-ink-border/60"
                 }`}
               >
                 {f.label}

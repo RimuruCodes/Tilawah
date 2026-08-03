@@ -501,23 +501,20 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
+  // Same semantic tiers as RecordingModal's getScoreColor — success/warning/
+  // danger are theme-aware tokens already, so no per-theme branching needed
+  // here either.
   const getScoreColor = (score) => {
-    if (score >= 90) return "text-emerald-400";
-    if (score >= 75) return "text-amber-400";
-    return "text-orange-400";
-  };
-
-  const getScoreGlow = (score) => {
-    if (score >= 90) return "shadow-emerald-500/30";
-    if (score >= 75) return "shadow-amber-500/30";
-    return "shadow-orange-500/30";
+    if (score >= 90) return "text-ink-success";
+    if (score >= 75) return "text-ink-warning";
+    return "text-ink-danger";
   };
 
   const currentAyah = ayahs?.[currentAyahIdx];
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="bg-slate-900 border-slate-700/50 max-w-lg max-h-[85vh] overflow-y-auto p-0">
+      <DialogContent className="bg-ink-surface border-ink-border max-w-lg max-h-[85vh] overflow-y-auto p-0">
         <CelebrationOverlay
           show={!!celebration}
           title={celebration?.title}
@@ -529,8 +526,8 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
               the custom X that used to sit here duplicated (and covered)
               DialogContent's built-in, properly-labelled close button. */}
           <div>
-            <DialogTitle className="text-xl font-semibold text-white">Continuous Recitation</DialogTitle>
-            <DialogDescription className="text-sm text-slate-400">{surahName} · {ayahs?.length} Ayahs</DialogDescription>
+            <DialogTitle className="text-xl font-semibold text-ink-text">Continuous Recitation</DialogTitle>
+            <DialogDescription className="text-sm text-ink-text-2">{surahName} · {ayahs?.length} Ayahs</DialogDescription>
           </div>
 
           {/* Live region: announces flow transitions and the outcome to
@@ -553,48 +550,48 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
             {state === "idle" && (
               <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-4">
                 <div className="text-center space-y-2">
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-ink-text-2">
                     Recite the entire Surah in one go. Record once, tap "Next Ayah" as you progress, and get a full evaluation against {reciterName}'s recitation at the end.
                   </p>
                 </div>
                 {currentAyah && (
-                  <div className="w-full bg-slate-800/50 rounded-xl p-4 border border-slate-700/30" dir="rtl" lang="ar">
-                    <p className="text-xl text-white/90 leading-loose text-center" style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.5" }}>
+                  <div className="w-full bg-ink-surface-2/50 rounded-xl p-4 border border-ink-border/60" dir="rtl" lang="ar">
+                    <p className="text-xl text-ink-text/90 leading-loose text-center" style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.5" }}>
                       {currentAyah.arabic}
                     </p>
-                    <p className="text-xs text-slate-500 text-center mt-2" lang="en">Ayah {currentAyah.number}</p>
+                    <p className="text-xs text-ink-text-3 text-center mt-2" lang="en">Ayah {currentAyah.number}</p>
                   </div>
                 )}
-                <button onClick={startRecording} aria-label="Start continuous recording" className="w-20 h-20 rounded-full bg-red-500/20 border-2 border-red-500/50 flex items-center justify-center hover:bg-red-500/30 hover:border-red-400 transition-all group">
-                  <Mic className="w-8 h-8 text-red-400 group-hover:text-red-300" />
+                <button onClick={startRecording} aria-label="Start continuous recording" className="w-20 h-20 rounded-full bg-ink-danger/20 border-2 border-ink-danger/50 flex items-center justify-center hover:bg-ink-danger/30 hover:border-ink-danger transition-all group">
+                  <Mic className="w-8 h-8 text-ink-danger" />
                 </button>
-                <span className="text-xs text-slate-500">Tap to start continuous recording</span>
+                <span className="text-xs text-ink-text-3">Tap to start continuous recording</span>
 
                 <button
                   onClick={handleMicCheck}
                   disabled={micChecking}
-                  className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2 disabled:opacity-50"
+                  className="text-xs text-ink-text-3 hover:text-ink-text-2 underline underline-offset-2 disabled:opacity-50"
                 >
                   {micChecking ? "Checking mic..." : "Test your mic first"}
                 </button>
                 {micCheckResult && (
                   <div className={`text-xs px-3 py-2 rounded-lg border max-w-xs text-center ${
                     micCheckResult.verdict === "good"
-                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                      : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                      ? "bg-ink-success/10 text-ink-success border-ink-success/20"
+                      : "bg-ink-warning/10 text-ink-warning border-ink-warning/20"
                   }`}>
                     {micCheckResult.message}
                   </div>
                 )}
 
                 <div className="flex items-center gap-2 w-full max-w-[240px]">
-                  <div className="h-px flex-1 bg-slate-800" />
-                  <span className="text-[10px] text-slate-500">or</span>
-                  <div className="h-px flex-1 bg-slate-800" />
+                  <div className="h-px flex-1 bg-ink-border" />
+                  <span className="text-[10px] text-ink-text-3">or</span>
+                  <div className="h-px flex-1 bg-ink-border" />
                 </div>
 
-                <div className="w-full bg-slate-800/30 rounded-xl p-3 border border-slate-700/30 space-y-2">
-                  <label className="flex items-center justify-between gap-2 text-xs text-slate-400">
+                <div className="w-full bg-ink-surface-2/30 rounded-xl p-3 border border-ink-border/60 space-y-2">
+                  <label className="flex items-center justify-between gap-2 text-xs text-ink-text-2">
                     How many ayahs does the recording contain?
                     <input
                       type="number"
@@ -602,12 +599,12 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                       max={ayahs?.length || 1}
                       value={uploadAyahCount}
                       onChange={(e) => setUploadAyahCount(clamp(parseInt(e.target.value, 10) || 1, 1, ayahs?.length || 1))}
-                      className="w-16 text-center bg-slate-900 border border-slate-700 rounded-xl py-1 text-white text-sm"
+                      className="w-16 text-center bg-ink-bg border border-ink-border rounded-xl py-1 text-ink-text text-sm"
                     />
                   </label>
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors rounded-lg py-2"
+                    className="w-full flex items-center justify-center gap-1.5 text-xs text-ink-text-2 bg-ink-surface-2 hover:brightness-110 transition-colors rounded-lg py-2"
                   >
                     <Upload className="w-3.5 h-3.5" />
                     Upload an audio file instead
@@ -620,8 +617,8 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
             {state === "recording" && (
               <motion.div key="recording" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
                 <div className="flex items-center justify-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <span className="text-red-400 font-mono text-lg">{formatTime(recordingTime)}</span>
+                  <div className="w-2 h-2 rounded-full bg-ink-danger animate-pulse" />
+                  <span className="text-ink-danger font-mono text-lg">{formatTime(recordingTime)}</span>
                 </div>
 
                 {currentAyah && (
@@ -629,66 +626,66 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                     key={currentAyah.number}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="w-full bg-emerald-500/10 rounded-xl p-4 border border-emerald-500/20" dir="rtl" lang="ar"
+                    className="w-full bg-ink-accent-soft rounded-xl p-4 border border-ink-accent/20" dir="rtl" lang="ar"
                   >
-                    <p className="text-2xl text-emerald-200 leading-loose text-center" style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.8" }}>
+                    <p className="text-2xl text-ink-accent leading-loose text-center" style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.8" }}>
                       {currentAyah.arabic}
                     </p>
                     {/* aria-live so "Next Ayah" progress is announced. */}
-                    <p className="text-xs text-emerald-400/60 text-center mt-2" lang="en" aria-live="polite">
+                    <p className="text-xs text-ink-accent/60 text-center mt-2" lang="en" aria-live="polite">
                       Reciting Ayah {currentAyah.number} of {ayahs.length}
                     </p>
                   </motion.div>
                 )}
 
                 {currentAyah?.translation && (
-                  <p className="text-xs text-slate-500 italic text-center px-4">{currentAyah.translation}</p>
+                  <p className="text-xs text-ink-text-3 italic text-center px-4">{currentAyah.translation}</p>
                 )}
 
                 <div className="flex items-center gap-3">
                   {currentAyahIdx < ayahs.length - 1 ? (
                     <button
                       onClick={advanceAyah}
-                      className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 text-sm"
+                      className="flex-1 py-3 rounded-xl bg-ink-surface-2 text-ink-text-2 font-medium hover:brightness-110 transition-colors flex items-center justify-center gap-2 text-sm"
                     >
                       <ChevronRight className="w-4 h-4" />
                       Next Ayah
                     </button>
                   ) : (
-                    <div className="flex-1 py-3 rounded-xl bg-emerald-500/10 text-emerald-400 font-medium flex items-center justify-center gap-2 text-sm">
+                    <div className="flex-1 py-3 rounded-xl bg-ink-accent-soft text-ink-accent font-medium flex items-center justify-center gap-2 text-sm">
                       <CheckCircle2 className="w-4 h-4" />
                       All verses covered
                     </div>
                   )}
                   <button
                     onClick={stopRecording}
-                    className="px-6 py-3 rounded-xl bg-red-500 text-slate-900 font-medium hover:bg-red-400 transition-colors flex items-center justify-center gap-2 text-sm shadow-lg shadow-red-500/20"
+                    className="px-6 py-3 rounded-xl bg-ink-danger text-ink-bg font-medium hover:brightness-110 transition-colors flex items-center justify-center gap-2 text-sm shadow-ink"
                   >
                     <Square className="w-4 h-4" />
                     Finish & Analyze
                   </button>
                 </div>
-                <p className="text-xs text-slate-500 text-center">Recite each verse, tap "Next Ayah" as you go, then finish for real acoustic feedback.</p>
+                <p className="text-xs text-ink-text-3 text-center">Recite each verse, tap "Next Ayah" as you go, then finish for real acoustic feedback.</p>
               </motion.div>
             )}
 
             {state === "analyzing" && (
               <motion.div key="analyzing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-4 py-8">
-                <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
-                <p className="text-sm text-slate-400">Comparing your recitation to {reciterName}...</p>
-                <p className="text-xs text-slate-500">This may take a moment</p>
+                <Loader2 className="w-10 h-10 text-ink-accent animate-spin" />
+                <p className="text-sm text-ink-text-2">Comparing your recitation to {reciterName}...</p>
+                <p className="text-xs text-ink-text-3">This may take a moment</p>
               </motion.div>
             )}
 
             {state === "error" && (
               <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-4 py-8 text-center">
-                <AlertTriangle className="w-10 h-10 text-orange-400" />
+                <AlertTriangle className="w-10 h-10 text-ink-danger" />
                 {/* role="alert" so the error is announced immediately by
                     screen readers, from the same element that shows it. */}
-                <p className="text-sm text-slate-300" role="alert">{errorMessage}</p>
+                <p className="text-sm text-ink-text-2" role="alert">{errorMessage}</p>
                 <button
                   onClick={resetState}
-                  className="px-5 py-2.5 rounded-xl bg-slate-700/50 text-slate-300 font-medium hover:bg-slate-700 transition-colors text-sm"
+                  className="px-5 py-2.5 rounded-xl bg-ink-surface-2/50 text-ink-text-2 font-medium hover:bg-ink-surface-2 transition-colors text-sm"
                 >
                   Try Again
                 </button>
@@ -698,25 +695,25 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
             {state === "result" && results && (
               <motion.div key="result" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
                 <div className="text-center">
-                  <div className={`inline-flex items-center justify-center w-24 h-24 rounded-full bg-slate-800 border-2 border-slate-700 shadow-xl ${getScoreGlow(results.score)}`}>
+                  <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-ink-surface-2 border-2 border-ink-border shadow-ink">
                     <span data-testid="recitation-score" className={`text-3xl font-bold ${getScoreColor(results.score)}`}>
                       {results.score}
                     </span>
                   </div>
                   {!results.referenceAvailable && (
-                    <p className="mt-2 text-xs text-amber-400/80">Reference audio unavailable — recording-quality score only</p>
+                    <p className="mt-2 text-xs text-ink-warning/80">Reference audio unavailable — recording-quality score only</p>
                   )}
-                  <p className="text-xs text-slate-500 mt-1">Recited {results.recitedCount} ayahs in {formatTime(recordingTime)}</p>
+                  <p className="text-xs text-ink-text-3 mt-1">Recited {results.recitedCount} ayahs in {formatTime(recordingTime)}</p>
                   {results.manualOverride ? (
-                    <p className="text-xs text-emerald-400/80 mt-1">Recalculated using your correction — scored against {results.resolvedAyahCount} ayahs.</p>
+                    <p className="text-xs text-ink-accent/80 mt-1">Recalculated using your correction — scored against {results.resolvedAyahCount} ayahs.</p>
                   ) : results.ayahCountCorrected && (
-                    <p className="text-xs text-amber-400/80 mt-1">
+                    <p className="text-xs text-ink-warning/80 mt-1">
                       Detected {results.countMethod === "transcript" ? `${results.resolvedAyahCount} ayahs from the words recognized in your recitation` : `~${results.resolvedAyahCount} ayahs based on your recording's actual length`} (you tapped through {results.taggedAyahCount}) — scored against {results.resolvedAyahCount}.
                     </p>
                   )}
                   {confidence?.isLow && (
                     <div
-                      className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-1 cursor-help"
+                      className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-ink-warning/80 bg-ink-warning/10 border border-ink-warning/20 rounded-full px-2.5 py-1 cursor-help"
                       title={confidence.reasons.join("; ")}
                       aria-label={`Low confidence in this result: ${confidence.reasons.join("; ")}`}
                     >
@@ -727,8 +724,8 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                 </div>
 
 
-                <div className="bg-slate-800/30 rounded-xl p-3 border border-slate-700/30 space-y-2">
-                  <p className="text-xs text-slate-400">That count not right? Tell us how many ayahs you actually recited and we'll rescore it.</p>
+                <div className="bg-ink-surface-2/30 rounded-xl p-3 border border-ink-border/60 space-y-2">
+                  <p className="text-xs text-ink-text-2">That count not right? Tell us how many ayahs you actually recited and we'll rescore it.</p>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
@@ -738,12 +735,12 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                       value={overrideCount}
                       onChange={(e) => setOverrideCount(e.target.value)}
                       aria-label={`Number of ayahs you actually recited, between 1 and ${ayahs?.length || 1}`}
-                      className="w-20 text-center bg-slate-900 border border-slate-700 rounded-xl py-1.5 text-white text-sm"
+                      className="w-20 text-center bg-ink-bg border border-ink-border rounded-xl py-1.5 text-ink-text text-sm"
                     />
                     <button
                       onClick={handleOverrideSubmit}
                       disabled={!overrideCount}
-                      className="flex-1 flex items-center justify-center gap-1.5 text-xs text-slate-300 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-lg py-2"
+                      className="flex-1 flex items-center justify-center gap-1.5 text-xs text-ink-text-2 bg-ink-surface-2 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-lg py-2"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
                       Recalculate
@@ -753,8 +750,8 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
 
                 <div className="space-y-2">
                   {results.feedback.map((note, i) => (
-                    <div key={i} className="bg-slate-800/50 rounded-xl p-3.5 border border-slate-700/30">
-                      <p className="text-sm text-slate-300 leading-relaxed">{note}</p>
+                    <div key={i} className="bg-ink-surface-2/50 rounded-xl p-3.5 border border-ink-border/60">
+                      <p className="text-sm text-ink-text-2 leading-relaxed">{note}</p>
                     </div>
                   ))}
                 </div>
@@ -781,9 +778,9 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                 />
 
                 {tajweedPending ? (
-                  <div className="flex items-center gap-2 bg-slate-800/40 border border-slate-700/30 rounded-xl p-3">
-                    <Loader2 className="w-4 h-4 text-emerald-400 animate-spin flex-shrink-0" />
-                    <p className="text-xs text-slate-400">
+                  <div className="flex items-center gap-2 bg-ink-surface-2/40 border border-ink-border/60 rounded-xl p-3">
+                    <Loader2 className="w-4 h-4 text-ink-accent animate-spin flex-shrink-0" />
+                    <p className="text-xs text-ink-text-2">
                       {modelProgress == null
                         ? "Speech recognition for Tajweed details is still running in the background..."
                         : `Downloading speech recognition model in the background... ${modelProgress}%`}
@@ -794,9 +791,9 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                 )}
 
                 {escalating && (
-                  <div className="flex items-center gap-2 bg-slate-800/40 border border-slate-700/30 rounded-xl p-3">
-                    <Loader2 className="w-4 h-4 text-emerald-400 animate-spin flex-shrink-0" />
-                    <p className="text-xs text-slate-400" role="status">
+                  <div className="flex items-center gap-2 bg-ink-surface-2/40 border border-ink-border/60 rounded-xl p-3">
+                    <Loader2 className="w-4 h-4 text-ink-accent animate-spin flex-shrink-0" />
+                    <p className="text-xs text-ink-text-2" role="status">
                       {modelProgress == null
                         ? "Double-checking for a more reliable reading…"
                         : `Loading a more accurate model to double-check… ${modelProgress}%`}
@@ -804,7 +801,7 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                   </div>
                 )}
                 {escalationNote && !escalating && (
-                  <p className="text-[11px] text-emerald-400/80 text-center" role="status">{escalationNote}</p>
+                  <p className="text-[11px] text-ink-accent/80 text-center" role="status">{escalationNote}</p>
                 )}
 
                 <ResultFeedback
@@ -817,11 +814,11 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
                 />
 
                 <div className="flex gap-2">
-                  <button onClick={resetState} className="flex-1 py-2.5 rounded-xl bg-slate-700/50 text-slate-300 font-medium hover:bg-slate-700 transition-colors text-sm flex items-center justify-center gap-2">
+                  <button onClick={resetState} className="flex-1 py-2.5 rounded-xl bg-ink-surface-2/50 text-ink-text-2 font-medium hover:bg-ink-surface-2 transition-colors text-sm flex items-center justify-center gap-2">
                     <RotateCcw className="w-4 h-4" />
                     Recite Again
                   </button>
-                  <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 font-medium hover:bg-emerald-500/30 transition-colors text-sm">
+                  <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-ink-accent/20 text-ink-accent font-medium hover:bg-ink-accent/30 transition-colors text-sm">
                     Done
                   </button>
                 </div>

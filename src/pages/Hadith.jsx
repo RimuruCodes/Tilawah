@@ -114,15 +114,15 @@ export default function Hadith() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-ink-bg">
       <div className="max-w-2xl mx-auto px-4 pt-6 pb-8 space-y-6">
         {/* Header */}
         <header className="space-y-1">
           <div className="flex items-center gap-2">
-            <ScrollText className="w-6 h-6 text-emerald-400" />
-            <h1 className="text-2xl font-bold text-white">Hadith</h1>
+            <ScrollText className="w-6 h-6 text-ink-accent" />
+            <h1 className="text-2xl font-bold text-ink-text">Hadith</h1>
           </div>
-          <p className="text-xs text-slate-500">Authentic (Sahih) narrations from the two Sahih collections.</p>
+          <p className="text-xs text-ink-text-3">Authentic (Sahih) narrations from the two Sahih collections.</p>
         </header>
 
         {/* Mode toggle */}
@@ -141,7 +141,7 @@ export default function Hadith() {
                 if (m.key !== "browse") setOpenBook(null);
               }}
               className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${
-                mode === m.key ? "bg-emerald-500 text-slate-900" : "bg-slate-800/50 text-slate-400 border border-slate-700/30"
+                mode === m.key ? "bg-ink-accent text-ink-bg" : "bg-ink-surface-2/50 text-ink-text-2 border border-ink-border/60"
               }`}
             >
               {m.label}
@@ -158,8 +158,8 @@ export default function Hadith() {
                 onClick={() => switchCollection(c.id)}
                 className={`py-2.5 rounded-xl text-sm font-medium transition-all border ${
                   collectionId === c.id
-                    ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
-                    : "bg-slate-900/50 border-slate-700/20 text-slate-400 hover:border-slate-600/40"
+                    ? "bg-ink-accent-soft border-ink-accent/40 text-ink-accent"
+                    : "bg-ink-surface/50 border-ink-border/40 text-ink-text-2 hover:border-ink-border"
                 }`}
               >
                 {c.name}
@@ -169,12 +169,12 @@ export default function Hadith() {
         )}
 
         {loadError && (
-          <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/20 rounded-xl p-3">
-            <AlertTriangle className="w-4 h-4 text-orange-400 flex-shrink-0" />
-            <p className="text-xs text-orange-300 flex-1">{loadError}</p>
+          <div className="flex items-center gap-2 bg-ink-danger/10 border border-ink-danger/20 rounded-xl p-3">
+            <AlertTriangle className="w-4 h-4 text-ink-danger flex-shrink-0" />
+            <p className="text-xs text-ink-danger flex-1">{loadError}</p>
             <button
               onClick={retryLoad}
-              className="px-3 py-1.5 rounded-xl bg-orange-500/20 text-orange-300 text-xs font-medium hover:bg-orange-500/30 transition-colors flex-shrink-0"
+              className="px-3 py-1.5 rounded-xl bg-ink-danger/20 text-ink-danger text-xs font-medium hover:bg-ink-danger/30 transition-colors flex-shrink-0"
             >
               Try again
             </button>
@@ -186,32 +186,32 @@ export default function Hadith() {
           <div className="space-y-4">
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-text-3" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
                   placeholder={`Search ${collection.name} (English text)...`}
-                  className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/30 text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/40 text-sm"
+                  className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-ink-surface-2/50 border border-ink-border/60 text-ink-text placeholder:text-ink-text-3 focus:outline-none focus:border-ink-accent/40 text-sm"
                 />
               </div>
               <button
                 onClick={runSearch}
                 disabled={searching || searchQuery.trim().length < 3}
-                className="px-4 rounded-xl bg-emerald-500 text-slate-900 text-sm font-medium hover:bg-emerald-400 disabled:opacity-40 transition-colors"
+                className="px-4 rounded-xl bg-ink-accent text-ink-bg text-sm font-medium hover:brightness-110 disabled:opacity-40 transition-colors"
               >
                 {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
               </button>
             </div>
             {!searchReady && searchResults === null && !searching && (
-              <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <p className="flex items-center gap-1.5 text-[11px] text-ink-text-3">
                 <Download className="w-3 h-3" />
                 First search downloads the whole collection once (~5MB) so searching stays instant afterward.
               </p>
             )}
             {searching && !searchReady && (
-              <p className="text-xs text-slate-500 text-center py-4">Downloading {collection.name} for search...</p>
+              <p className="text-xs text-ink-text-3 text-center py-4">Downloading {collection.name} for search...</p>
             )}
             {searchResults && (
               searchResults.length === 0 ? (
@@ -222,7 +222,7 @@ export default function Hadith() {
                 />
               ) : (
                 <div className="space-y-3">
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-ink-text-3">
                     {`${searchResults.length}${searchResults.length >= 50 ? "+" : ""} match${searchResults.length === 1 ? "" : "es"}`}
                   </p>
                   {searchResults.map((h, i) => (
@@ -250,26 +250,26 @@ export default function Hadith() {
                   onClick={() => setActiveTopic(t.id)}
                   className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
                     activeTopic === t.id
-                      ? "bg-emerald-500 text-slate-900"
-                      : "bg-slate-800/50 text-slate-400 border border-slate-700/30"
+                      ? "bg-ink-accent text-ink-bg"
+                      : "bg-ink-surface-2/50 text-ink-text-2 border border-ink-border/60"
                   }`}
                 >
                   {t.label}
                 </button>
               ))}
             </div>
-            <div className="flex items-start gap-2 bg-emerald-500/5 border border-emerald-500/15 rounded-xl p-3">
-              <Sparkles className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-slate-400">
+            <div className="flex items-start gap-2 bg-ink-accent/5 border border-ink-accent/15 rounded-xl p-3">
+              <Sparkles className="w-4 h-4 text-ink-accent flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-ink-text-2">
                 {HADITH_TOPICS.find((t) => t.id === activeTopic)?.description}
               </p>
             </div>
             {topicLoading && (
-              <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
+              <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-ink-accent animate-spin" /></div>
             )}
             {!topicLoading && topicGroups && topicGroups.map((group) => (
               <div key={`${group.collectionId}-${group.bookNumber}`} className="space-y-3">
-                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-1">
+                <h3 className="text-xs font-semibold text-ink-text-3 uppercase tracking-wide px-1">
                   {HADITH_COLLECTIONS.find((c) => c.id === group.collectionId)?.name} · {group.bookName}
                 </h3>
                 {group.entries.map((h, i) => (
@@ -304,8 +304,8 @@ export default function Hadith() {
                   onClick={() => setDuaCategory(cat.id)}
                   className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
                     duaCategory === cat.id
-                      ? "bg-emerald-500 text-slate-900"
-                      : "bg-slate-800/50 text-slate-400 border border-slate-700/30"
+                      ? "bg-ink-accent text-ink-bg"
+                      : "bg-ink-surface-2/50 text-ink-text-2 border border-ink-border/60"
                   }`}
                 >
                   {cat.label}
@@ -318,19 +318,19 @@ export default function Hadith() {
                   key={dua.id}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="rounded-2xl bg-slate-900/50 border border-slate-700/20 p-4 space-y-3"
+                  className="rounded-2xl bg-ink-surface/50 border border-ink-border/40 p-4 space-y-3"
                 >
-                  <h3 className="text-sm font-semibold text-white">{dua.title}</h3>
-                  <p dir="rtl" lang="ar" className="font-arabic text-xl leading-loose text-white/90 text-right">
+                  <h3 className="text-sm font-semibold text-ink-text">{dua.title}</h3>
+                  <p dir="rtl" lang="ar" className="font-arabic text-xl leading-loose text-ink-text/90 text-right">
                     {dua.arabic}
                   </p>
-                  <p className="text-xs text-slate-400 italic">{dua.transliteration}</p>
-                  <p className="text-sm text-slate-300 leading-relaxed">{dua.translation}</p>
-                  <p className="text-[11px] text-slate-500 border-t border-slate-700/30 pt-2">{dua.source}</p>
+                  <p className="text-xs text-ink-text-2 italic">{dua.transliteration}</p>
+                  <p className="text-sm text-ink-text-2 leading-relaxed">{dua.translation}</p>
+                  <p className="text-[11px] text-ink-text-3 border-t border-ink-border/60 pt-2">{dua.source}</p>
                 </motion.div>
               ))}
             </div>
-            <p className="text-[11px] text-slate-600 leading-relaxed">
+            <p className="text-[11px] text-ink-text-3 leading-relaxed">
               A small curated set — every dua here is sourced from the Quran or the two Sahih collections,
               cited on each card. The Arabic follows those sources' standard printed texts; check your
               recitation with a teacher.
@@ -342,13 +342,13 @@ export default function Hadith() {
         {mode === "browse" && !openBook && (
           <div className="space-y-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-text-3" />
               <input
                 type="text"
                 value={bookFilter}
                 onChange={(e) => setBookFilter(e.target.value)}
                 placeholder="Filter books by name or number..."
-                className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/30 text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/40 text-sm"
+                className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-ink-surface-2/50 border border-ink-border/60 text-ink-text placeholder:text-ink-text-3 focus:outline-none focus:border-ink-accent/40 text-sm"
               />
             </div>
             <div className="space-y-2">
@@ -356,13 +356,13 @@ export default function Hadith() {
                 <button
                   key={book.number}
                   onClick={() => setOpenBook(book)}
-                  className="w-full flex items-center gap-3 rounded-xl bg-slate-900/50 border border-slate-700/20 hover:border-slate-600/40 transition-colors p-3 text-left"
+                  className="w-full flex items-center gap-3 rounded-xl bg-ink-surface/50 border border-ink-border/40 hover:border-ink-border transition-colors p-3 text-left"
                 >
-                  <span className="w-8 h-8 rounded-xl bg-slate-800 text-slate-400 text-xs font-medium flex items-center justify-center flex-shrink-0">
+                  <span className="w-8 h-8 rounded-xl bg-ink-surface-2 text-ink-text-2 text-xs font-medium flex items-center justify-center flex-shrink-0">
                     {book.number}
                   </span>
-                  <span className="flex-1 text-sm text-slate-200 truncate">{book.name}</span>
-                  <ChevronRight className="w-4 h-4 text-slate-600 flex-shrink-0" />
+                  <span className="flex-1 text-sm text-ink-text-2 truncate">{book.name}</span>
+                  <ChevronRight className="w-4 h-4 text-ink-text-3 flex-shrink-0" />
                 </button>
               ))}
               {filteredBooks.length === 0 && (
@@ -377,14 +377,14 @@ export default function Hadith() {
           <div className="space-y-4">
             <button
               onClick={() => { setOpenBook(null); setEntries(null); }}
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+              className="flex items-center gap-1.5 text-xs text-ink-text-2 hover:text-ink-text transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               All books
             </button>
-            <h2 className="text-lg font-semibold text-white">{openBook.name}</h2>
+            <h2 className="text-lg font-semibold text-ink-text">{openBook.name}</h2>
             {entries === null && !loadError && (
-              <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
+              <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-ink-accent animate-spin" /></div>
             )}
             {entries && (
               <div className="space-y-3">
@@ -407,10 +407,10 @@ export default function Hadith() {
 
         {/* Content policy — the honest note (mirrors the app's Tajweed
             disclaimers): what's included, where it comes from, what this is. */}
-        <footer className="border-t border-slate-800/50 pt-4">
-          <p className="text-[11px] text-slate-600 leading-relaxed">
-            Content is limited to hadith from <span className="text-slate-500">Sahih al-Bukhari</span> and{" "}
-            <span className="text-slate-500">Sahih Muslim</span>, collections regarded as authentic (Sahih) by
+        <footer className="border-t border-ink-border/50 pt-4">
+          <p className="text-[11px] text-ink-text-3 leading-relaxed">
+            Content is limited to hadith from <span className="text-ink-text-3">Sahih al-Bukhari</span> and{" "}
+            <span className="text-ink-text-3">Sahih Muslim</span>, collections regarded as authentic (Sahih) by
             their compilers' methodology and mainstream scholarly consensus — the grading shown comes from the
             source collections, not from this app. Text is served from the open fawazahmed0/hadith-api dataset
             (compiled from sunnah.com, al-maktaba.org and similar); translations: Muhsin Khan (Bukhari) and
@@ -429,11 +429,13 @@ export default function Hadith() {
   );
 }
 
-// accent differentiates the two collections at a glance (emerald=Bukhari,
-// sky=Muslim) — purely visual grouping, not a claim about relative authenticity.
+// accent differentiates the two collections at a glance (accent=Bukhari,
+// gold=Muslim — the palette has no separate "sky" equivalent, same
+// two-hue-substitution as ComparePlayback's reciter/you distinction) —
+// purely visual grouping, not a claim about relative authenticity.
 const ACCENT_STYLES = {
-  bukhari: { border: "border-l-emerald-500/50", badge: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20" },
-  muslim: { border: "border-l-sky-500/50", badge: "bg-sky-500/10 text-sky-300 border-sky-500/20" },
+  bukhari: { border: "border-l-ink-accent/50", badge: "bg-ink-accent/10 text-ink-accent border-ink-accent/20" },
+  muslim: { border: "border-l-ink-gold/50", badge: "bg-ink-gold/10 text-ink-gold border-ink-gold/20" },
 };
 
 function HadithCard({ hadith, collectionName, accent, onClick }) {
@@ -446,21 +448,21 @@ function HadithCard({ hadith, collectionName, accent, onClick }) {
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
-      className={`rounded-2xl bg-slate-900/50 border border-slate-700/20 border-l-2 ${style.border} p-4 space-y-3 ${
-        onClick ? "cursor-pointer hover:border-slate-600/40 hover:bg-slate-900/80 transition-colors" : ""
+      className={`rounded-2xl bg-ink-surface/50 border border-ink-border/40 border-l-2 ${style.border} p-4 space-y-3 ${
+        onClick ? "cursor-pointer hover:border-ink-border hover:bg-ink-surface/80 transition-colors" : ""
       }`}
     >
       {hadith.arabic && (
-        <p dir="rtl" lang="ar" className="font-arabic text-base leading-loose text-white/90 text-right line-clamp-3">
+        <p dir="rtl" lang="ar" className="font-arabic text-base leading-loose text-ink-text/90 text-right line-clamp-3">
           {hadith.arabic}
         </p>
       )}
-      <p className="text-sm text-slate-300 leading-relaxed line-clamp-4">{hadith.english}</p>
+      <p className="text-sm text-ink-text-2 leading-relaxed line-clamp-4">{hadith.english}</p>
       <div className="flex items-center gap-2 pt-1">
         <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${style.badge}`}>Sahih</span>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-ink-text-3">
           {collectionName} {hadith.number}
-          <span className="text-slate-600"> · source collection's grading</span>
+          <span className="text-ink-text-3"> · source collection's grading</span>
         </p>
       </div>
     </motion.div>
@@ -480,35 +482,35 @@ function HadithDetailModal({ viewing, onClose, onNavigate }) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="bg-slate-900 border-slate-700/50 max-w-lg max-h-[85vh] overflow-y-auto p-0">
+      <DialogContent className="bg-ink-surface border-ink-border max-w-lg max-h-[85vh] overflow-y-auto p-0">
         <div className={`p-6 space-y-4 border-l-2 ${style.border}`}>
           <div className="flex items-center gap-2">
             <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${style.badge}`}>Sahih</span>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-text-3">
               {viewing.collectionName} {hadith.number}
-              <span className="text-slate-600"> · source collection's grading</span>
+              <span className="text-ink-text-3"> · source collection's grading</span>
             </p>
           </div>
           {hadith.arabic && (
-            <p dir="rtl" lang="ar" className="font-arabic text-2xl leading-loose text-white text-right">
+            <p dir="rtl" lang="ar" className="font-arabic text-2xl leading-loose text-ink-text text-right">
               {hadith.arabic}
             </p>
           )}
-          <p className="text-base text-slate-200 leading-relaxed">{hadith.english}</p>
-          <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
+          <p className="text-base text-ink-text-2 leading-relaxed">{hadith.english}</p>
+          <div className="flex items-center justify-between pt-2 border-t border-ink-border/60">
             <button
               onClick={() => onNavigate(-1)}
               disabled={!hasPrev}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 bg-slate-800/60 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-medium text-ink-text-2 bg-ink-surface-2/60 hover:bg-ink-surface-2 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
               Previous
             </button>
-            <span className="text-[11px] text-slate-600">{viewing.index + 1} of {viewing.list.length}</span>
+            <span className="text-[11px] text-ink-text-3">{viewing.index + 1} of {viewing.list.length}</span>
             <button
               onClick={() => onNavigate(1)}
               disabled={!hasNext}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 bg-slate-800/60 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-medium text-ink-text-2 bg-ink-surface-2/60 hover:bg-ink-surface-2 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               Next
               <ChevronRight className="w-3.5 h-3.5" />

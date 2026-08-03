@@ -14,14 +14,14 @@ export default function StreakDisplay({ streaks, currentStreak, averageScore }) 
         icon={<Flame className="w-5 h-5" />}
         label="Day Streak"
         value={currentStreak}
-        color="orange"
+        color="warning"
         delay={0}
       />
       <StatCard
         icon={<Target className="w-5 h-5" />}
         label="Today's Score"
         value={todayStreak?.average_accuracy ? `${todayStreak.average_accuracy}%` : "—"}
-        color="emerald"
+        color="accent"
         delay={0.1}
       />
       {/* All-time average (from recitation logs) — replaced "Recordings
@@ -32,7 +32,7 @@ export default function StreakDisplay({ streaks, currentStreak, averageScore }) 
           icon={<TrendingUp className="w-5 h-5" />}
           label="Average Score"
           value={averageScore}
-          color="blue"
+          color="gold"
           delay={0.2}
         />
       ) : (
@@ -40,7 +40,7 @@ export default function StreakDisplay({ streaks, currentStreak, averageScore }) 
           icon={<Clock className="w-5 h-5" />}
           label="Recordings Today"
           value={todayStreak?.total_recordings || 0}
-          color="blue"
+          color="gold"
           delay={0.2}
         />
       )}
@@ -48,26 +48,32 @@ export default function StreakDisplay({ streaks, currentStreak, averageScore }) 
         icon={<TrendingUp className="w-5 h-5" />}
         label="Ayahs Practiced"
         value={todayStreak?.ayahs_practiced || 0}
-        color="purple"
+        color="danger"
         delay={0.3}
       />
     </div>
   );
 }
 
+// Four distinct hues so the tiles read apart at a glance — the Paper & Ink
+// palette only defines four non-neutral accent colors total (accent, gold,
+// warning, danger), so each is used here exactly once rather than the
+// original orange/emerald/blue/purple spread. Less maximally distinct than
+// four arbitrary hues, but stays inside the exact palette rather than
+// inventing new colors outside it.
 function StatCard({ icon, label, value, color, delay }) {
   const colorMap = {
-    orange: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-    emerald: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-    blue: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    purple: "bg-purple-500/10 text-purple-400 border-purple-500/20"
+    warning: "bg-ink-warning/10 text-ink-warning border-ink-warning/20",
+    accent: "bg-ink-accent/10 text-ink-accent border-ink-accent/20",
+    gold: "bg-ink-gold/10 text-ink-gold border-ink-gold/20",
+    danger: "bg-ink-danger/10 text-ink-danger border-ink-danger/20"
   };
 
   const iconColorMap = {
-    orange: "bg-orange-500/20 text-orange-400",
-    emerald: "bg-emerald-500/20 text-emerald-400",
-    blue: "bg-blue-500/20 text-blue-400",
-    purple: "bg-purple-500/20 text-purple-400"
+    warning: "bg-ink-warning/20 text-ink-warning",
+    accent: "bg-ink-accent/20 text-ink-accent",
+    gold: "bg-ink-gold/20 text-ink-gold",
+    danger: "bg-ink-danger/20 text-ink-danger"
   };
 
   return (
@@ -80,7 +86,7 @@ function StatCard({ icon, label, value, color, delay }) {
       <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${iconColorMap[color]}`}>
         {icon}
       </div>
-      <div className="text-2xl font-bold text-white">{value}</div>
+      <div className="text-2xl font-bold text-ink-text">{value}</div>
       {/* No opacity-70 here: it dropped the tinted label below WCAG AA on
           the tile's own /10 background. Full-strength colored text passes. */}
       <div className="text-xs mt-0.5">{label}</div>

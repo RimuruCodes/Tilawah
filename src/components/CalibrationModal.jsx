@@ -79,11 +79,11 @@ export default function CalibrationModal({ open, onClose }) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="bg-slate-900 border-slate-700/50 max-w-md p-0">
+      <DialogContent className="bg-ink-surface border-ink-border max-w-md p-0">
         <div className="p-6 space-y-5">
           <div className="text-center space-y-1.5">
-            <h3 className="text-lg font-semibold text-white">Calibrate Microphone</h3>
-            <p className="text-sm text-slate-400">
+            <h3 className="text-lg font-semibold text-ink-text">Calibrate Microphone</h3>
+            <p className="text-sm text-ink-text-2">
               Helps the app tell real speech apart from background noise on your specific device/room.
             </p>
           </div>
@@ -91,36 +91,36 @@ export default function CalibrationModal({ open, onClose }) {
           <AnimatePresence mode="wait">
             {state === "idle" && (
               <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4">
-                <p className="text-xs text-slate-500 text-center">
+                <p className="text-xs text-ink-text-3 text-center">
                   Stay quiet for {CALIBRATION_SECONDS} seconds after tapping start — this just measures your room's ambient noise level.
                 </p>
-                <button onClick={startCalibration} className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-500/50 flex items-center justify-center hover:bg-emerald-500/30 transition-all">
-                  <Mic className="w-7 h-7 text-emerald-400" />
+                <button onClick={startCalibration} className="w-16 h-16 rounded-full bg-ink-accent/20 border-2 border-ink-accent/50 flex items-center justify-center hover:bg-ink-accent/30 transition-all">
+                  <Mic className="w-7 h-7 text-ink-accent" />
                 </button>
               </motion.div>
             )}
 
             {state === "recording" && (
               <motion.div key="recording" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-3 py-4">
-                <div className="w-16 h-16 rounded-full bg-red-500/20 border-2 border-red-500/50 flex items-center justify-center">
-                  <span className="text-2xl font-bold text-red-400">{secondsLeft}</span>
+                <div className="w-16 h-16 rounded-full bg-ink-danger/20 border-2 border-ink-danger/50 flex items-center justify-center">
+                  <span className="text-2xl font-bold text-ink-danger">{secondsLeft}</span>
                 </div>
-                <p className="text-sm text-slate-400">Stay quiet...</p>
+                <p className="text-sm text-ink-text-2">Stay quiet...</p>
               </motion.div>
             )}
 
             {state === "processing" && (
               <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-3 py-4">
-                <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
-                <p className="text-sm text-slate-400">Measuring...</p>
+                <Loader2 className="w-8 h-8 text-ink-accent animate-spin" />
+                <p className="text-sm text-ink-text-2">Measuring...</p>
               </motion.div>
             )}
 
             {state === "error" && (
               <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-3 py-4 text-center">
-                <AlertTriangle className="w-8 h-8 text-orange-400" />
-                <p className="text-sm text-slate-300">{errorMessage}</p>
-                <button onClick={reset} className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-medium hover:bg-slate-700 transition-colors">
+                <AlertTriangle className="w-8 h-8 text-ink-danger" />
+                <p className="text-sm text-ink-text-2">{errorMessage}</p>
+                <button onClick={reset} className="px-4 py-2 rounded-xl bg-ink-surface-2 text-ink-text-2 text-sm font-medium hover:brightness-110 transition-colors">
                   Try Again
                 </button>
               </motion.div>
@@ -128,15 +128,15 @@ export default function CalibrationModal({ open, onClose }) {
 
             {state === "done" && result && (
               <motion.div key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-3 py-2 text-center">
-                <CheckCircle2 className="w-9 h-9 text-emerald-400" />
-                <p className="text-sm text-slate-300">Calibrated — noise floor: {result.noiseFloorDb.toFixed(1)} dB</p>
-                <p className="text-xs text-slate-500">This will be used automatically in future recordings.</p>
+                <CheckCircle2 className="w-9 h-9 text-ink-accent" />
+                <p className="text-sm text-ink-text-2">Calibrated — noise floor: {result.noiseFloorDb.toFixed(1)} dB</p>
+                <p className="text-xs text-ink-text-3">This will be used automatically in future recordings.</p>
                 <div className="flex gap-2 pt-2">
-                  <button onClick={reset} className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-medium hover:bg-slate-700 transition-colors flex items-center gap-1.5">
+                  <button onClick={reset} className="px-4 py-2 rounded-xl bg-ink-surface-2 text-ink-text-2 text-sm font-medium hover:brightness-110 transition-colors flex items-center gap-1.5">
                     <RotateCcw className="w-3.5 h-3.5" />
                     Redo
                   </button>
-                  <button onClick={onClose} className="px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-400 text-sm font-medium hover:bg-emerald-500/30 transition-colors">
+                  <button onClick={onClose} className="px-4 py-2 rounded-xl bg-ink-accent/20 text-ink-accent text-sm font-medium hover:bg-ink-accent/30 transition-colors">
                     Done
                   </button>
                 </div>

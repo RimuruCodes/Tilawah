@@ -42,11 +42,11 @@ export default function SupportModal({ open, onClose }) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="bg-slate-900 border-slate-700/50 max-w-md p-0 overflow-hidden">
+      <DialogContent className="bg-ink-surface border-ink-border max-w-md p-0 overflow-hidden">
         <button
           onClick={onClose}
           aria-label="Close"
-          className="absolute top-4 right-4 z-10 p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
+          className="absolute top-4 right-4 z-10 p-1.5 rounded-lg text-ink-text-3 hover:text-ink-text hover:bg-ink-surface-2 transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
@@ -62,13 +62,13 @@ export default function SupportModal({ open, onClose }) {
               className="p-8 space-y-5"
             >
               <div className="flex flex-col items-center text-center space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                  <Heart className="w-7 h-7 text-amber-400" />
+                <div className="w-14 h-14 rounded-2xl bg-ink-gold/10 border border-ink-gold/20 flex items-center justify-center">
+                  <Heart className="w-7 h-7 text-ink-gold" />
                 </div>
-                <h2 className="text-xl font-bold text-white tracking-tight">
-                  Share in the Reward <span className="text-amber-400">(Sadaqah Jariyah)</span>
+                <h2 className="text-xl font-bold text-ink-text tracking-tight">
+                  Share in the Reward <span className="text-ink-gold">(Sadaqah Jariyah)</span>
                 </h2>
-                <p className="text-sm text-slate-400 leading-relaxed">
+                <p className="text-sm text-ink-text-2 leading-relaxed">
                   This app is built and maintained independently. By supporting this project, you help keep it ad-free and available for thousands of Muslims to memorize the Quran. Every letter they read becomes a reward in your scale of good deeds.
                 </p>
               </div>
@@ -80,8 +80,8 @@ export default function SupportModal({ open, onClose }) {
                     onClick={() => setAmount(a)}
                     className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                       amount === a
-                        ? "bg-amber-500 text-slate-900 shadow-lg shadow-amber-500/20"
-                        : "bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 border border-slate-700/50"
+                        ? "bg-ink-gold text-ink-bg shadow-ink"
+                        : "bg-ink-surface-2/50 text-ink-text-2 hover:bg-ink-surface-2 border border-ink-border/60"
                     }`}
                   >
                     ${a}
@@ -93,7 +93,7 @@ export default function SupportModal({ open, onClose }) {
                 <button
                   onClick={handleStripeDonate}
                   disabled={busy}
-                  className="w-full py-4 rounded-xl bg-amber-500 text-slate-900 font-semibold text-base flex items-center justify-center gap-2 hover:bg-amber-400 disabled:opacity-50 transition-colors shadow-lg shadow-amber-500/30"
+                  className="w-full py-4 rounded-xl bg-ink-gold text-ink-bg font-semibold text-base flex items-center justify-center gap-2 hover:brightness-110 disabled:opacity-50 transition-colors shadow-ink"
                 >
                   {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : (
                     <>
@@ -103,6 +103,8 @@ export default function SupportModal({ open, onClose }) {
                   )}
                 </button>
               ) : (
+                // Cash App's own brand green — kept as-is regardless of app
+                // theme, same as any third-party payment brand mark.
                 <a
                   href={cashAppUrl(amount)}
                   target="_blank"
@@ -115,9 +117,9 @@ export default function SupportModal({ open, onClose }) {
                 </a>
               )}
 
-              {errorMessage && <p className="text-xs text-orange-400 text-center">{errorMessage}</p>}
+              {errorMessage && <p className="text-xs text-ink-danger text-center">{errorMessage}</p>}
 
-              <p className="text-[10px] text-slate-600 text-center">
+              <p className="text-[10px] text-ink-text-3 text-center">
                 {isDonationBackendConfigured
                   ? "Secure one-time payment via Stripe. Your card details never touch this app."
                   : "You will be redirected to Cash App in a new tab."}
@@ -137,21 +139,21 @@ export default function SupportModal({ open, onClose }) {
                   initial={{ scale: 0.6, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
-                  className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center"
+                  className="w-14 h-14 rounded-2xl bg-ink-accent-soft border border-ink-accent/20 flex items-center justify-center"
                 >
-                  <Sparkles className="w-7 h-7 text-emerald-400" />
+                  <Sparkles className="w-7 h-7 text-ink-accent" />
                 </motion.div>
-                <h2 className="text-2xl font-bold text-white tracking-tight">
+                <h2 className="text-2xl font-bold text-ink-text tracking-tight">
                   Jazakallah Khair!
                 </h2>
-                <p className="text-sm text-slate-300 leading-relaxed">
+                <p className="text-sm text-ink-text-2 leading-relaxed">
                   My personal Dua to you: May Allah accept your charity, bless your wealth, and make this a continuous source of reward (Sadaqah Jariyah) for you and your loved ones in this life and the next. Ameen.
                 </p>
               </div>
 
               <button
                 onClick={onClose}
-                className="w-full py-3 rounded-xl bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition-colors"
+                className="w-full py-3 rounded-xl bg-ink-surface-2 text-ink-text-2 font-medium hover:bg-ink-surface-2/70 transition-colors"
               >
                 Close
               </button>

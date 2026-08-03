@@ -43,7 +43,7 @@ export default function CelebrationOverlay({ show, title, subtitle, onDone, dura
         >
           {/* Soft radial glow */}
           <motion.div
-            className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-emerald-400/15 to-transparent"
+            className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-ink-accent/15 to-transparent"
             initial={{ opacity: 0 }}
             animate={{ opacity: [0, 1, 0.6] }}
             transition={{ duration: 1.2 }}
@@ -54,7 +54,7 @@ export default function CelebrationOverlay({ show, title, subtitle, onDone, dura
             particles.map((p) => (
               <motion.span
                 key={p.id}
-                className={`absolute rounded-full ${p.gold ? "bg-amber-300/80" : "bg-emerald-300/80"}`}
+                className={`absolute rounded-full ${p.gold ? "bg-ink-gold/80" : "bg-ink-accent/80"}`}
                 style={{ left: `${p.left}%`, top: "18%", width: p.size, height: p.size }}
                 initial={{ opacity: 0, y: 10, scale: 0.6 }}
                 animate={{ opacity: [0, 1, 0], y: -70, x: p.drift, scale: 1 }}
@@ -64,16 +64,16 @@ export default function CelebrationOverlay({ show, title, subtitle, onDone, dura
 
           {/* The message pill */}
           <motion.div
-            className="mt-10 flex items-center gap-2 rounded-full bg-slate-900/90 border border-emerald-500/30 px-4 py-2 shadow-lg shadow-emerald-500/10"
+            className="mt-10 flex items-center gap-2 rounded-full bg-ink-surface/90 border border-ink-accent/30 px-4 py-2 shadow-ink"
             initial={{ opacity: 0, y: -12, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ type: "spring", stiffness: 320, damping: 22 }}
           >
-            <Sparkles className="w-4 h-4 text-amber-300 flex-shrink-0" />
+            <Sparkles className="w-4 h-4 text-ink-gold flex-shrink-0" />
             <div className="text-left">
-              <p className="text-sm font-semibold text-white leading-tight">{title}</p>
-              {subtitle && <p className="text-[11px] text-slate-400 leading-tight">{subtitle}</p>}
+              <p className="text-sm font-semibold text-ink-text leading-tight">{title}</p>
+              {subtitle && <p className="text-[11px] text-ink-text-2 leading-tight">{subtitle}</p>}
             </div>
           </motion.div>
         </motion.div>

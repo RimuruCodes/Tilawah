@@ -27,7 +27,7 @@ export default function BottomTabBar() {
   return (
     <nav
       aria-label="Primary"
-      className={`fixed bottom-0 inset-x-0 z-40 border-t border-slate-800/80 ${IS_RISKY_ENGINE ? "bg-slate-950" : "bg-slate-950/90 backdrop-blur-lg"} pb-[env(safe-area-inset-bottom)]`}
+      className={`fixed bottom-0 inset-x-0 z-40 border-t border-ink-border/80 ${IS_RISKY_ENGINE ? "bg-ink-bg" : "bg-ink-bg/90 backdrop-blur-lg"} pb-[env(safe-area-inset-bottom)]`}
     >
       <div className="max-w-2xl mx-auto grid grid-cols-5">
         {TABS.map(({ to, label, icon: Icon, end }) => (
@@ -37,7 +37,7 @@ export default function BottomTabBar() {
             end={end}
             className={({ isActive }) =>
               `flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors ${
-                isActive ? "text-emerald-400" : "text-slate-500 hover:text-slate-300"
+                isActive ? "text-ink-accent" : "text-ink-text-3 hover:text-ink-text-2"
               }`
             }
           >

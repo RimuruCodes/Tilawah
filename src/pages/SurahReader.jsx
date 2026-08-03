@@ -17,15 +17,25 @@ import UpgradeModal from "@/components/quran/UpgradeModal";
 import { useSubscription } from "@/lib/SubscriptionContext";
 import { canAccessFeature, GATED_FEATURES } from "@/lib/entitlements";
 import { summarizeLastScores } from "@/lib/ayahScores";
+import { PRACTICE_FOCUS_RULES, getDefaultPracticeFocusRule } from "@/lib/practiceFocus";
 
-const PRACTICE_RULES = [
-  { key: "qalqalah", label: "Qalqalah", color: "text-sky-400 bg-sky-500/10 border-sky-500/20" },
-  { key: "ghunnah", label: "Ghunnah", color: "text-purple-400 bg-purple-500/10 border-purple-500/20" },
-  { key: "iqlab", label: "Iqlab", color: "text-pink-400 bg-pink-500/10 border-pink-500/20" },
-  { key: "idgham_ghunnah", label: "Idgham", color: "text-orange-400 bg-orange-500/10 border-orange-500/20" },
-  { key: "ikhfa", label: "Ikhfa", color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" },
-  { key: "madd", label: "Madd", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
-];
+// Per-rule filter-chip color, presentation-only and kept here; ids/labels
+// come from practiceFocus.js, the single source of truth shared with
+// Settings' default-focus-rule picker. Uses the `rule-*` categorical
+// tokens (tailwind.config.js/index.css) rather than raw Tailwind colors —
+// those measured 1.6-2.6:1 against the new light-theme backgrounds, so
+// this needed real per-theme values, not a like-for-like class swap.
+// `madd` reuses `ink-accent` directly: its dark-mode color already IS
+// ink-accent's dark value (both are emerald-400).
+const PRACTICE_RULE_COLORS = {
+  qalqalah: "text-rule-qalqalah bg-rule-qalqalah/10 border-rule-qalqalah/20",
+  ghunnah: "text-rule-ghunnah bg-rule-ghunnah/10 border-rule-ghunnah/20",
+  iqlab: "text-rule-iqlab bg-rule-iqlab/10 border-rule-iqlab/20",
+  idgham_ghunnah: "text-rule-idgham bg-rule-idgham/10 border-rule-idgham/20",
+  ikhfa: "text-rule-ikhfa bg-rule-ikhfa/10 border-rule-ikhfa/20",
+  madd: "text-ink-accent bg-ink-accent/10 border-ink-accent/20",
+};
+const PRACTICE_RULES = PRACTICE_FOCUS_RULES.map((r) => ({ ...r, key: r.id, color: PRACTICE_RULE_COLORS[r.id] }));
 
 // Lazy-loaded: these pull in the ASR/speech-recognition chain
 // (@huggingface/transformers + ONNX Runtime Web), which is heavy and only
@@ -59,7 +69,10 @@ export default function SurahReader() {
   const [lastScoreMap, setLastScoreMap] = useState({});
   const [supportOpen, setSupportOpen] = useState(false);
   const [continuousOpen, setContinuousOpen] = useState(false);
-  const [practiceRuleFilter, setPracticeRuleFilter] = useState(null);
+  // Seeded from the Settings default focus rule (null = "All ayahs", the
+  // pre-existing default); corrected below once this surah's rule counts
+  // are known, in case the default rule doesn't occur in this surah at all.
+  const [practiceRuleFilter, setPracticeRuleFilter] = useState(getDefaultPracticeFocusRule());
   const [upgradeFeature, setUpgradeFeature] = useState(null);
   const { subscription } = useSubscription();
 
@@ -122,6 +135,18 @@ export default function SurahReader() {
     return ayahs.filter((ayah) => ayahRuleCategories[ayah.number]?.has(practiceRuleFilter));
   }, [ayahs, practiceRuleFilter, ayahRuleCategories]);
 
+  // A default focus rule (Settings) that happens not to occur anywhere in
+  // THIS surah would otherwise land on the "no ayahs" empty state every
+  // time it's opened — fall back to "All ayahs" instead. Only ever fires
+  // for that case: a rule the user actually clicked always has count > 0
+  // (the filter buttons below only render when it does), so this never
+  // fights a real selection.
+  useEffect(() => {
+    if (!loading && practiceRuleFilter && !practiceRuleCounts[practiceRuleFilter]) {
+      setPracticeRuleFilter(null);
+    }
+  }, [loading, practiceRuleFilter, practiceRuleCounts]);
+
   const handleAyahHighlight = useCallback((ayahNum) => {
     setHighlightedAyah(ayahNum);
     const el = document.getElementById(`ayah-${ayahNum}`);
@@ -164,24 +189,24 @@ export default function SurahReader() {
 
   if (!surah) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-ink-bg flex items-center justify-center">
         <div className="text-center">
-          <BookOpen className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-          <p className="text-slate-500">Surah not found</p>
-          <Link to="/" className="text-emerald-400 text-sm mt-2 inline-block hover:underline">Go back</Link>
+          <BookOpen className="w-12 h-12 text-ink-border mx-auto mb-4" />
+          <p className="text-ink-text-3">Surah not found</p>
+          <Link to="/" className="text-ink-accent text-sm mt-2 inline-block hover:underline">Go back</Link>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-ink-bg">
       <div className="max-w-3xl mx-auto px-4 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] space-y-6">
         {/* Top Bar */}
         <div className="flex items-center justify-between">
           <button
             onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+            className="flex items-center gap-2 text-ink-text-2 hover:text-ink-text transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span className="text-sm">All Surahs</span>
@@ -205,7 +230,7 @@ export default function SurahReader() {
             />
             <button
               onClick={handleContinuousClick}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors border border-emerald-500/20 text-sm font-medium"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-accent/10 text-ink-accent hover:bg-ink-accent/20 transition-colors border border-ink-accent/20 text-sm font-medium"
               title="Recite the entire Surah"
             >
               <Mic className="w-4 h-4" />
@@ -221,22 +246,22 @@ export default function SurahReader() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center space-y-3 py-6"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-            <span className="text-xs text-emerald-400 font-medium">{surah.type}</span>
-            <span className="text-slate-600">·</span>
-            <span className="text-xs text-slate-400">{surah.ayahs} Ayahs</span>
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-ink-accent-soft border border-ink-accent/20">
+            <span className="text-xs text-ink-accent font-medium">{surah.type}</span>
+            <span className="text-ink-text-3">·</span>
+            <span className="text-xs text-ink-text-2">{surah.ayahs} Ayahs</span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-arabic text-emerald-300" dir="rtl" style={{ fontFamily: "var(--font-arabic)" }}>
+          <h1 className="text-4xl md:text-5xl font-arabic text-ink-accent" dir="rtl" style={{ fontFamily: "var(--font-arabic)" }}>
             {surah.arabic}
           </h1>
-          <h2 className="text-xl text-white font-semibold">{surah.name}</h2>
-          <p className="text-sm text-slate-500">{surah.meaning}</p>
+          <h2 className="text-xl text-ink-text font-semibold">{surah.name}</h2>
+          <p className="text-sm text-ink-text-3">{surah.meaning}</p>
         </motion.div>
 
         {/* Bismillah */}
         {surahNumber !== 1 && surahNumber !== 9 && (
           <div className="text-center py-4" dir="rtl">
-            <p className="text-2xl text-emerald-300/60" style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.5" }}>
+            <p className="text-2xl text-ink-accent/60" style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.5" }}>
               بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ
             </p>
           </div>
@@ -245,11 +270,11 @@ export default function SurahReader() {
         {/* Tajweed Practice Filter */}
         {!loading && Object.values(practiceRuleCounts).some((n) => n > 0) && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-slate-500 mr-1">Practice:</span>
+            <span className="text-xs text-ink-text-3 mr-1">Practice:</span>
             <button
               onClick={() => setPracticeRuleFilter(null)}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                !practiceRuleFilter ? "bg-slate-700 text-white border-slate-600" : "bg-slate-800/40 text-slate-500 border-slate-700/30 hover:text-slate-300"
+                !practiceRuleFilter ? "bg-ink-surface-2 text-ink-text border-ink-border" : "bg-ink-surface-2/40 text-ink-text-3 border-ink-border/60 hover:text-ink-text-2"
               }`}
             >
               All ayahs
@@ -260,7 +285,7 @@ export default function SurahReader() {
                   key={rule.key}
                   onClick={() => setPracticeRuleFilter(practiceRuleFilter === rule.key ? null : rule.key)}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                    practiceRuleFilter === rule.key ? rule.color : "bg-slate-800/40 text-slate-500 border-slate-700/30 hover:text-slate-300"
+                    practiceRuleFilter === rule.key ? rule.color : "bg-ink-surface-2/40 text-ink-text-3 border-ink-border/60 hover:text-ink-text-2"
                   }`}
                 >
                   {rule.label} ({practiceRuleCounts[rule.key]})
@@ -287,10 +312,10 @@ export default function SurahReader() {
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
-            className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex items-center gap-3"
+            className="bg-ink-gold/10 border border-ink-gold/20 rounded-xl p-3 flex items-center gap-3"
           >
-            <EyeOff className="w-4 h-4 text-amber-400 flex-shrink-0" />
-            <p className="text-xs text-amber-300/80">
+            <EyeOff className="w-4 h-4 text-ink-gold flex-shrink-0" />
+            <p className="text-xs text-ink-gold/80">
               <span className="font-medium">Active Recall Mode</span> — Verses are hidden. Tap each to reveal and test your memory. This leverages spaced repetition for deeper retention.
             </p>
           </motion.div>
@@ -299,14 +324,14 @@ export default function SurahReader() {
         {/* Ayahs */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+            <Loader2 className="w-8 h-8 text-ink-accent animate-spin" />
           </div>
         ) : loadError ? (
-          <div className="text-center py-16 bg-slate-900/30 rounded-2xl border border-slate-700/20 space-y-4">
-            <p className="text-slate-400 text-sm px-6">{loadError}</p>
+          <div className="text-center py-16 bg-ink-surface/30 rounded-2xl border border-ink-border/40 space-y-4">
+            <p className="text-ink-text-2 text-sm px-6">{loadError}</p>
             <button
               onClick={load}
-              className="px-5 py-2 rounded-lg bg-emerald-500 text-slate-900 text-sm font-medium hover:bg-emerald-400 transition-colors"
+              className="px-5 py-2 rounded-lg bg-ink-accent text-ink-bg text-sm font-medium hover:brightness-110 transition-colors"
             >
               Try again
             </button>
@@ -356,15 +381,15 @@ export default function SurahReader() {
         )}
 
         {/* Navigation */}
-        <div className="flex items-center justify-between py-8 border-t border-slate-800/50">
+        <div className="flex items-center justify-between py-8 border-t border-ink-border/50">
           {prevSurah ? (
             <Link
               to={`/surah/${prevSurah.number}`}
-              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors group"
+              className="flex items-center gap-2 text-ink-text-2 hover:text-ink-text transition-colors group"
             >
               <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
               <div>
-                <span className="text-xs text-slate-600 block">Previous</span>
+                <span className="text-xs text-ink-text-3 block">Previous</span>
                 <span className="text-sm">{prevSurah.name}</span>
               </div>
             </Link>
@@ -372,10 +397,10 @@ export default function SurahReader() {
           {nextSurah ? (
             <Link
               to={`/surah/${nextSurah.number}`}
-              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors group text-right"
+              className="flex items-center gap-2 text-ink-text-2 hover:text-ink-text transition-colors group text-right"
             >
               <div>
-                <span className="text-xs text-slate-600 block">Next</span>
+                <span className="text-xs text-ink-text-3 block">Next</span>
                 <span className="text-sm">{nextSurah.name}</span>
               </div>
               <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />

@@ -9,7 +9,7 @@ export default function SupportButton({ onClick, className = "" }) {
       onClick={onClick}
       title="Support the App"
       aria-label="Support the App"
-      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 text-slate-900 font-semibold text-sm hover:bg-amber-400 transition-colors shadow-sm shadow-amber-500/20 ${className}`}
+      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-gold text-ink-bg font-semibold text-sm hover:brightness-110 transition-colors shadow-ink ${className}`}
     >
       <Heart className="w-4 h-4" />
       Donate

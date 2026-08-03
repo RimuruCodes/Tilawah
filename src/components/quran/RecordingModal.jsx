@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Square, Play, Pause, RotateCcw, Send, Loader2, AlertTriangle, Upload, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { analyzeSingleAyahRecitation, persistRecitationResult, revertRecitationResult, runTajweedAnalysis, decodeUserRecording, assessRecitationConfidence, attachTajweedToLogs, getLastAsrFailure, describeAsrFailureForUser, describeAsrFailureForLog, escalateAnalysis } from "@/lib/recitationService";
+import { analyzeSingleAyahRecitation, compareAgainstSecondReciter, persistRecitationResult, revertRecitationResult, runTajweedAnalysis, decodeUserRecording, assessRecitationConfidence, attachTajweedToLogs, getLastAsrFailure, describeAsrFailureForUser, describeAsrFailureForLog, escalateAnalysis } from "@/lib/recitationService";
 import { getEscalationBudgetMs, describeEscalationOutcome } from "@/lib/escalation";
 import { getVisualizationEnvelope } from "@/lib/audioAnalysis";
 import { getSupportedRecorderMimeType } from "@/lib/mediaUtils";
@@ -12,7 +12,8 @@ import { describeAsrGate } from "@/lib/asrEngine";
 import TajweedResultsPanel from "@/components/quran/TajweedResultsPanel";
 import WaveformTimeline from "@/components/quran/WaveformTimeline";
 import ComparePlayback from "@/components/quran/ComparePlayback";
-import { getAudioUrl } from "@/lib/quranData";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getAudioUrl, RECITERS } from "@/lib/quranData";
 import { getQuaWordWindowsForAyah } from "@/lib/quaReferenceData";
 import MetricBadge from "@/components/quran/MetricBadge";
 import ResultFeedback from "@/components/quran/ResultFeedback";
@@ -38,6 +39,13 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
   const [escalationNote, setEscalationNote] = useState(null);
   const [scoreUpdateInfo, setScoreUpdateInfo] = useState(null); // { from, to } | null — a background re-score changed the displayed number
   const [celebration, setCelebration] = useState(null);
+  // Phase 3: optional second reciter for a side-by-side acoustic comparison
+  // (capped at 2 reciters total — see recitationService.js's
+  // compareAgainstSecondReciter). secondReciterId persists across "Try
+  // Again" (the user's choice, like the primary reciterFolder prop);
+  // secondReciterResult is the per-attempt analysis output and gets reset.
+  const [secondReciterId, setSecondReciterId] = useState("");
+  const [secondReciterResult, setSecondReciterResult] = useState(null);
   const runSeqRef = useRef(0); // invalidates background Tajweed work from a previous run/reset
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -133,6 +141,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
     setEscalationNote(null);
     setScoreUpdateInfo(null);
     setCelebration(null);
+    setSecondReciterResult(null); // secondReciterId (the choice) intentionally persists
     chunksRef.current = [];
     if (timerRef.current) clearInterval(timerRef.current);
     if (streamRef.current) {
@@ -264,6 +273,30 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
         ayahNumber: ayah.number,
       });
       setAnalysisResult({ ...dspResult, _scoreSource: "initial-analysis" });
+
+      // Second reciter (optional, Phase 3): strictly AFTER the primary
+      // comparison above has fully resolved -- analyzeSingleAyahRecitation's
+      // own `finally` has already released "reference-samples" by this
+      // point, so this second fetch/decode/compare never overlaps the
+      // first one in memory. A failure here is non-fatal -- the primary
+      // result already stands on its own.
+      if (secondReciterId) {
+        const second = RECITERS.find((r) => r.id === secondReciterId);
+        if (second) {
+          try {
+            const secondResult = await compareAgainstSecondReciter({
+              userSamples,
+              reciterFolder: second.folder,
+              surahNumber,
+              ayahNumber: ayah.number,
+            });
+            setSecondReciterResult(secondResult ? { ...secondResult, reciterName: second.name } : null);
+          } catch (err) {
+            console.error("Second-reciter comparison failed — primary result stands without it:", err);
+            setSecondReciterResult(null);
+          }
+        }
+      }
     } catch (err) {
       console.error(err);
       // Persist the real reason: "something went wrong" alone made failures
@@ -449,21 +482,21 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
+  // Semantic tiers, not literal color names: success/warning/danger are
+  // theme-aware CSS custom properties (see index.css), so this needs no
+  // per-theme branching here. A blind find-replace onto ink-gold instead of
+  // ink-warning would look identical in dark theme (both currently equal
+  // amber-400) but wrong in light theme, where gold is a muted brand/accent
+  // tone and warning is a distinct, more alarming ochre.
   const getScoreColor = (score) => {
-    if (score >= 90) return "text-emerald-400";
-    if (score >= 75) return "text-amber-400";
-    return "text-orange-400";
-  };
-
-  const getScoreGlow = (score) => {
-    if (score >= 90) return "shadow-emerald-500/30";
-    if (score >= 75) return "shadow-amber-500/30";
-    return "shadow-orange-500/30";
+    if (score >= 90) return "text-ink-success";
+    if (score >= 75) return "text-ink-warning";
+    return "text-ink-danger";
   };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="bg-slate-900 border-slate-700/50 max-w-lg max-h-[85vh] overflow-y-auto p-0">
+      <DialogContent className="bg-ink-surface border-ink-border max-w-lg max-h-[85vh] overflow-y-auto p-0">
         <CelebrationOverlay
           show={!!celebration}
           title={celebration?.title}
@@ -475,8 +508,8 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
             {/* DialogTitle/Description (not bare h3/p) so the dialog has an
                 accessible name — screen readers otherwise announce an
                 unnamed dialog. */}
-            <DialogTitle className="text-xl font-semibold text-white">Voice Comparison</DialogTitle>
-            <DialogDescription className="text-sm text-slate-400">{surahName} · Ayah {ayah?.number}</DialogDescription>
+            <DialogTitle className="text-xl font-semibold text-ink-text">Voice Comparison</DialogTitle>
+            <DialogDescription className="text-sm text-ink-text-2">{surahName} · Ayah {ayah?.number}</DialogDescription>
           </div>
 
           {/* Live region: announces analysis progress/outcome to screen
@@ -490,8 +523,8 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
           </p>
 
           {ayah && (
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/30" dir="rtl" lang="ar">
-              <p className="text-xl text-white/90 leading-loose text-center" style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.5" }}>
+            <div className="bg-ink-surface-2/50 rounded-xl p-4 border border-ink-border/60" dir="rtl" lang="ar">
+              <p className="text-xl text-ink-text/90 leading-loose text-center" style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.5" }}>
                 {ayah.arabic}
               </p>
             </div>
@@ -511,28 +544,46 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                 animate={{ opacity: 1 }}
                 className="flex flex-col items-center gap-4"
               >
-                <p className="text-sm text-slate-400 text-center">
+                <p className="text-sm text-ink-text-2 text-center">
                   Record yourself reciting this ayah. Your recording is analyzed against {reciterName}'s actual audio for this verse, plus real speech recognition for word accuracy and basic Tajweed checks (Qalqalah, Ghunnah, Madd).
                 </p>
+
+                <div className="w-full max-w-[220px] space-y-1.5">
+                  <label htmlFor="second-reciter-select" className="text-[11px] text-ink-text-3">
+                    Optionally compare against a second reciter too
+                  </label>
+                  <Select value={secondReciterId} onValueChange={setSecondReciterId}>
+                    <SelectTrigger id="second-reciter-select" aria-label="Second reciter for comparison" className="bg-ink-surface-2/50 border-ink-border text-sm text-ink-text-2 h-9">
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-ink-surface-2 border-ink-border">
+                      {RECITERS.filter((r) => r.folder !== reciterFolder).map((r) => (
+                        <SelectItem key={r.id} value={r.id} className="text-ink-text-2 focus:bg-ink-border/50 focus:text-ink-text">
+                          {r.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
                 <button
                   onClick={startRecording}
                   aria-label="Start recording"
-                  className="w-20 h-20 rounded-full bg-red-500/20 border-2 border-red-500/50 flex items-center justify-center hover:bg-red-500/30 hover:border-red-400 transition-all group"
+                  className="w-20 h-20 rounded-full bg-ink-danger/20 border-2 border-ink-danger/50 flex items-center justify-center hover:bg-ink-danger/30 hover:border-ink-danger transition-all group"
                 >
-                  <Mic className="w-8 h-8 text-red-400 group-hover:text-red-300" />
+                  <Mic className="w-8 h-8 text-ink-danger" />
                 </button>
-                <span className="text-xs text-slate-500">Tap to start recording</span>
+                <span className="text-xs text-ink-text-3">Tap to start recording</span>
 
                 <div className="flex items-center gap-2 w-full max-w-[200px]">
-                  <div className="h-px flex-1 bg-slate-800" />
-                  <span className="text-[10px] text-slate-500">or</span>
-                  <div className="h-px flex-1 bg-slate-800" />
+                  <div className="h-px flex-1 bg-ink-border" />
+                  <span className="text-[10px] text-ink-text-3">or</span>
+                  <div className="h-px flex-1 bg-ink-border" />
                 </div>
 
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 underline underline-offset-2"
+                  className="flex items-center gap-1.5 text-xs text-ink-text-2 hover:text-ink-text underline underline-offset-2"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   Upload an audio file instead
@@ -542,15 +593,15 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                 <button
                   onClick={handleMicCheck}
                   disabled={micChecking}
-                  className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2 disabled:opacity-50"
+                  className="text-xs text-ink-text-3 hover:text-ink-text-2 underline underline-offset-2 disabled:opacity-50"
                 >
                   {micChecking ? "Checking mic..." : "Test your mic first"}
                 </button>
                 {micCheckResult && (
                   <div className={`text-xs px-3 py-2 rounded-lg border max-w-xs text-center ${
                     micCheckResult.verdict === "good"
-                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                      : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                      ? "bg-ink-success/10 text-ink-success border-ink-success/20"
+                      : "bg-ink-warning/10 text-ink-warning border-ink-warning/20"
                   }`}>
                     {micCheckResult.message}
                   </div>
@@ -569,21 +620,21 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                   <motion.div
                     animate={{ scale: [1, 1.2, 1] }}
                     transition={{ repeat: Infinity, duration: 1.5 }}
-                    className="absolute inset-0 rounded-full bg-red-500/20"
+                    className="absolute inset-0 rounded-full bg-ink-danger/20"
                   />
                   <button
                     onClick={stopRecording}
                     aria-label="Stop recording"
-                    className="relative w-20 h-20 rounded-full bg-red-500 flex items-center justify-center shadow-lg shadow-red-500/30"
+                    className="relative w-20 h-20 rounded-full bg-ink-danger flex items-center justify-center shadow-ink"
                   >
-                    <Square className="w-6 h-6 text-white" />
+                    <Square className="w-6 h-6 text-ink-bg" />
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <span className="text-red-400 font-mono text-lg">{formatTime(recordingTime)}</span>
+                  <div className="w-2 h-2 rounded-full bg-ink-danger animate-pulse" />
+                  <span className="text-ink-danger font-mono text-lg">{formatTime(recordingTime)}</span>
                 </div>
-                <span className="text-xs text-slate-500">Recording... tap to stop</span>
+                <span className="text-xs text-ink-text-3">Recording... tap to stop</span>
               </motion.div>
             )}
 
@@ -598,15 +649,15 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                   <button
                     onClick={playBack}
                     aria-label={isPlayingBack ? "Pause playback" : "Play back your recording"}
-                    className="p-3 rounded-xl bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-colors"
+                    className="p-3 rounded-xl bg-ink-surface-2/50 text-ink-text-2 hover:bg-ink-surface-2 transition-colors"
                   >
                     {isPlayingBack ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                   </button>
-                  <div className="text-sm text-slate-400 font-mono">{formatTime(recordingTime)}</div>
+                  <div className="text-sm text-ink-text-2 font-mono">{formatTime(recordingTime)}</div>
                   <button
                     onClick={resetState}
                     aria-label="Discard recording and start over"
-                    className="p-3 rounded-xl bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-colors"
+                    className="p-3 rounded-xl bg-ink-surface-2/50 text-ink-text-2 hover:bg-ink-surface-2 transition-colors"
                   >
                     <RotateCcw className="w-5 h-5" />
                   </button>
@@ -614,7 +665,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
 
                 <button
                   onClick={analyzeRecitation}
-                  className="w-full py-3 rounded-xl bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+                  className="w-full py-3 rounded-xl bg-ink-accent text-ink-bg font-medium hover:brightness-110 transition-colors flex items-center justify-center gap-2 shadow-ink"
                 >
                   <Send className="w-4 h-4" />
                   Analyze My Recitation
@@ -629,8 +680,8 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                 animate={{ opacity: 1 }}
                 className="flex flex-col items-center gap-4 py-6"
               >
-                <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
-                <p className="text-sm text-slate-400">Listening to your recording and comparing it to {reciterName}...</p>
+                <Loader2 className="w-10 h-10 text-ink-accent animate-spin" />
+                <p className="text-sm text-ink-text-2">Listening to your recording and comparing it to {reciterName}...</p>
               </motion.div>
             )}
 
@@ -641,13 +692,13 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                 animate={{ opacity: 1 }}
                 className="flex flex-col items-center gap-4 py-6 text-center"
               >
-                <AlertTriangle className="w-10 h-10 text-orange-400" />
+                <AlertTriangle className="w-10 h-10 text-ink-danger" />
                 {/* role="alert" so the error is announced immediately by
                     screen readers, from the same element that shows it. */}
-                <p className="text-sm text-slate-300" role="alert">{errorMessage}</p>
+                <p className="text-sm text-ink-text-2" role="alert">{errorMessage}</p>
                 <button
                   onClick={resetState}
-                  className="px-5 py-2.5 rounded-xl bg-slate-700/50 text-slate-300 font-medium hover:bg-slate-700 transition-colors text-sm"
+                  className="px-5 py-2.5 rounded-xl bg-ink-surface-2/50 text-ink-text-2 font-medium hover:bg-ink-surface-2 transition-colors text-sm"
                 >
                   Try Again
                 </button>
@@ -661,8 +712,9 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                 animate={{ opacity: 1, y: 0 }}
                 className="space-y-5"
               >
-                <div className="text-center">
-                  <div className={`inline-flex items-center justify-center w-24 h-24 rounded-full bg-slate-800 border-2 border-slate-700 shadow-xl ${getScoreGlow(analysisResult.score)}`}>
+                <div className={secondReciterResult ? "flex flex-col sm:flex-row gap-5 justify-center items-start" : ""}>
+                <div className="text-center flex-1 min-w-0">
+                  <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-ink-surface-2 border-2 border-ink-border shadow-ink">
                     <span data-testid="recitation-score" className={`text-3xl font-bold ${getScoreColor(analysisResult.score)}`}>
                       {analysisResult.score}
                     </span>
@@ -671,27 +723,27 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                     <motion.div
                       initial={{ opacity: 0, y: -6 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="mt-3 flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-3 py-2 text-left"
+                      className="mt-3 flex items-center gap-2 bg-ink-accent-soft border border-ink-accent/25 rounded-xl px-3 py-2 text-left"
                       role="status"
                     >
-                      <RefreshCw className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <p className="text-xs text-emerald-300">
+                      <RefreshCw className="w-4 h-4 text-ink-accent flex-shrink-0" />
+                      <p className="text-xs text-ink-accent">
                         Score updated: {scoreUpdateInfo.from} → {scoreUpdateInfo.to}. The reference audio loaded after all, so
                         this is now a real comparison against the reciter instead of a recording-quality estimate.
                       </p>
                     </motion.div>
                   )}
                   {!analysisResult.referenceAvailable && (
-                    <p className="mt-2 text-xs text-amber-400/80">Reference audio unavailable — recording-quality score only</p>
+                    <p className="mt-2 text-xs text-ink-warning/80">Reference audio unavailable — recording-quality score only</p>
                   )}
                   {analysisResult.referenceAvailable && (
-                    <p className="mt-2 text-xs text-slate-500">
+                    <p className="mt-2 text-xs text-ink-text-3">
                       You: {analysisResult.userDuration}s · {analysisResult.reciterUsed || reciterName}: {analysisResult.referenceDuration}s
                     </p>
                   )}
                   {confidence?.isLow && (
                     <div
-                      className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-1 cursor-help"
+                      className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-ink-warning/80 bg-ink-warning/10 border border-ink-warning/20 rounded-full px-2.5 py-1 cursor-help"
                       title={confidence.reasons.join("; ")}
                       aria-label={`Low confidence in this result: ${confidence.reasons.join("; ")}`}
                     >
@@ -701,10 +753,42 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                   )}
                 </div>
 
+                {/* Second reciter's card (Phase 3: multi-reciter comparison,
+                    capped at 2 total) -- same acoustic-comparison scoring as
+                    the primary card, no new comparison math. Tajweed/Style
+                    Match deliberately not shown here: rule-checking stays
+                    anchored to the primary reciter only. */}
+                {secondReciterResult && (
+                  <div className="text-center flex-1 min-w-0">
+                    <p className="text-xs text-ink-text-3 mb-1 truncate">vs. {secondReciterResult.reciterName}</p>
+                    <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-ink-surface-2 border-2 border-ink-border shadow-ink">
+                      <span className={`text-3xl font-bold ${getScoreColor(secondReciterResult.score)}`}>
+                        {secondReciterResult.score}
+                      </span>
+                    </div>
+                    {!secondReciterResult.referenceAvailable && (
+                      <p className="mt-2 text-xs text-ink-warning/80">Reference audio unavailable</p>
+                    )}
+                    {secondReciterResult.referenceAvailable && (
+                      <>
+                        <p className="mt-2 text-xs text-ink-text-3">
+                          You: {secondReciterResult.userDuration}s · {secondReciterResult.reciterUsed || secondReciterResult.reciterName}: {secondReciterResult.referenceDuration}s
+                        </p>
+                        <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                          <MetricBadge label="Rhythm" value={secondReciterResult.alignmentScore} />
+                          <MetricBadge label="Loudness" value={secondReciterResult.energyScore} />
+                          <MetricBadge label="Pitch" value={secondReciterResult.pitchScore} />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+                </div>
+
                 <div className="space-y-2">
                   {analysisResult.feedback.map((note, i) => (
-                    <div key={i} className="bg-slate-800/50 rounded-xl p-3.5 border border-slate-700/30">
-                      <p className="text-sm text-slate-300 leading-relaxed">{note}</p>
+                    <div key={i} className="bg-ink-surface-2/50 rounded-xl p-3.5 border border-ink-border/60">
+                      <p className="text-sm text-ink-text-2 leading-relaxed">{note}</p>
                     </div>
                   ))}
                 </div>
@@ -731,9 +815,9 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                 />
 
                 {tajweedPending ? (
-                  <div className="flex items-center gap-2 bg-slate-800/40 border border-slate-700/30 rounded-xl p-3">
-                    <Loader2 className="w-4 h-4 text-emerald-400 animate-spin flex-shrink-0" />
-                    <p className="text-xs text-slate-400">
+                  <div className="flex items-center gap-2 bg-ink-surface-2/40 border border-ink-border/60 rounded-xl p-3">
+                    <Loader2 className="w-4 h-4 text-ink-accent animate-spin flex-shrink-0" />
+                    <p className="text-xs text-ink-text-2">
                       {modelProgress == null
                         ? "Speech recognition for Tajweed details is still running in the background..."
                         : `Downloading speech recognition model in the background... ${modelProgress}%`}
@@ -744,9 +828,9 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                 )}
 
                 {escalating && (
-                  <div className="flex items-center gap-2 bg-slate-800/40 border border-slate-700/30 rounded-xl p-3">
-                    <Loader2 className="w-4 h-4 text-emerald-400 animate-spin flex-shrink-0" />
-                    <p className="text-xs text-slate-400" role="status">
+                  <div className="flex items-center gap-2 bg-ink-surface-2/40 border border-ink-border/60 rounded-xl p-3">
+                    <Loader2 className="w-4 h-4 text-ink-accent animate-spin flex-shrink-0" />
+                    <p className="text-xs text-ink-text-2" role="status">
                       {modelProgress == null
                         ? "Double-checking for a more reliable reading…"
                         : `Loading a more accurate model to double-check… ${modelProgress}%`}
@@ -754,7 +838,7 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                   </div>
                 )}
                 {escalationNote && !escalating && (
-                  <p className="text-[11px] text-emerald-400/80 text-center" role="status">{escalationNote}</p>
+                  <p className="text-[11px] text-ink-accent/80 text-center" role="status">{escalationNote}</p>
                 )}
 
                 <ResultFeedback
@@ -769,13 +853,13 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
                 <div className="flex gap-2">
                   <button
                     onClick={resetState}
-                    className="flex-1 py-2.5 rounded-xl bg-slate-700/50 text-slate-300 font-medium hover:bg-slate-700 transition-colors text-sm"
+                    className="flex-1 py-2.5 rounded-xl bg-ink-surface-2/50 text-ink-text-2 font-medium hover:bg-ink-surface-2 transition-colors text-sm"
                   >
                     Try Again
                   </button>
                   <button
                     onClick={onClose}
-                    className="flex-1 py-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 font-medium hover:bg-emerald-500/30 transition-colors text-sm"
+                    className="flex-1 py-2.5 rounded-xl bg-ink-accent/20 text-ink-accent font-medium hover:bg-ink-accent/30 transition-colors text-sm"
                   >
                     Done
                   </button>

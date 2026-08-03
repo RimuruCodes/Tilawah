@@ -131,6 +131,13 @@ export const FeedbackReport = createEntity("feedback_reports");
 // day-by-day completion is derived from RecitationLog, not stored — see
 // src/lib/recitationPlans.js.
 export const RecitationPlanState = createEntity("recitation_plans");
+// Metadata only (reciter, size, download date) for downloaded offline
+// audio packs — the actual audio bytes live in Cache Storage, not here; see
+// src/lib/offlinePacks.js. Deliberately NOT in EXPORTABLE_COLLECTIONS below:
+// it's re-downloadable device infrastructure, not user-authored data, and
+// export/import round-tripping it across devices would be misleading (the
+// actual cached audio wouldn't travel with it).
+export const OfflinePack = createEntity("offline_packs");
 
 const EXPORTABLE_COLLECTIONS = ["recitation_logs", "daily_streaks", "memorization_progress", "feedback_reports", "recitation_plans"];
 

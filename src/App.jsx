@@ -3,7 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes, Navigate, useLocation, Outlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider } from 'next-themes';
+import { ThemeProvider } from '@/lib/ThemeContext';
 import { lazy, Suspense } from 'react';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
@@ -65,8 +65,8 @@ const RootRoute = () => {
 };
 
 const PageLoader = () => (
-  <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-    <div className="w-8 h-8 border-4 border-slate-700 border-t-emerald-400 rounded-full animate-spin"></div>
+  <div className="min-h-screen bg-ink-bg flex items-center justify-center">
+    <div className="w-8 h-8 border-4 border-ink-border border-t-ink-accent rounded-full animate-spin"></div>
   </div>
 );
 
@@ -87,10 +87,10 @@ const AuthenticatedApp = () => {
 
   if (isLoadingAuth) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-slate-950">
+      <div className="fixed inset-0 flex items-center justify-center bg-ink-bg">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-2 border-emerald-500/20 border-t-emerald-400 rounded-full animate-spin"></div>
-          <p className="text-sm text-slate-500">Loading Quran Companion...</p>
+          <div className="w-10 h-10 border-2 border-ink-accent/20 border-t-ink-accent rounded-full animate-spin"></div>
+          <p className="text-sm text-ink-text-3">Loading Quran Companion...</p>
         </div>
       </div>
     );
@@ -131,7 +131,7 @@ function App() {
     <AuthProvider>
       <SubscriptionProvider>
         <QueryClientProvider client={queryClientInstance}>
-          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <ThemeProvider>
             <Router>
               <ScrollToTop />
               <AuthenticatedApp />

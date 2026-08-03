@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, User, Trash2, LogOut, Loader2, AlertTriangle, Download, Upload, Mic2, CheckCircle2, Sparkles, MessageCircle, BookOpen, ExternalLink } from "lucide-react";
+import { ArrowLeft, User, Trash2, LogOut, Loader2, AlertTriangle, Download, Upload, Mic2, CheckCircle2, Sparkles, MessageCircle, BookOpen, ExternalLink, LayoutGrid, ChevronUp, ChevronDown, Gauge, ListFilter, Palette } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { useSubscription } from "@/lib/SubscriptionContext";
 import { describeSubscription } from "@/lib/entitlements";
 import { openBillingPortalUrl, deleteSubscriberAccount } from "@/lib/subscriptionApi";
 import { RecitationLog, MemorizationProgress, DailyStreak, FeedbackReport, RecitationPlanState, exportUserData, importUserData } from "@/lib/localDb";
+import { downloadJson } from "@/lib/downloadJson";
 import IconButton from "@/components/IconButton";
 // Removes every localStorage key for one account's on-device data + its sync
 // marker, after the server-side account has already been deleted.
@@ -22,9 +23,15 @@ import { isRamadanModeEnabled, setRamadanModeEnabled } from "@/lib/hijri";
 import { ARABIC_COMFORT_LEVELS, getArabicComfort, setArabicComfort } from "@/lib/arabicComfort";
 import { ARABIC_TEXT_SIZES, getArabicTextSize, setArabicTextSize } from "@/lib/arabicTextSize";
 import { ARABIC_FONTS, getArabicFont, setArabicFont } from "@/lib/arabicFont";
+import { HOME_CARDS, getHomeLayout, setHomeLayout, resetHomeLayout, moveCard, toggleCardVisibility } from "@/lib/homeLayout";
+import { PLAYBACK_SPEEDS, getPlaybackSpeedId, setPlaybackSpeedId } from "@/lib/playbackSpeed";
+import { PRACTICE_FOCUS_RULES, getDefaultPracticeFocusRule, setDefaultPracticeFocusRule } from "@/lib/practiceFocus";
+import { useTheme } from "@/lib/ThemeContext";
+import { THEME_PREFERENCES } from "@/lib/theme";
 import { getLifecycleEvents, clearLifecycleEvents } from "@/lib/lifecycleDebug";
 import { getStoredCalibration } from "@/lib/micCalibration";
 import CalibrationModal from "@/components/CalibrationModal";
+import OfflinePacksSettings from "@/components/quran/OfflinePacksSettings";
 import { Switch } from "@/components/ui/switch";
 import UpgradeModal from "@/components/quran/UpgradeModal";
 import RestoreSubscriptionModal from "@/components/quran/RestoreSubscriptionModal";
@@ -44,6 +51,7 @@ export default function Settings() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { subscription, isLoadingSubscription, refreshSubscription } = useSubscription();
+  const { themePreference, setTheme } = useTheme();
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [modelPref, setModelPref] = useState(getAsrModelPreference());
@@ -53,6 +61,9 @@ export default function Settings() {
   const [comfortLevel, setComfortLevel] = useState(getArabicComfort());
   const [arabicTextSize, setArabicTextSizeState] = useState(getArabicTextSize());
   const [arabicFont, setArabicFontState] = useState(getArabicFont());
+  const [homeLayout, setHomeLayoutState] = useState(getHomeLayout());
+  const [playbackSpeed, setPlaybackSpeedState] = useState(getPlaybackSpeedId());
+  const [practiceFocusRule, setPracticeFocusRuleState] = useState(getDefaultPracticeFocusRule());
   const [calibration, setCalibration] = useState(getStoredCalibration());
   const [calibrationOpen, setCalibrationOpen] = useState(false);
   const [importMessage, setImportMessage] = useState("");
@@ -112,16 +123,21 @@ export default function Settings() {
     setEscalationBudget(id);
   };
 
-  const downloadJson = (payload, baseName) => {
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${baseName}-${new Date().toISOString().split("T")[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+  const handleMoveCard = (id, direction) => {
+    const next = moveCard(homeLayout, id, direction);
+    setHomeLayout(next);
+    setHomeLayoutState(next);
+  };
+
+  const handleToggleCard = (id) => {
+    const next = toggleCardVisibility(homeLayout, id);
+    setHomeLayout(next);
+    setHomeLayoutState(next);
+  };
+
+  const handleResetHomeLayout = () => {
+    resetHomeLayout();
+    setHomeLayoutState(getHomeLayout());
   };
 
   const handleExport = () => {
@@ -190,7 +206,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-ink-bg">
       <div className="max-w-2xl mx-auto px-4 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] space-y-8">
         <div className="flex items-center gap-3">
           <IconButton
@@ -200,28 +216,28 @@ export default function Settings() {
             onClick={() => navigate(-1)}
             className="p-2 min-h-[44px] min-w-[44px]"
           />
-          <h1 className="text-2xl font-bold text-white">Settings</h1>
+          <h1 className="text-2xl font-bold text-ink-text">Settings</h1>
         </div>
 
         {/* Profile */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-6 space-y-4"
+          className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-6 space-y-4"
         >
-          <div className="flex items-center gap-2 text-slate-400">
+          <div className="flex items-center gap-2 text-ink-text-2">
             <User className="w-5 h-5" />
             <h2 className="text-sm font-medium">Profile</h2>
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-              <span className="text-lg font-bold text-emerald-400">
+            <div className="w-12 h-12 rounded-full bg-ink-accent-soft border border-ink-accent/20 flex items-center justify-center">
+              <span className="text-lg font-bold text-ink-accent">
                 {user?.full_name?.[0]?.toUpperCase() || "?"}
               </span>
             </div>
             <div>
-              <p className="text-sm font-medium text-white">{user?.full_name || "Reciter"}</p>
-              <p className="text-xs text-slate-500">
+              <p className="text-sm font-medium text-ink-text">{user?.full_name || "Reciter"}</p>
+              <p className="text-xs text-ink-text-3">
                 {user?.email ? `${user.email} · synced across your devices` : "Synced across your devices"}
               </p>
             </div>
@@ -230,30 +246,30 @@ export default function Settings() {
 
         {/* Subscription */}
         <div className="space-y-3">
-          <h2 className="text-sm font-medium text-slate-400 px-1">Subscription</h2>
-          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
+          <h2 className="text-sm font-medium text-ink-text-2 px-1">Subscription</h2>
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-slate-400">
+              <div className="flex items-center gap-2 text-ink-text-2">
                 <Sparkles className="w-4 h-4" />
-                <h3 className="text-sm font-medium text-white">
+                <h3 className="text-sm font-medium text-ink-text">
                   {isLoadingSubscription ? "Checking plan..." : planInfo.label}
                 </h3>
               </div>
               {planInfo.active && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-ink-accent-soft text-ink-accent border border-ink-accent/20">
                   Active
                 </span>
               )}
             </div>
 
             {checkoutNote && (
-              <p className="text-xs text-emerald-400">{checkoutNote}</p>
+              <p className="text-xs text-ink-accent">{checkoutNote}</p>
             )}
             {!isLoadingSubscription && planInfo.detail && (
-              <p className="text-xs text-slate-500">{planInfo.detail}</p>
+              <p className="text-xs text-ink-text-3">{planInfo.detail}</p>
             )}
             {!isLoadingSubscription && !planInfo.active && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-ink-text-3">
                 Unlock "Recite all" continuous recitation and Tajweed Trends with a subscription. Single-ayah recitation analysis is free.
               </p>
             )}
@@ -262,12 +278,12 @@ export default function Settings() {
                 <button
                   onClick={handleManageSubscription}
                   disabled={portalBusy}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 text-slate-200 text-sm font-medium hover:bg-slate-700 disabled:opacity-50 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-ink-surface-2 text-ink-text-2 text-sm font-medium hover:brightness-110 disabled:opacity-50 transition-colors"
                 >
                   {portalBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Manage subscription"}
                 </button>
-                {portalError && <p className="text-xs text-orange-400">{portalError}</p>}
-                <p className="text-[10px] text-slate-600 text-center">
+                {portalError && <p className="text-xs text-ink-danger">{portalError}</p>}
+                <p className="text-[10px] text-ink-text-3 text-center">
                   Change plan, update card, or cancel — handled on Stripe's secure page.
                 </p>
               </>
@@ -275,7 +291,7 @@ export default function Settings() {
             {planInfo.active ? (
               <Link
                 to="/contact"
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 text-slate-200 text-sm font-medium hover:bg-slate-700 transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-ink-surface-2 text-ink-text-2 text-sm font-medium hover:brightness-110 transition-colors"
               >
                 <MessageCircle className="w-4 h-4" />
                 Questions about your subscription? Contact us
@@ -284,13 +300,13 @@ export default function Settings() {
               <>
                 <button
                   onClick={() => setUpgradeOpen(true)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-900 text-sm font-medium hover:bg-emerald-400 transition-colors"
+                  className="w-full px-4 py-2.5 rounded-xl bg-ink-accent text-ink-bg text-sm font-medium hover:brightness-110 transition-colors"
                 >
                   Upgrade
                 </button>
                 <button
                   onClick={() => setRestoreOpen(true)}
-                  className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                  className="w-full text-xs text-ink-text-3 hover:text-ink-text-2 transition-colors"
                 >
                   Already subscribed on another device? Restore purchase
                 </button>
@@ -301,31 +317,122 @@ export default function Settings() {
 
         {/* Account Actions */}
         <div className="space-y-3">
-          <h2 className="text-sm font-medium text-slate-400 px-1">Account</h2>
+          <h2 className="text-sm font-medium text-ink-text-2 px-1">Account</h2>
 
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 p-4 rounded-2xl bg-slate-900/50 border border-slate-700/20 hover:border-slate-600/30 transition-colors text-left"
+            className="w-full flex items-center gap-3 p-4 rounded-2xl bg-ink-surface/50 border border-ink-border/40 hover:border-ink-border transition-colors text-left"
           >
-            <div className="w-10 h-10 rounded-xl bg-slate-700/30 flex items-center justify-center">
-              <LogOut className="w-5 h-5 text-slate-400" />
+            <div className="w-10 h-10 rounded-xl bg-ink-surface-2/60 flex items-center justify-center">
+              <LogOut className="w-5 h-5 text-ink-text-2" />
             </div>
             <div>
-              <h3 className="text-sm font-medium text-white">Log Out</h3>
-              <p className="text-xs text-slate-500">Sign out of your account</p>
+              <h3 className="text-sm font-medium text-ink-text">Log Out</h3>
+              <p className="text-xs text-ink-text-3">Sign out of your account</p>
             </div>
           </button>
         </div>
 
+        {/* Home Dashboard */}
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-ink-text-2 px-1">Home Dashboard</h2>
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-ink-text-2">
+              <LayoutGrid className="w-4 h-4" />
+              <h3 className="text-sm font-medium text-ink-text">Reorder or hide cards</h3>
+            </div>
+            <p className="text-xs text-ink-text-3">
+              Choose which cards show on Home, and in what order. Changes apply the next time you open Home.
+            </p>
+            <div className="space-y-2">
+              {homeLayout.map((entry, i) => {
+                const card = HOME_CARDS.find((c) => c.id === entry.id);
+                if (!card) return null;
+                return (
+                  <div
+                    key={entry.id}
+                    className={`flex items-center gap-2 p-2.5 rounded-xl border ${
+                      entry.visible ? "bg-ink-surface-2/30 border-ink-border/60" : "bg-ink-surface-2/10 border-ink-border/30"
+                    }`}
+                  >
+                    <div className="flex flex-col">
+                      <button
+                        onClick={() => handleMoveCard(entry.id, -1)}
+                        disabled={i === 0}
+                        aria-label={`Move ${card.label} up`}
+                        className="p-0.5 text-ink-text-3 hover:text-ink-text-2 disabled:opacity-20 disabled:hover:text-ink-text-3 transition-colors"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleMoveCard(entry.id, 1)}
+                        disabled={i === homeLayout.length - 1}
+                        aria-label={`Move ${card.label} down`}
+                        className="p-0.5 text-ink-text-3 hover:text-ink-text-2 disabled:opacity-20 disabled:hover:text-ink-text-3 transition-colors"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <span className={`flex-1 text-sm ${entry.visible ? "text-ink-text-2" : "text-ink-text-3"}`}>
+                      {card.label}
+                    </span>
+                    <Switch
+                      checked={entry.visible}
+                      onCheckedChange={() => handleToggleCard(entry.id)}
+                      aria-label={`Show ${card.label} on Home`}
+                      className="data-[state=checked]:bg-ink-accent data-[state=unchecked]:bg-ink-border"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              onClick={handleResetHomeLayout}
+              className="w-full text-xs text-ink-text-3 hover:text-ink-text-2 transition-colors"
+            >
+              Reset to default order
+            </button>
+          </div>
+        </div>
+
+        {/* Appearance */}
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-ink-text-2 px-1">Appearance</h2>
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-ink-text-2">
+              <Palette className="w-4 h-4" />
+              <h3 className="text-sm font-medium text-ink-text">Theme</h3>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {THEME_PREFERENCES.map((pref) => (
+                <button
+                  key={pref}
+                  onClick={() => setTheme(pref)}
+                  className={`py-2 rounded-xl text-xs font-medium capitalize transition-all border ${
+                    themePreference === pref
+                      ? "bg-ink-accent-soft border-ink-accent/40 text-ink-accent"
+                      : "bg-ink-surface-2/40 border-ink-border/60 text-ink-text-2 hover:border-ink-border"
+                  }`}
+                >
+                  {pref}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-ink-text-3">
+              "Paper & Ink" is the new warm, high-contrast light theme. System follows your device's setting.
+            </p>
+          </div>
+        </div>
+
         {/* Recitation Analysis */}
         <div className="space-y-3">
-          <h2 className="text-sm font-medium text-slate-400 px-1">Recitation Analysis</h2>
-          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center gap-2 text-slate-400">
+          <h2 className="text-sm font-medium text-ink-text-2 px-1">Recitation Analysis</h2>
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-ink-text-2">
               <Mic2 className="w-4 h-4" />
-              <h3 className="text-sm font-medium text-white">Speech recognition model</h3>
+              <h3 className="text-sm font-medium text-ink-text">Speech recognition model</h3>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-text-3">
               Used for word-accuracy and Tajweed checks. Changing this downloads a different model next time you analyze a recording.
             </p>
             <div className="space-y-2">
@@ -335,17 +442,17 @@ export default function Settings() {
                   onClick={() => handleModelPrefChange(key)}
                   className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-colors ${
                     modelPref === key
-                      ? "bg-emerald-500/10 border-emerald-500/30"
-                      : "bg-slate-800/30 border-slate-700/30 hover:border-slate-600/40"
+                      ? "bg-ink-accent-soft border-ink-accent/30"
+                      : "bg-ink-surface-2/30 border-ink-border/60 hover:border-ink-border"
                   }`}
                 >
-                  <span className="text-sm text-slate-200">{opt.label}</span>
-                  {modelPref === key && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                  <span className="text-sm text-ink-text-2">{opt.label}</span>
+                  {modelPref === key && <CheckCircle2 className="w-4 h-4 text-ink-accent flex-shrink-0" />}
                 </button>
               ))}
             </div>
             {isIosWebKit() && (
-              <p className="text-xs text-amber-400/90 flex items-start gap-1.5">
+              <p className="text-xs text-ink-warning/90 flex items-start gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                 <span>
                   "More accurate" is more likely to fail on iPhone/iPad due to a known device memory
@@ -356,12 +463,12 @@ export default function Settings() {
             )}
           </div>
 
-          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center gap-2 text-slate-400">
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-ink-text-2">
               <Mic2 className="w-4 h-4" />
-              <h3 className="text-sm font-medium text-white">Extra time for a more reliable reading</h3>
+              <h3 className="text-sm font-medium text-ink-text">Extra time for a more reliable reading</h3>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-text-3">
               After showing your result, the app can optionally spend a little longer improving the parts a second attempt
               can legitimately help — refetching reference audio, or (on capable devices) re-checking with a more accurate
               speech model. It never changes your score by "retrying for a better number", and always falls back to the
@@ -374,31 +481,31 @@ export default function Settings() {
                   onClick={() => handleEscalationBudgetChange(opt.id)}
                   className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-colors ${
                     escalationBudget === opt.id
-                      ? "bg-emerald-500/10 border-emerald-500/30"
-                      : "bg-slate-800/30 border-slate-700/30 hover:border-slate-600/40"
+                      ? "bg-ink-accent-soft border-ink-accent/30"
+                      : "bg-ink-surface-2/30 border-ink-border/60 hover:border-ink-border"
                   }`}
                 >
-                  <span className="text-sm text-slate-200">{opt.label}</span>
-                  {escalationBudget === opt.id && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                  <span className="text-sm text-ink-text-2">{opt.label}</span>
+                  {escalationBudget === opt.id && <CheckCircle2 className="w-4 h-4 text-ink-accent flex-shrink-0" />}
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-slate-400">
+              <div className="flex items-center gap-2 text-ink-text-2">
                 <Mic2 className="w-4 h-4" />
-                <h3 className="text-sm font-medium text-white">Word-level Tajweed (speech recognition)</h3>
+                <h3 className="text-sm font-medium text-ink-text">Word-level Tajweed (speech recognition)</h3>
               </div>
               <Switch
                 checked={asrOn}
                 onCheckedChange={(checked) => { setAsrEnabled(checked); setAsrOn(checked); }}
                 aria-label="Word-level Tajweed (speech recognition)"
-                className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-slate-700"
+                className="data-[state=checked]:bg-ink-accent data-[state=unchecked]:bg-ink-border"
               />
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-text-3">
               Runs an on-device speech-recognition model for word accuracy and Tajweed timing checks.
               When off, you still get the full acoustic score — only the word-level layer is skipped.
               Defaults off on iPhones/iPads and on any device where this step previously crashed the
@@ -407,29 +514,29 @@ export default function Settings() {
           </div>
 
 
-          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-slate-400">
+              <div className="flex items-center gap-2 text-ink-text-2">
                 <Sparkles className="w-4 h-4" />
-                <h3 className="text-sm font-medium text-white">Ramadan mode</h3>
+                <h3 className="text-sm font-medium text-ink-text">Ramadan mode</h3>
               </div>
               <Switch
                 checked={ramadanMode}
                 onCheckedChange={(checked) => { setRamadanModeEnabled(checked); setRamadanMode(checked); }}
                 aria-label="Ramadan mode"
-                className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-slate-700"
+                className="data-[state=checked]:bg-ink-accent data-[state=unchecked]:bg-ink-border"
               />
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-text-3">
               During Ramadan (Umm al-Qura calendar), the Home screen adds a nightly Taraweeh practice
               suggestion. Turn off to keep Home exactly the same year-round.
             </p>
           </div>
 
-          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center gap-2 text-slate-400">
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-ink-text-2">
               <Mic2 className="w-4 h-4" />
-              <h3 className="text-sm font-medium text-white">Arabic reading comfort</h3>
+              <h3 className="text-sm font-medium text-ink-text">Arabic reading comfort</h3>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {ARABIC_COMFORT_LEVELS.map((level) => (
@@ -438,24 +545,24 @@ export default function Settings() {
                   onClick={() => { setArabicComfort(level.id); setComfortLevel(level.id); }}
                   className={`py-2 rounded-xl text-xs font-medium transition-all border ${
                     comfortLevel === level.id
-                      ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
-                      : "bg-slate-800/40 border-slate-700/30 text-slate-400 hover:border-slate-600/40"
+                      ? "bg-ink-accent-soft border-ink-accent/40 text-ink-accent"
+                      : "bg-ink-surface-2/40 border-ink-border/60 text-ink-text-2 hover:border-ink-border"
                   }`}
                 >
                   {level.label}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-text-3">
               Sets friendlier defaults (like whether translation starts visible in the reader).
               Never locks anything — every toggle still works as usual.
             </p>
           </div>
 
-          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center gap-2 text-slate-400">
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-ink-text-2">
               <BookOpen className="w-4 h-4" />
-              <h3 className="text-sm font-medium text-white">Arabic text size</h3>
+              <h3 className="text-sm font-medium text-ink-text">Arabic text size</h3>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {ARABIC_TEXT_SIZES.map((size) => (
@@ -464,8 +571,8 @@ export default function Settings() {
                   onClick={() => { setArabicTextSize(size.id); setArabicTextSizeState(size.id); }}
                   className={`py-2 rounded-xl text-xs font-medium transition-all border ${
                     arabicTextSize === size.id
-                      ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
-                      : "bg-slate-800/40 border-slate-700/30 text-slate-400 hover:border-slate-600/40"
+                      ? "bg-ink-accent-soft border-ink-accent/40 text-ink-accent"
+                      : "bg-ink-surface-2/40 border-ink-border/60 text-ink-text-2 hover:border-ink-border"
                   }`}
                 >
                   {size.label}
@@ -474,7 +581,7 @@ export default function Settings() {
             </div>
             <p
               dir="rtl"
-              className="text-center text-emerald-300/80 leading-loose"
+              className="text-center text-ink-accent/80 leading-loose"
               style={{
                 fontFamily: "var(--font-arabic)",
                 fontSize: `${(1.75 * (ARABIC_TEXT_SIZES.find((s) => s.id === arabicTextSize)?.scale || 1)).toFixed(3)}rem`,
@@ -482,15 +589,15 @@ export default function Settings() {
             >
               بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
             </p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-text-3">
               Sizes the Arabic script in the reader. Starts from your reading-comfort level.
             </p>
           </div>
 
-          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center gap-2 text-slate-400">
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-ink-text-2">
               <BookOpen className="w-4 h-4" />
-              <h3 className="text-sm font-medium text-white">Arabic font</h3>
+              <h3 className="text-sm font-medium text-ink-text">Arabic font</h3>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {ARABIC_FONTS.map((font) => (
@@ -499,8 +606,8 @@ export default function Settings() {
                   onClick={() => { setArabicFont(font.id); setArabicFontState(font.id); }}
                   className={`py-2 rounded-xl text-xs font-medium transition-all border ${
                     arabicFont === font.id
-                      ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
-                      : "bg-slate-800/40 border-slate-700/30 text-slate-400 hover:border-slate-600/40"
+                      ? "bg-ink-accent-soft border-ink-accent/40 text-ink-accent"
+                      : "bg-ink-surface-2/40 border-ink-border/60 text-ink-text-2 hover:border-ink-border"
                   }`}
                 >
                   {font.label}
@@ -509,35 +616,94 @@ export default function Settings() {
             </div>
             <p
               dir="rtl"
-              className="text-center text-emerald-300/80 leading-loose"
+              className="text-center text-ink-accent/80 leading-loose"
               style={{ fontFamily: "var(--font-arabic)", fontSize: "1.75rem" }}
             >
               بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
             </p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-text-3">
               Changes the Arabic typeface used throughout the reader, recording screen, and results.
             </p>
           </div>
 
-          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center gap-2 text-slate-400">
-              <Mic2 className="w-4 h-4" />
-              <h3 className="text-sm font-medium text-white">Microphone calibration</h3>
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-ink-text-2">
+              <Gauge className="w-4 h-4" />
+              <h3 className="text-sm font-medium text-ink-text">Default playback speed</h3>
             </div>
-            <p className="text-xs text-slate-500">
+            <div className="grid grid-cols-4 gap-2">
+              {PLAYBACK_SPEEDS.map((speed) => (
+                <button
+                  key={speed.id}
+                  onClick={() => { setPlaybackSpeedId(speed.id); setPlaybackSpeedState(speed.id); }}
+                  className={`py-2 rounded-xl text-xs font-medium transition-all border ${
+                    playbackSpeed === speed.id
+                      ? "bg-ink-accent-soft border-ink-accent/40 text-ink-accent"
+                      : "bg-ink-surface-2/40 border-ink-border/60 text-ink-text-2 hover:border-ink-border"
+                  }`}
+                >
+                  {speed.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-ink-text-3">
+              Applied whenever reciter audio starts playing in the reader.
+            </p>
+          </div>
+
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-ink-text-2">
+              <ListFilter className="w-4 h-4" />
+              <h3 className="text-sm font-medium text-ink-text">Default Tajweed practice focus</h3>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => { setDefaultPracticeFocusRule(null); setPracticeFocusRuleState(null); }}
+                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                  !practiceFocusRule ? "bg-ink-surface-2 text-ink-text border-ink-border" : "bg-ink-surface-2/40 text-ink-text-3 border-ink-border/60 hover:text-ink-text-2"
+                }`}
+              >
+                All ayahs
+              </button>
+              {PRACTICE_FOCUS_RULES.map((rule) => (
+                <button
+                  key={rule.id}
+                  onClick={() => { setDefaultPracticeFocusRule(rule.id); setPracticeFocusRuleState(rule.id); }}
+                  className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                    practiceFocusRule === rule.id
+                      ? "bg-ink-accent-soft border-ink-accent/40 text-ink-accent"
+                      : "bg-ink-surface-2/40 text-ink-text-3 border-ink-border/60 hover:text-ink-text-2"
+                  }`}
+                >
+                  {rule.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-ink-text-3">
+              Pre-selects this rule in a surah's practice filter when you open it — falls back to "All ayahs" if
+              that surah has none of that rule. You can still switch filters freely once you're there.
+            </p>
+          </div>
+
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-ink-text-2">
+              <Mic2 className="w-4 h-4" />
+              <h3 className="text-sm font-medium text-ink-text">Microphone calibration</h3>
+            </div>
+            <p className="text-xs text-ink-text-3">
               A quick 3-second silence check so the app can tell your voice apart from background
               noise more reliably on this device.
             </p>
             {calibration ? (
-              <p className="text-xs text-emerald-400">
+              <p className="text-xs text-ink-accent">
                 Calibrated (noise floor: {calibration.noiseFloorDb.toFixed(1)} dB)
               </p>
             ) : (
-              <p className="text-xs text-slate-500">Not calibrated yet — using default settings.</p>
+              <p className="text-xs text-ink-text-3">Not calibrated yet — using default settings.</p>
             )}
             <button
               onClick={() => setCalibrationOpen(true)}
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-800 text-slate-200 text-sm font-medium hover:bg-slate-700 transition-colors"
+              className="w-full px-4 py-2.5 rounded-xl bg-ink-surface-2 text-ink-text-2 text-sm font-medium hover:brightness-110 transition-colors"
             >
               {calibration ? "Recalibrate" : "Calibrate Now"}
             </button>
@@ -552,25 +718,31 @@ export default function Settings() {
           }}
         />
 
+        {/* Offline Access */}
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-ink-text-2 px-1">Offline Access</h2>
+          <OfflinePacksSettings />
+        </div>
+
         {/* Data */}
         <div className="space-y-3">
-          <h2 className="text-sm font-medium text-slate-400 px-1">Data</h2>
-          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
-            <p className="text-xs text-slate-500">
+          <h2 className="text-sm font-medium text-ink-text-2 px-1">Data</h2>
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
+            <p className="text-xs text-ink-text-3">
               Your recitation history, streaks, and memorization progress live only in this browser.
               Export a backup, or restore one on a new browser/device.
             </p>
             <div className="flex gap-2">
               <button
                 onClick={handleExport}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 text-slate-200 text-sm font-medium hover:bg-slate-700 transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-ink-surface-2 text-ink-text-2 text-sm font-medium hover:brightness-110 transition-colors"
               >
                 <Download className="w-4 h-4" />
                 Export
               </button>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 text-slate-200 text-sm font-medium hover:bg-slate-700 transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-ink-surface-2 text-ink-text-2 text-sm font-medium hover:brightness-110 transition-colors"
               >
                 <Upload className="w-4 h-4" />
                 Import
@@ -583,15 +755,15 @@ export default function Settings() {
                 onChange={handleImportFile}
               />
             </div>
-            {importMessage && <p className="text-xs text-emerald-400">{importMessage}</p>}
-            <div className="pt-2 border-t border-slate-800/60 space-y-2">
-              <p className="text-xs text-slate-500">
+            {importMessage && <p className="text-xs text-ink-accent">{importMessage}</p>}
+            <div className="pt-2 border-t border-ink-border/60 space-y-2">
+              <p className="text-xs text-ink-text-3">
                 Flagged a result as "seems off"? Those text-only reports stay on this device — export
                 them here if you'd like to share them to help tune the scoring.
               </p>
               <button
                 onClick={handleExportFeedback}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 text-slate-200 text-sm font-medium hover:bg-slate-700 transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-ink-surface-2 text-ink-text-2 text-sm font-medium hover:brightness-110 transition-colors"
               >
                 <Download className="w-4 h-4" />
                 Export feedback reports
@@ -602,15 +774,15 @@ export default function Settings() {
 
         {/* Credits */}
         <div className="space-y-3">
-          <h2 className="text-sm font-medium text-slate-400 px-1">Open Data & Credits</h2>
-          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-2">
-            <p className="text-xs text-slate-500">
+          <h2 className="text-sm font-medium text-ink-text-2 px-1">Open Data & Credits</h2>
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-2">
+            <p className="text-xs text-ink-text-3">
               Tilawah's Tajweed-precision research draws on data and tools from{" "}
               <a
                 href="https://github.com/Wider-Community/quranic-universal-audio"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 inline-flex items-center gap-1"
+                className="text-ink-accent hover:text-ink-accent/80 underline underline-offset-2 inline-flex items-center gap-1"
               >
                 Qur'anic Universal Audio (QUA)
                 <ExternalLink className="w-3 h-3" />
@@ -621,7 +793,7 @@ export default function Settings() {
                 href="https://creativecommons.org/licenses/by/4.0/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
+                className="text-ink-accent hover:text-ink-accent/80 underline underline-offset-2"
               >
                 CC BY 4.0
               </a>
@@ -635,29 +807,29 @@ export default function Settings() {
             investigation — readable on the phone itself, since a reload
             wipes the console. Remove with src/lib/lifecycleDebug.js. */}
         <div className="space-y-3">
-          <h2 className="text-sm font-medium text-slate-400 px-1">Lifecycle debug log (temporary)</h2>
-          <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4 space-y-3">
-            <p className="text-xs text-slate-500">
+          <h2 className="text-sm font-medium text-ink-text-2 px-1">Lifecycle debug log (temporary)</h2>
+          <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4 space-y-3">
+            <p className="text-xs text-ink-text-3">
               Records page reload/hide and service-worker events across reloads, to diagnose why a result screen disappeared. Look for a
-              <span className="text-amber-400"> PREVIOUS-SESSION-DIED-MID-ANALYSIS</span> entry (tab was killed/reloaded by the browser) or an
-              <span className="text-amber-400"> sw-controllerchange</span> entry (a service worker took over).
+              <span className="text-ink-warning"> PREVIOUS-SESSION-DIED-MID-ANALYSIS</span> entry (tab was killed/reloaded by the browser) or an
+              <span className="text-ink-warning"> sw-controllerchange</span> entry (a service worker took over).
             </p>
             {/* tabIndex + role so keyboard users can scroll and reach this
                 log region (it holds no focusable children of its own). */}
-            <div tabIndex={0} role="group" aria-label="Lifecycle debug log" className="max-h-64 overflow-y-auto rounded-lg bg-slate-950/60 border border-slate-800 p-2 space-y-1 focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500">
+            <div tabIndex={0} role="group" aria-label="Lifecycle debug log" className="max-h-64 overflow-y-auto rounded-lg bg-ink-bg/60 border border-ink-border p-2 space-y-1 focus:outline-none focus-visible:ring-1 focus-visible:ring-ink-accent">
               {getLifecycleEvents().length === 0 && (
-                <p className="text-[11px] text-slate-600">No events recorded yet.</p>
+                <p className="text-[11px] text-ink-text-3">No events recorded yet.</p>
               )}
               {getLifecycleEvents().slice().reverse().map((e, i) => (
-                <p key={i} className={`text-[11px] font-mono break-all ${/DIED|controllerchange/.test(e.type) ? "text-amber-400" : "text-slate-400"}`}>
-                  {e.t.slice(11, 19)} <span className="text-slate-200">{e.type}</span>
-                  {e.detail ? ` — ${e.detail}` : ""} <span className="text-slate-600">[{e.phase}]</span>
+                <p key={i} className={`text-[11px] font-mono break-all ${/DIED|controllerchange/.test(e.type) ? "text-ink-warning" : "text-ink-text-2"}`}>
+                  {e.t.slice(11, 19)} <span className="text-ink-text-2">{e.type}</span>
+                  {e.detail ? ` — ${e.detail}` : ""} <span className="text-ink-text-3">[{e.phase}]</span>
                 </p>
               ))}
             </div>
             <button
               onClick={() => { clearLifecycleEvents(); setLifecycleLogCleared((n) => n + 1); }}
-              className="w-full px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-700 transition-colors"
+              className="w-full px-4 py-2 rounded-xl bg-ink-surface-2 text-ink-text-2 text-xs font-medium hover:brightness-110 transition-colors"
             >
               Clear log
             </button>
@@ -666,45 +838,45 @@ export default function Settings() {
 
         {/* Danger Zone */}
         <div className="space-y-3">
-          <h2 className="text-sm font-medium text-red-400/80 px-1 flex items-center gap-1.5">
+          <h2 className="text-sm font-medium text-ink-danger/80 px-1 flex items-center gap-1.5">
             <AlertTriangle className="w-4 h-4" />
             Danger Zone
           </h2>
 
-          <div className="bg-red-950/20 border border-red-500/20 rounded-2xl p-4 flex items-center justify-between gap-4">
+          <div className="bg-ink-danger/10 border border-ink-danger/20 rounded-2xl p-4 flex items-center justify-between gap-4">
             <div className="flex-1">
-              <h3 className="text-sm font-medium text-white">Delete Account</h3>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <h3 className="text-sm font-medium text-ink-text">Delete Account</h3>
+              <p className="text-xs text-ink-text-2 mt-0.5">
                 Permanently remove your account and all associated data.
               </p>
             </div>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <button className="px-4 py-2.5 rounded-xl bg-red-500 text-slate-900 text-sm font-medium hover:bg-red-400 transition-colors flex items-center gap-2 flex-shrink-0">
+                <button className="px-4 py-2.5 rounded-xl bg-ink-danger text-ink-bg text-sm font-medium hover:brightness-110 transition-colors flex items-center gap-2 flex-shrink-0">
                   <Trash2 className="w-4 h-4" />
                   Delete
                 </button>
               </AlertDialogTrigger>
-              <AlertDialogContent className="bg-slate-900 border-slate-700/50">
+              <AlertDialogContent className="bg-ink-surface border-ink-border">
                 <AlertDialogHeader>
-                  <AlertDialogTitle className="text-white">Delete your account?</AlertDialogTitle>
-                  <AlertDialogDescription className="text-slate-400">
+                  <AlertDialogTitle className="text-ink-text">Delete your account?</AlertDialogTitle>
+                  <AlertDialogDescription className="text-ink-text-2">
                     This will permanently delete your account and all locally stored data: recitation scores and feedback, memorization progress, streaks, plans, and feedback reports. (Audio recordings are never stored, so there are none to delete.) If you have a subscription, it will be cancelled and your account record removed from our server too. This cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 {deleteError && (
-                  <p role="alert" className="text-xs text-red-400 bg-red-950/30 border border-red-500/20 rounded-lg p-2.5">
+                  <p role="alert" className="text-xs text-ink-danger bg-ink-danger/10 border border-ink-danger/20 rounded-lg p-2.5">
                     {deleteError}
                   </p>
                 )}
                 <AlertDialogFooter>
-                  <AlertDialogCancel className="bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700">
+                  <AlertDialogCancel className="bg-ink-surface-2 text-ink-text-2 border-ink-border hover:brightness-110">
                     Cancel
                   </AlertDialogCancel>
                   <AlertDialogAction
                     onClick={handleDeleteAccount}
                     disabled={deleting}
-                    className="bg-red-500 text-slate-900 hover:bg-red-400 border-red-500"
+                    className="bg-ink-danger text-ink-bg hover:brightness-110 border-ink-danger"
                   >
                     {deleting ? (
                       <>
@@ -722,10 +894,10 @@ export default function Settings() {
         </div>
 
         <div className="flex items-center justify-center gap-4 pt-4 pb-2">
-          <Link to="/privacy" className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2">
+          <Link to="/privacy" className="text-xs text-ink-text-3 hover:text-ink-text-2 underline underline-offset-2">
             Privacy Policy
           </Link>
-          <Link to="/terms" className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2">
+          <Link to="/terms" className="text-xs text-ink-text-3 hover:text-ink-text-2 underline underline-offset-2">
             Terms of Service
           </Link>
         </div>

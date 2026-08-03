@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { RecitationLog, DailyStreak, MemorizationProgress } from "@/lib/localDb";
 import { motion } from "framer-motion";
-import { ArrowLeft, BookOpen, Mic, Trophy, TrendingUp, Loader2, Calendar, Sparkles, Lock } from "lucide-react";
+import { ArrowLeft, BookOpen, Mic, Trophy, TrendingUp, Loader2, Calendar, Sparkles, Lock, Download } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { MILESTONES } from "@/lib/quranData";
 import WeeklyHeatmap from "@/components/quran/WeeklyHeatmap";
@@ -12,76 +12,32 @@ import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useSubscription } from "@/lib/SubscriptionContext";
 import { canAccessFeature, GATED_FEATURES } from "@/lib/entitlements";
 import { computeCurrentStreak } from "@/lib/streaks";
-import { TAJWEED_RULE_DEFINITIONS } from "@/lib/tajweedAnalysis";
-
-// Which TAJWEED_RULE_DEFINITIONS entry each chart category's validation
-// tier comes from. "madd" covers madd_natural/extended/obligatory, which
-// all share one validation tier (MADD_VALIDATION in tajweedAnalysis.js), so
-// any one of them is representative.
-const CATEGORY_TO_RULE_KEY = {
-  qalqalah: "qalqalah",
-  ghunnah: "ghunnah",
-  iqlab: "iqlab",
-  idgham_ghunnah: "idgham_ghunnah",
-  ikhfa: "ikhfa",
-  madd: "madd_natural",
-};
-
-// Same three-tier line treatment for every status but "validated" (solid,
-// unchanged) — dashing and dimming scale with how much evidence backs the
-// rule, so an unproven line can't visually pass as being as trustworthy as
-// Madd's real one (2026-07, Phase 4 — see tools/qdat-eval/README.md).
-const LINE_STYLE_BY_STATUS = {
-  validated: { strokeDasharray: undefined, strokeOpacity: 1 },
-  "weak-signal": { strokeDasharray: "6 4", strokeOpacity: 0.85 },
-  unvalidated: { strokeDasharray: "2 3", strokeOpacity: 0.65 },
-};
-
-// Identical wording to ValidationTag in TajweedResultsPanel.jsx — one voice
-// across the app for the same underlying tiers, not fresh copy invented
-// for the chart.
-function validationTagText(status) {
-  if (!status || status === "validated") return null;
-  return status === "weak-signal" ? "Weak signal" : "Not yet verified";
-}
-
-const TAJWEED_CATEGORIES = [
-  { key: "qalqalah", label: "Qalqalah", color: "#38bdf8" },
-  { key: "ghunnah", label: "Ghunnah", color: "#a78bfa" },
-  { key: "iqlab", label: "Iqlab", color: "#f472b6" },
-  { key: "idgham_ghunnah", label: "Idgham", color: "#fb923c" },
-  { key: "ikhfa", label: "Ikhfa", color: "#22d3ee" },
-  { key: "madd", label: "Madd", color: "#34d399" },
-].map((cat) => {
-  const validation = TAJWEED_RULE_DEFINITIONS[CATEGORY_TO_RULE_KEY[cat.key]]?.validation;
-  const status = validation?.status || "validated";
-  return {
-    ...cat,
-    tagText: validationTagText(status),
-    validationNote: validation?.note || null,
-    ...LINE_STYLE_BY_STATUS[status],
-  };
-});
+import { downloadJson } from "@/lib/downloadJson";
+import { TAJWEED_CATEGORIES, STYLE_MATCH_DISPLAY } from "@/lib/tajweedValidationDisplay";
+import { aggregateLogsBy, cumulativeAverageTrend } from "@/lib/practiceAnalytics";
 
 // Compact per-point breakdown (value + short tag, not the full note — the
 // full note lives on the legend's title/hover, matching how
 // TajweedResultsPanel puts it on the tag's title attribute rather than
 // inline, so the tooltip doesn't balloon into several paragraphs when
 // multiple unvalidated categories have data at the same point).
+// Raw inline styles (not Tailwind classes) since recharts' Tooltip content
+// renders outside the normal DOM flow -- these still resolve per the
+// active theme, same as WaveformTimeline's SVG fill/stroke values.
 function TajweedTrendTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
-    <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8 }} className="p-2.5 text-xs space-y-1">
-      <p style={{ color: "#94a3b8" }}>Attempt #{label}</p>
+    <div style={{ background: "hsl(var(--ink-bg-surface))", border: "1px solid hsl(var(--ink-border))", borderRadius: 8 }} className="p-2.5 text-xs space-y-1">
+      <p style={{ color: "hsl(var(--ink-text-tertiary))" }}>Attempt #{label}</p>
       {payload.map((entry) => {
         const cat = TAJWEED_CATEGORIES.find((c) => c.key === entry.dataKey);
         if (!cat || entry.value == null) return null;
         return (
           <div key={entry.dataKey} className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-            <span className="text-slate-300">
+            <span className="text-ink-text-2">
               {cat.label}: {entry.value}%
-              {cat.tagText && <span className="text-slate-500 italic"> ({cat.tagText})</span>}
+              {cat.tagText && <span className="text-ink-text-3 italic"> ({cat.tagText})</span>}
             </span>
           </div>
         );
@@ -101,8 +57,12 @@ export default function Progress() {
   const hasTajweedTrendsAccess = canAccessFeature(GATED_FEATURES.TAJWEED_TRENDS, subscription);
 
   const load = useCallback(async () => {
+    // Raised from 50 (Phase 6): a surah/reciter breakdown or long-term trend
+    // silently reflecting only the most recent 50 recitations would badly
+    // undercut anyone who's practiced for months. Matches Home.jsx's own
+    // existing fetch limit for the same reason.
     const [logData, streakData, progressData] = await Promise.all([
-      RecitationLog.list('-created_date', 50),
+      RecitationLog.list('-created_date', 1000),
       DailyStreak.list('-date', 30),
       MemorizationProgress.filter({ status: 'memorized' })
     ]);
@@ -153,43 +113,91 @@ export default function Progress() {
     });
   }, [logs]);
 
+  // Cumulative average Style Match over time -- the same "running average
+  // as you practice" shape as tajweedTrend, but for a single metric rather
+  // than per-rule. Phase 6: requires style_match_score, a NEW field on
+  // RecitationLog (recitationService.js) -- older logs from before this
+  // shipped simply won't have it, so this naturally only reflects practice
+  // from here forward, never retroactively invented.
+  const styleMatchTrend = useMemo(
+    () => cumulativeAverageTrend(logs, "style_match_score").map((p) => ({ attempt: p.attempt, styleMatch: p.value })),
+    [logs]
+  );
+
+  const surahBreakdown = useMemo(
+    () => aggregateLogsBy(logs, (l) => String(l.surah_number), (l) => l.surah_name || `Surah ${l.surah_number}`),
+    [logs]
+  );
+  const reciterBreakdown = useMemo(() => aggregateLogsBy(logs, (l) => l.reciter_used, (l) => l.reciter_used), [logs]);
+
+  // A self-documenting export: each rule's validation status/note travels
+  // WITH the numbers, so the file stays honest even opened outside the app
+  // — not just in the UI where the hover tooltip lives.
+  const handleDownloadAnalytics = () => {
+    downloadJson(
+      {
+        exportedAt: new Date().toISOString(),
+        overview: { avgScore, totalRecordings, totalMemorized, currentStreak },
+        tajweedPassRateByCategory: TAJWEED_CATEGORIES.map(({ key, label, status, validationNote }) => ({
+          category: label,
+          validationStatus: status,
+          validationNote,
+          cumulativePassRatePercent: tajweedTrend.length ? tajweedTrend[tajweedTrend.length - 1][key] : null,
+        })),
+        styleMatch: {
+          validationStatus: STYLE_MATCH_DISPLAY.status,
+          validationNote: STYLE_MATCH_DISPLAY.validationNote,
+          averagePercent: styleMatchTrend.length ? styleMatchTrend[styleMatchTrend.length - 1].styleMatch : null,
+        },
+        bySurah: surahBreakdown,
+        byReciter: reciterBreakdown,
+      },
+      "quran-companion-tajweed-analytics"
+    );
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+      <div className="min-h-screen bg-ink-bg flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-ink-accent animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 overscroll-none" {...touchHandlers}>
+    <div className="min-h-screen bg-ink-bg overscroll-none" {...touchHandlers}>
       <div className="max-w-3xl mx-auto px-4 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] space-y-6">
         {(isRefreshing || pullDistance > 0) && (
           <div className="flex justify-center items-center" style={{ height: Math.max(pullDistance, isRefreshing ? 40 : 0) }}>
-            <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
+            <Loader2 className="w-6 h-6 text-ink-accent animate-spin" />
           </div>
         )}
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white transition-colors">
+          <button onClick={() => navigate(-1)} className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-ink-text-2 hover:text-ink-text transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-2xl font-bold text-white">Your Progress</h1>
+          <h1 className="text-2xl font-bold text-ink-text">Your Progress</h1>
         </div>
 
-        {/* Overview Stats */}
+        {/* Overview Stats -- same 4-token spread as StreakDisplay/Home
+            (accent/gold/warning/danger), so the same category always maps
+            to the same hue across the app rather than a fresh assignment
+            per screen. */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <ProgressStat icon={<TrendingUp className="w-5 h-5" />} label="Avg Score" value={`${avgScore}%`} color="emerald" />
-          <ProgressStat icon={<Mic className="w-5 h-5" />} label="Recordings" value={totalRecordings} color="blue" />
-          <ProgressStat icon={<BookOpen className="w-5 h-5" />} label="Memorized" value={totalMemorized} color="purple" />
-          <ProgressStat icon={<Calendar className="w-5 h-5" />} label="Day Streak" value={currentStreak} color="orange" />
+          <ProgressStat icon={<TrendingUp className="w-5 h-5" />} label="Avg Score" value={`${avgScore}%`} color="accent" />
+          <ProgressStat icon={<Mic className="w-5 h-5" />} label="Recordings" value={totalRecordings} color="gold" />
+          <ProgressStat icon={<BookOpen className="w-5 h-5" />} label="Memorized" value={totalMemorized} color="danger" />
+          <ProgressStat icon={<Calendar className="w-5 h-5" />} label="Day Streak" value={currentStreak} color="warning" />
         </div>
 
         <WeeklyHeatmap streaks={streaks} />
 
-        {/* Milestones */}
+        {/* Milestones -- gold, not the general accent: trophies read as
+            gold regardless of theme, a deliberate distinct association
+            from the app's main green accent. */}
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-amber-400" />
+          <h2 className="text-lg font-semibold text-ink-text flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-ink-gold" />
             Milestones
           </h2>
           <div className="grid gap-2">
@@ -200,17 +208,17 @@ export default function Progress() {
                   key={m.label}
                   className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
                     achieved
-                      ? 'border-amber-500/30 bg-amber-500/5'
-                      : 'border-slate-700/20 bg-slate-900/30 opacity-50'
+                      ? 'border-ink-gold/30 bg-ink-gold/5'
+                      : 'border-ink-border/40 bg-ink-surface/30 opacity-50'
                   }`}
                 >
                   <span className="text-2xl">{m.icon}</span>
                   <div className="flex-1">
-                    <h3 className={`text-sm font-medium ${achieved ? 'text-amber-300' : 'text-slate-400'}`}>{m.label}</h3>
-                    <p className="text-xs text-slate-500">{m.description}</p>
+                    <h3 className={`text-sm font-medium ${achieved ? 'text-ink-gold' : 'text-ink-text-2'}`}>{m.label}</h3>
+                    <p className="text-xs text-ink-text-3">{m.description}</p>
                   </div>
                   {achieved && (
-                    <span className="text-xs text-amber-400/60 bg-amber-500/10 px-2 py-1 rounded-full">Achieved</span>
+                    <span className="text-xs text-ink-gold/60 bg-ink-gold/10 px-2 py-1 rounded-full">Achieved</span>
                   )}
                 </div>
               );
@@ -220,72 +228,140 @@ export default function Progress() {
 
         {/* Tajweed Trends */}
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-emerald-400" />
+          <h2 className="text-lg font-semibold text-ink-text flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-ink-accent" />
             Tajweed Trends
           </h2>
           {!hasTajweedTrendsAccess ? (
             <button
               onClick={() => setUpgradeOpen(true)}
-              className="w-full text-center py-10 bg-slate-900/30 rounded-2xl border border-slate-700/20 hover:border-emerald-500/30 transition-colors"
+              className="w-full text-center py-10 bg-ink-surface/30 rounded-2xl border border-ink-border/40 hover:border-ink-accent/30 transition-colors"
             >
-              <Lock className="w-6 h-6 text-slate-600 mx-auto mb-2" />
-              <p className="text-slate-400 text-sm font-medium">Tajweed Trends is part of Quran Companion's subscription</p>
-              <p className="text-slate-600 text-xs mt-1">See your Qalqalah, Ghunnah, and Madd pass-rate trend over time — tap to unlock</p>
+              <Lock className="w-6 h-6 text-ink-text-3 mx-auto mb-2" />
+              <p className="text-ink-text-2 text-sm font-medium">Tajweed Trends is part of Quran Companion's subscription</p>
+              <p className="text-ink-text-3 text-xs mt-1">See your Qalqalah, Ghunnah, and Madd pass-rate trend over time — tap to unlock</p>
             </button>
-          ) : tajweedTrend.length < 2 ? (
-            <EmptyState
-              icon={TrendingUp}
-              title="Not enough Tajweed-checked recitations yet"
-              message="Keep practicing single-ayah recitation to see your Qalqalah, Ghunnah, and Madd trends here"
-            />
           ) : (
-            <div className="bg-slate-900/50 border border-slate-700/20 rounded-2xl p-4">
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={tajweedTrend} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="attempt" stroke="#64748b" fontSize={11} tickLine={false} label={{ value: "Attempt #", position: "insideBottom", offset: -3, fill: "#64748b", fontSize: 10 }} />
-                  <YAxis domain={[0, 100]} stroke="#64748b" fontSize={11} tickLine={false} width={35} />
-                  <Tooltip content={<TajweedTrendTooltip />} />
-                  {TAJWEED_CATEGORIES.map(({ key, label, color, strokeDasharray, strokeOpacity }) => (
-                    <Line
-                      key={key}
-                      type="monotone"
-                      dataKey={key}
-                      name={label}
-                      stroke={color}
-                      strokeWidth={2}
-                      strokeDasharray={strokeDasharray}
-                      strokeOpacity={strokeOpacity}
-                      dot={false}
-                      connectNulls
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-              <div className="flex items-center justify-center gap-4 mt-2 flex-wrap">
-                {TAJWEED_CATEGORIES.map(({ key, label, color, tagText, validationNote }) => (
-                  <div key={key} className="flex items-center gap-1.5" title={validationNote || undefined}>
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                    <span className={`text-[11px] ${tagText ? "text-slate-600 cursor-help" : "text-slate-500"}`}>
-                      {label}
-                      {tagText && <span className="italic"> · {tagText}</span>}
-                    </span>
+            <>
+              {tajweedTrend.length < 2 ? (
+                <EmptyState
+                  icon={TrendingUp}
+                  title="Not enough Tajweed-checked recitations yet"
+                  message="Keep practicing single-ayah recitation to see your Qalqalah, Ghunnah, and Madd trends here"
+                />
+              ) : (
+                <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={tajweedTrend} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--ink-border))" />
+                      <XAxis dataKey="attempt" stroke="hsl(var(--ink-text-tertiary))" fontSize={11} tickLine={false} label={{ value: "Attempt #", position: "insideBottom", offset: -3, fill: "hsl(var(--ink-text-tertiary))", fontSize: 10 }} />
+                      <YAxis domain={[0, 100]} stroke="hsl(var(--ink-text-tertiary))" fontSize={11} tickLine={false} width={35} />
+                      <Tooltip content={<TajweedTrendTooltip />} />
+                      {TAJWEED_CATEGORIES.map(({ key, label, color, strokeDasharray, strokeOpacity }) => (
+                        <Line
+                          key={key}
+                          type="monotone"
+                          dataKey={key}
+                          name={label}
+                          stroke={color}
+                          strokeWidth={2}
+                          strokeDasharray={strokeDasharray}
+                          strokeOpacity={strokeOpacity}
+                          dot={false}
+                          connectNulls
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <div className="flex items-center justify-center gap-4 mt-2 flex-wrap">
+                    {TAJWEED_CATEGORIES.map(({ key, label, color, tagText, validationNote }) => (
+                      <div key={key} className="flex items-center gap-1.5" title={validationNote || undefined}>
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                        <span className={`text-[11px] ${tagText ? "text-ink-text-3 cursor-help" : "text-ink-text-3"}`}>
+                          {label}
+                          {tagText && <span className="italic"> · {tagText}</span>}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <p className="text-[10px] text-slate-600 text-center mt-2 leading-relaxed">
-                Cumulative pass rate per rule as you practice — a rising line means that rule is improving.
-                <br />
-                Solid = validated against real labeled data · dashed = weak or unproven signal (hover a label for why).
-              </p>
-            </div>
+                  <p className="text-[10px] text-ink-text-3 text-center mt-2 leading-relaxed">
+                    Cumulative pass rate per rule as you practice — a rising line means that rule is improving.
+                    <br />
+                    Solid = validated against real labeled data · dashed = weak or unproven signal (hover a label for why).
+                  </p>
+                </div>
+              )}
+
+              {/* Style Match trend (Phase 6) — its own honest tag, not
+                  borrowed from the rule-validation tiers (see
+                  tajweedValidationDisplay.js's STYLE_MATCH_DISPLAY for why:
+                  it's a similarity-to-a-reciter-profile score, not a
+                  pass/fail rule check against expert labels). */}
+              {styleMatchTrend.length >= 2 && (
+                <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4">
+                  <h3 className="text-sm font-medium text-ink-text-2 mb-2">Style Match trend</h3>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <LineChart data={styleMatchTrend} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--ink-border))" />
+                      <XAxis dataKey="attempt" stroke="hsl(var(--ink-text-tertiary))" fontSize={11} tickLine={false} />
+                      <YAxis domain={[0, 100]} stroke="hsl(var(--ink-text-tertiary))" fontSize={11} tickLine={false} width={35} />
+                      <Tooltip
+                        content={({ active, payload, label }) =>
+                          active && payload?.length ? (
+                            <div style={{ background: "hsl(var(--ink-bg-surface))", border: "1px solid hsl(var(--ink-border))", borderRadius: 8 }} className="p-2.5 text-xs">
+                              <p style={{ color: "hsl(var(--ink-text-tertiary))" }}>Attempt #{label}</p>
+                              <p className="text-ink-text-2">{payload[0].value}%</p>
+                            </div>
+                          ) : null
+                        }
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="styleMatch"
+                        stroke={STYLE_MATCH_DISPLAY.color}
+                        strokeWidth={2}
+                        strokeDasharray={STYLE_MATCH_DISPLAY.strokeDasharray}
+                        strokeOpacity={STYLE_MATCH_DISPLAY.strokeOpacity}
+                        dot={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <p
+                    className="text-[10px] text-ink-text-3 text-center mt-2 leading-relaxed cursor-help"
+                    title={STYLE_MATCH_DISPLAY.validationNote}
+                  >
+                    How closely your pacing/elongation/pitch matched your reciter's own typical delivery.{" "}
+                    <span className="italic">{STYLE_MATCH_DISPLAY.tagText}</span> — hover for why. Only tracked for
+                    recitations against a reciter with a built style profile (currently: Alafasy).
+                  </p>
+                </div>
+              )}
+
+              {/* Breakdown by surah / reciter (Phase 6) — pure aggregation
+                  over fields RecitationLog already stores; no new tracking. */}
+              {(surahBreakdown.length > 0 || reciterBreakdown.length > 0) && (
+                <div className="grid gap-3 md:grid-cols-2">
+                  <BreakdownTable title="By Surah" rows={surahBreakdown} />
+                  <BreakdownTable title="By Reciter" rows={reciterBreakdown} />
+                </div>
+              )}
+
+              {logs.length > 0 && (
+                <button
+                  onClick={handleDownloadAnalytics}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-ink-surface-2 text-ink-text-2 text-sm font-medium hover:brightness-110 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Download Tajweed analytics summary
+                </button>
+              )}
+            </>
           )}
         </div>
 
         {/* Recent Activity */}
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-white">Recent Recitations</h2>
+          <h2 className="text-lg font-semibold text-ink-text">Recent Recitations</h2>
           {logs.length === 0 ? (
             <EmptyState
               icon={Mic}
@@ -296,29 +372,34 @@ export default function Progress() {
             />
           ) : (
             <div className="space-y-2">
-              {logs.map(log => (
+              {/* Capped display, even though `logs` itself now holds up to
+                  1000 (raised for the analytics above) -- this list was
+                  never meant to render hundreds of rows, just the recent
+                  ones; the fetch limit and the render cap are now two
+                  separate concerns instead of accidentally the same number. */}
+              {logs.slice(0, 50).map(log => (
                 <motion.div
                   key={log.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="flex items-center gap-4 p-4 rounded-xl bg-slate-900/50 border border-slate-700/20"
+                  className="flex items-center gap-4 p-4 rounded-xl bg-ink-surface/50 border border-ink-border/40"
                 >
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold ${
-                    (log.accuracy_score || 0) >= 90 ? 'bg-emerald-500/20 text-emerald-400' :
-                    (log.accuracy_score || 0) >= 75 ? 'bg-amber-500/20 text-amber-400' :
-                    'bg-orange-500/20 text-orange-400'
+                    (log.accuracy_score || 0) >= 90 ? 'bg-ink-success/20 text-ink-success' :
+                    (log.accuracy_score || 0) >= 75 ? 'bg-ink-warning/20 text-ink-warning' :
+                    'bg-ink-danger/20 text-ink-danger'
                   }`}>
                     {log.accuracy_score || 0}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-medium text-white truncate">
+                    <h4 className="text-sm font-medium text-ink-text truncate">
                       {log.surah_name} · Ayah {log.ayah_number}
                     </h4>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-ink-text-3">
                       {log.reciter_used} · {log.duration_seconds || 0}s
                     </p>
                   </div>
-                  <span className="text-[10px] text-slate-600">
+                  <span className="text-[10px] text-ink-text-3">
                     {new Date(log.created_date).toLocaleDateString()}
                   </span>
                 </motion.div>
@@ -333,24 +414,52 @@ export default function Progress() {
   );
 }
 
+// Phase 6: renders an aggregateBy() result -- shared by "By Surah" and "By
+// Reciter", same row shape either way.
+function BreakdownTable({ title, rows }) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="bg-ink-surface/50 border border-ink-border/40 rounded-2xl p-4">
+      <h3 className="text-sm font-medium text-ink-text-2 mb-3">{title}</h3>
+      <div className="space-y-2">
+        {rows.slice(0, 10).map((row) => (
+          <div key={row.label} className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-ink-text-2 truncate flex-1">{row.label}</span>
+            <span className="text-ink-text-3 flex-shrink-0">{row.count}x</span>
+            <span
+              className={`flex-shrink-0 font-semibold w-9 text-right ${
+                row.avgScore >= 90 ? "text-ink-success" : row.avgScore >= 75 ? "text-ink-warning" : "text-ink-danger"
+              }`}
+            >
+              {row.avgScore}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Same 4-token spread as StreakDisplay/Home's stat tiles -- see this
+// project's Phase 5 note there for why (only 4 non-neutral tokens exist).
 function ProgressStat({ icon, label, value, color }) {
   const colorMap = {
-    emerald: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-    blue: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    purple: "bg-purple-500/10 text-purple-400 border-purple-500/20",
-    orange: "bg-orange-500/10 text-orange-400 border-orange-500/20"
+    accent: "bg-ink-accent/10 text-ink-accent border-ink-accent/20",
+    gold: "bg-ink-gold/10 text-ink-gold border-ink-gold/20",
+    danger: "bg-ink-danger/10 text-ink-danger border-ink-danger/20",
+    warning: "bg-ink-warning/10 text-ink-warning border-ink-warning/20"
   };
   const iconColorMap = {
-    emerald: "bg-emerald-500/20 text-emerald-400",
-    blue: "bg-blue-500/20 text-blue-400",
-    purple: "bg-purple-500/20 text-purple-400",
-    orange: "bg-orange-500/20 text-orange-400"
+    accent: "bg-ink-accent/20 text-ink-accent",
+    gold: "bg-ink-gold/20 text-ink-gold",
+    danger: "bg-ink-danger/20 text-ink-danger",
+    warning: "bg-ink-warning/20 text-ink-warning"
   };
 
   return (
     <div className={`rounded-2xl border p-4 ${colorMap[color]}`}>
       <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${iconColorMap[color]}`}>{icon}</div>
-      <div className="text-2xl font-bold text-white">{value}</div>
+      <div className="text-2xl font-bold text-ink-text">{value}</div>
       <div className="text-xs">{label}</div>
     </div>
   );

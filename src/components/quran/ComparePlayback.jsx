@@ -45,18 +45,22 @@ function HighlightedText({ text, activeItem, side }) {
   const activeCharIdx = activeItem?.charIndex ?? null;
   const lowConfidence = activeItem != null && activeItem.confidence != null && activeItem.confidence < LOW_CONFIDENCE_THRESHOLD;
 
+  // Reciter vs. "you" get two distinct palette hues (gold vs. accent-green)
+  // so the two sides stay visually unambiguous — the Paper & Ink palette has
+  // no dedicated third "info" color, and reusing gold keeps this within the
+  // exact token set from Phase 2 rather than inventing a new one.
   const classFor = (isActive) => {
     let cls = "transition-colors duration-150 rounded px-0.5 ";
     if (isActive && lowConfidence) {
       cls += side === "reference"
-        ? "text-sky-300/90 border-b-2 border-dashed border-sky-400/60"
-        : "text-emerald-300/90 border-b-2 border-dashed border-emerald-400/60";
+        ? "text-ink-gold/90 border-b-2 border-dashed border-ink-gold/60"
+        : "text-ink-accent/90 border-b-2 border-dashed border-ink-accent/60";
     } else if (isActive) {
       cls += side === "reference"
-        ? "bg-sky-500/20 text-sky-300 underline decoration-2 underline-offset-4"
-        : "bg-emerald-500/20 text-emerald-300";
+        ? "bg-ink-gold/20 text-ink-gold underline decoration-2 underline-offset-4"
+        : "bg-ink-accent/20 text-ink-accent";
     } else {
-      cls += "text-slate-300";
+      cls += "text-ink-text-2";
     }
     return cls;
   };
@@ -209,34 +213,34 @@ export default function ComparePlayback({
   const hasAnyWordData = !!(userWords?.length || refWordsForCurrentAyah?.length);
 
   return (
-    <div className="rounded-xl bg-slate-800/30 border border-slate-700/30 p-3 space-y-2">
+    <div className="rounded-xl bg-ink-surface-2/30 border border-ink-border/60 p-3 space-y-2">
       <div className="flex items-center gap-2">
         <button
           onClick={() => (playing ? stopAll() : start())}
-          className="p-2 rounded-lg bg-emerald-500 text-slate-900 hover:bg-emerald-400 transition-colors flex-shrink-0"
+          className="p-2 rounded-lg bg-ink-accent text-ink-bg hover:brightness-110 transition-colors flex-shrink-0"
           aria-label={playing ? "Stop comparison playback" : "Play your recording alongside the reference"}
         >
           {playing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
         </button>
-        <p className="text-xs text-slate-400 flex-1">Hear the difference — both play together; pick which is louder.</p>
+        <p className="text-xs text-ink-text-2 flex-1">Hear the difference — both play together; pick which is louder.</p>
       </div>
 
       {playing && (userAyahText || refTextForCurrentAyah) && (
         <div className="space-y-2 py-1">
           {refTextForCurrentAyah && (
             <div className="flex items-start gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-sky-400/80 font-medium pt-1.5 flex-shrink-0">Reciter</span>
+              <span className="text-[10px] uppercase tracking-wide text-ink-gold/80 font-medium pt-1.5 flex-shrink-0">Reciter</span>
               <HighlightedText text={refTextForCurrentAyah} activeItem={refActiveItem} side="reference" />
             </div>
           )}
           {userAyahText && (
             <div className="flex items-start gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-emerald-400/80 font-medium pt-1.5 flex-shrink-0">You</span>
+              <span className="text-[10px] uppercase tracking-wide text-ink-accent/80 font-medium pt-1.5 flex-shrink-0">You</span>
               <HighlightedText text={userAyahText} activeItem={userActiveItem} side="user" />
             </div>
           )}
           {!hasAnyWordData && (
-            <p className="text-[10px] text-slate-600">Word-by-word timing isn't available for this reciter/ayah yet — text shown without highlighting.</p>
+            <p className="text-[10px] text-ink-text-3">Word-by-word timing isn't available for this reciter/ayah yet — text shown without highlighting.</p>
           )}
         </div>
       )}
@@ -253,8 +257,8 @@ export default function ComparePlayback({
             aria-label={`Make ${side.label.toLowerCase()} the louder one`}
             className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-medium transition-all border ${
               focus === side.key
-                ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
-                : "bg-slate-800/50 border-slate-700/30 text-slate-500 hover:text-slate-300"
+                ? "bg-ink-accent/15 border-ink-accent/40 text-ink-accent"
+                : "bg-ink-surface-2/50 border-ink-border/60 text-ink-text-3 hover:text-ink-text-2"
             }`}
           >
             {focus === side.key && <Volume2 className="w-3 h-3" />}
@@ -262,7 +266,7 @@ export default function ComparePlayback({
           </button>
         ))}
       </div>
-      <p className="text-[10px] text-slate-600">
+      <p className="text-[10px] text-ink-text-3">
         Both start together and play at their natural pace — pacing differences are part of what you're hearing.
       </p>
     </div>

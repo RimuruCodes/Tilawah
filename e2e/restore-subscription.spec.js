@@ -3,49 +3,69 @@
 // the original bug this replaces (entering a DIFFERENT person's
 // subscription email in "Restore purchase" used to silently sign the
 // caller into that other person's account). This drives the ACTUAL app
-// with Playwright against a LOCAL Supabase stack and real Stripe TEST MODE
-// infrastructure -- never the project's deployed Supabase project, which is
-// live production (see the note below).
+// with Playwright against a real, non-production Supabase backend and
+// real Stripe TEST MODE infrastructure -- never the project's live
+// production Supabase project (see the note below).
 //
-// WHY THIS TARGETS LOCAL SUPABASE, NOT THE PROJECT'S USUAL ONE:
+// WHY NOT THE PROJECT'S USUAL SUPABASE PROJECT:
 // This repo is normally linked to exactly one Supabase project
 // (hfmyyjotththoziatilb / "Tilawah"), and it is live production -- real
 // subscribers, and per supabase/functions/stripeClient.ts's own header
 // comment, a LIVE Stripe secret key deployed since 2026-07-16 ("real cards
-// are charged"). The sk_test_... key in supabase/functions/.env only
-// applies when the functions run LOCALLY. Deploying this function or
-// creating accounts against the live project would mean real production
-// writes and, if Stripe were exercised there, real money -- neither of
-// which this suite (or its "TEST MODE ONLY" requirement) can honor against
-// that project. So this suite brings up its own local stack instead.
+// are charged"). Deploying this function or creating accounts against the
+// live project would mean real production writes and, if Stripe were
+// exercised there, real money.
 //
-// PREREQUISITES (all local; nothing here ever touches the live project):
-//   1. Docker Desktop running.
-//   2. `npx supabase start` from the repo root -- local Postgres/GoTrue/
-//      Inbucket on the CLI's fixed default ports (54321 API, 54324 mail).
-//      First run also applies supabase/migrations/*.sql automatically.
-//   3. In a separate terminal: `npx supabase functions serve --env-file
-//      supabase/functions/.env` -- serves restore-subscription locally
-//      using the sk_test_... Stripe key already committed there.
-//   4. `npm run test:e2e:restore`
-// If steps 1-2 haven't been done, every test below is SKIPPED with a clear
-// reason (see `localStackReachable`) rather than failing or being silently
-// omitted from a report.
+// WHAT THIS TARGETS INSTEAD (default): a separate staging Supabase project
+// (org kvafktlppoyrgxzlnljh, ref icjthqonblsroqvsgkws -- "tilawah-staging"),
+// created 2026-08-02 specifically so verification work never has to touch
+// production. Its own migrations/functions/secrets/auth config are set up
+// identically to production (see the commit that added this comment for
+// the exact CLI commands used), except APP_BASE_URL is localhost -- which
+// is also the actual fix for a real CORS wall hit during earlier Phase 1
+// screenshot work (production's deployed functions only accept requests
+// from https://tilawah1.com; staging's accept localhost by design). Being
+// a real hosted project rather than local `supabase start`, it needs no
+// Docker -- which matters because this sandbox doesn't have a reachable
+// Docker daemon. Local `supabase start` is still supported as an
+// alternative (E2E_SUPABASE_TARGET=local) for anyone who'd rather use that;
+// see supabaseTestTarget.js for how the two are selected.
+//
+// One real design consequence of a hosted project instead of local
+// `supabase start`: there's no Inbucket mail catcher to poll for the OTP
+// email. fetchOtpCode below instead reads the code via the admin API's
+// generateLink() (service-role only) for the staging target, and falls
+// back to Inbucket-polling for the local target.
+//
+// PREREQUISITES:
+//   Staging (default): e2e/.env.staging must exist (gitignored -- see its
+//     own header comment) with the staging project's URL/anon/service-role
+//     keys. Nothing else -- no Docker, no separate server process.
+//   Local (E2E_SUPABASE_TARGET=local): Docker Desktop running, then
+//     `npx supabase start` and `npx supabase functions serve --env-file
+//     supabase/functions/.env` in a separate terminal.
+//   Either way: `npm run test:e2e:restore`.
+// If the target backend isn't reachable, every test below is SKIPPED with
+// a clear reason (see `stackReachable`) rather than failing or being
+// silently omitted from a report.
 import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { LOCAL_SUPABASE_URL, LOCAL_INBUCKET_URL, LOCAL_SERVICE_ROLE_KEY } from "./localSupabaseKeys.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, INBUCKET_URL, E2E_SUPABASE_TARGET } from "./supabaseTestTarget.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(HERE, "..");
 
-// Reads the project's own committed TEST-mode Stripe credentials -- the
-// same ones `supabase functions serve` uses locally. Never the deployed
-// (live) secret; see the header comment above.
+// Reads the project's own committed TEST-mode Stripe credentials. Never a
+// live secret; see the header comment above. Staging and local share the
+// same Stripe test-mode keys (test mode is account-scoped, not
+// Supabase-project-scoped) -- the only real difference between the two
+// files is APP_BASE_URL, which the Edge Functions read, not this spec.
 function readFunctionsEnv() {
-  const raw = readFileSync(path.join(REPO_ROOT, "supabase/functions/.env"), "utf8");
+  const fileName = E2E_SUPABASE_TARGET === "local" ? "supabase/functions/.env" : "supabase/functions/.env.staging";
+  const raw = readFileSync(path.join(REPO_ROOT, fileName), "utf8");
   const vars = {};
   for (const line of raw.split("\n")) {
     const m = line.match(/^([A-Z_]+)=(.*)$/);
@@ -79,35 +99,54 @@ async function stripeRequest(method, url, key, body) {
   return data;
 }
 
-async function probeLocalSupabase() {
+async function probeSupabase() {
+  if (!SUPABASE_URL) return false;
   try {
-    const res = await fetch(`${LOCAL_SUPABASE_URL}/auth/v1/health`, { signal: AbortSignal.timeout(2000) });
+    // A real hosted project's GoTrue rejects even the health check without
+    // an apikey header ("No API key found in request") -- local
+    // `supabase start` is more lenient, but sending it either way is
+    // harmless and correct (real clients always send it).
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, {
+      signal: AbortSignal.timeout(4000),
+      headers: SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY } : {},
+    });
     return res.ok;
   } catch {
     return false;
   }
 }
 
-const localStackReachable = await probeLocalSupabase();
+const stackReachable = await probeSupabase();
 
 test.describe("Restore purchase: real identity + entitlement + Stripe verification", () => {
   test.skip(
-    !localStackReachable,
-    `Local Supabase isn't reachable at ${LOCAL_SUPABASE_URL}. Run \`npx supabase start\` ` +
-      `(Docker Desktop must be running) and \`npx supabase functions serve --env-file ` +
-      `supabase/functions/.env\` first, then re-run \`npm run test:e2e:restore\`. See this ` +
-      `file's header comment for the full prerequisite list.`
+    !stackReachable,
+    E2E_SUPABASE_TARGET === "local"
+      ? `Local Supabase isn't reachable at ${SUPABASE_URL}. Run \`npx supabase start\` ` +
+          `(Docker Desktop must be running) and \`npx supabase functions serve --env-file ` +
+          `supabase/functions/.env\` first, then re-run \`npm run test:e2e:restore\`.`
+      : `The staging Supabase project isn't reachable${SUPABASE_URL ? ` at ${SUPABASE_URL}` : ""}. ` +
+          `Check e2e/.env.staging exists and has real values (gitignored -- not present in a fresh ` +
+          `checkout), or set E2E_SUPABASE_TARGET=local to use a local Docker stack instead.`
   );
 
-  const admin = localStackReachable ? createClient(LOCAL_SUPABASE_URL, LOCAL_SERVICE_ROLE_KEY) : null;
+  const admin = stackReachable ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) : null;
   const stamp = Date.now();
-  const accountA = { email: `restore-fix-a-${stamp}@example.com`, password: "TestPassw0rd!A1" };
-  const accountB = { email: `restore-fix-b-${stamp}@example.com`, password: "TestPassw0rd!B1" };
+  // NOT @example.com: confirmed empirically that the staging project's
+  // default (no custom SMTP) mailer rejects it outright with
+  // email_address_invalid at the /auth/v1/otp endpoint -- and so does
+  // @gmail.com and other real providers. Only @tilawah1.com (the real
+  // product domain, already administered for this project) passed. Real
+  // delivery is never needed either way -- fetchOtpCode below reads the
+  // code via the admin API's generateLink(), not an actual inbox -- so
+  // this is safe, just an unexpected platform restriction to route around.
+  const accountA = { email: `restore-fix-a-${stamp}@tilawah1.com`, password: "TestPassw0rd!A1" };
+  const accountB = { email: `restore-fix-b-${stamp}@tilawah1.com`, password: "TestPassw0rd!B1" };
   let accountAId, accountBId, stripeCustomerId, stripeSubscriptionId;
-  const stripeEnv = readFunctionsEnv();
+  const stripeEnv = stackReachable ? readFunctionsEnv() : {};
 
   test.beforeAll(async () => {
-    if (!localStackReachable) return;
+    if (!stackReachable) return;
 
     // 1. Two genuinely disposable accounts, created via Supabase's admin
     // API (not the app's own signup UI), each auto-confirmed so they can
@@ -168,7 +207,7 @@ test.describe("Restore purchase: real identity + entitlement + Stripe verificati
   });
 
   test.afterAll(async () => {
-    if (!localStackReachable) return;
+    if (!stackReachable) return;
     if (stripeSubscriptionId) {
       await stripeRequest("DELETE", `subscriptions/${stripeSubscriptionId}`, stripeEnv.STRIPE_SECRET_KEY).catch(() => {});
     }
@@ -183,29 +222,41 @@ test.describe("Restore purchase: real identity + entitlement + Stripe verificati
     if (accountBId) await admin.auth.admin.deleteUser(accountBId).catch(() => {});
   });
 
-  // Local Supabase routes all outgoing auth email through Inbucket, a mail
-  // catcher exposed as JSON at LOCAL_INBUCKET_URL -- this fetches the REAL
-  // code the app sent, the same way a person would open their inbox.
+  // Local `supabase start` routes all outgoing auth email through Inbucket,
+  // a mail catcher exposed as JSON -- the same way a person would open
+  // their inbox. A real hosted project (staging included) has no Inbucket,
+  // so the code is fetched via the admin API's generateLink() instead,
+  // which returns the raw OTP directly (data.properties.email_otp -- see
+  // @supabase/auth-js's GoTrueAdminApi.generateLink() docs) without ever
+  // needing the email to actually be delivered.
   async function fetchOtpCode(email) {
-    const mailbox = email.split("@")[0].toLowerCase();
-    const url = `${LOCAL_INBUCKET_URL}/api/v1/mailbox/${encodeURIComponent(mailbox)}`;
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const res = await fetch(url);
-      if (res.ok) {
-        const messages = await res.json();
-        if (messages.length > 0) {
-          const latest = messages[messages.length - 1];
-          const full = await (await fetch(`${url}/${latest.id}`)).json();
-          const body = full.body?.text || full.body?.html || "";
-          // supabase/templates/magic_link.html renders the code as
-          // {{ .Token }} inside a <strong> -- a bare 6-digit run.
-          const match = body.match(/\b(\d{6})\b/);
-          if (match) return match[1];
+    if (E2E_SUPABASE_TARGET === "local") {
+      const mailbox = email.split("@")[0].toLowerCase();
+      const url = `${INBUCKET_URL}/api/v1/mailbox/${encodeURIComponent(mailbox)}`;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const res = await fetch(url);
+        if (res.ok) {
+          const messages = await res.json();
+          if (messages.length > 0) {
+            const latest = messages[messages.length - 1];
+            const full = await (await fetch(`${url}/${latest.id}`)).json();
+            const body = full.body?.text || full.body?.html || "";
+            // supabase/templates/magic_link.html renders the code as
+            // {{ .Token }} inside a <strong> -- a bare 6-digit run.
+            const match = body.match(/\b(\d{6})\b/);
+            if (match) return match[1];
+          }
         }
+        await new Promise((r) => setTimeout(r, 500));
       }
-      await new Promise((r) => setTimeout(r, 500));
+      throw new Error(`No OTP email arrived for ${email} within 10s (Inbucket mailbox "${mailbox}")`);
     }
-    throw new Error(`No OTP email arrived for ${email} within 10s (Inbucket mailbox "${mailbox}")`);
+
+    const { data, error } = await admin.auth.admin.generateLink({ type: "magiclink", email });
+    if (error) throw new Error(`generateLink failed for ${email}: ${error.message}`);
+    const code = data?.properties?.email_otp;
+    if (!code) throw new Error(`generateLink for ${email} returned no email_otp -- response shape: ${JSON.stringify(data)}`);
+    return code;
   }
 
   // Reads the REAL, actual Supabase session persisted in the browser --
@@ -250,7 +301,7 @@ test.describe("Restore purchase: real identity + entitlement + Stripe verificati
     expect(sessionIdAfterSendCode).toBe(accountBId);
 
     const code = await fetchOtpCode(accountA.email);
-    console.log(`[info] real OTP code fetched from local Inbucket for Account A (${accountA.email}): ${code}`);
+    console.log(`[info] real OTP code fetched for Account A (${accountA.email}) via ${E2E_SUPABASE_TARGET === "local" ? "Inbucket" : "generateLink"}: ${code}`);
 
     await page.getByPlaceholder("123456").fill(code);
     await page.getByText("Verify & restore", { exact: true }).click();

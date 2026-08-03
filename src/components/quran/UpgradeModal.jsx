@@ -127,14 +127,14 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
 
   return (
     <Dialog open={open} onOpenChange={resetAndClose}>
-      <DialogContent className="bg-slate-900 border-slate-700/50 max-w-md p-0">
+      <DialogContent className="bg-ink-surface border-ink-border max-w-md p-0">
         <div className="p-6 space-y-5">
           <div className="text-center space-y-2">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-              <Sparkles className="w-6 h-6 text-emerald-400" />
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-ink-accent-soft border border-ink-accent/20">
+              <Sparkles className="w-6 h-6 text-ink-accent" />
             </div>
-            <h3 className="text-lg font-semibold text-white">Unlock {featureLabel}</h3>
-            <p className="text-sm text-slate-400">
+            <h3 className="text-lg font-semibold text-ink-text">Unlock {featureLabel}</h3>
+            <p className="text-sm text-ink-text-2">
               A subscription unlocks reciting whole surahs with continuous analysis, plus your Tajweed trends over time. Single-ayah recitation analysis stays free for everyone.
             </p>
           </div>
@@ -148,31 +148,31 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
                       key={p.id}
                       onClick={() => setPlan(p.id)}
                       className={`relative p-3 rounded-xl border text-left transition-colors ${
-                        plan === p.id ? "bg-emerald-500/10 border-emerald-500/40" : "bg-slate-800/40 border-slate-700/30 hover:border-slate-600/40"
+                        plan === p.id ? "bg-ink-accent-soft border-ink-accent/40" : "bg-ink-surface-2/40 border-ink-border/60 hover:border-ink-border"
                       }`}
                     >
                       {p.badge && (
-                        <span className="absolute -top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500 text-slate-900 font-semibold">
+                        <span className="absolute -top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full bg-ink-accent text-ink-bg font-semibold">
                           {p.badge}
                         </span>
                       )}
-                      <p className="text-sm font-medium text-white">{p.label}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{p.price}</p>
+                      <p className="text-sm font-medium text-ink-text">{p.label}</p>
+                      <p className="text-xs text-ink-text-2 mt-0.5">{p.price}</p>
                     </button>
                   ))}
                 </div>
                 <button
                   onClick={() => setStep("email")}
-                  className="w-full py-2.5 rounded-xl bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-400 transition-colors text-sm"
+                  className="w-full py-2.5 rounded-xl bg-ink-accent text-ink-bg font-medium hover:brightness-110 transition-colors text-sm"
                 >
                   Continue
                 </button>
-                <p className="text-[10px] text-slate-600 text-center">
+                <p className="text-[10px] text-ink-text-3 text-center">
                   Renews automatically until cancelled. By subscribing you agree to the{" "}
-                  <a href="/terms" target="_blank" rel="noreferrer" className="underline hover:text-slate-400">Terms</a> and{" "}
-                  <a href="/privacy" target="_blank" rel="noreferrer" className="underline hover:text-slate-400">Privacy Policy</a>.
+                  <a href="/terms" target="_blank" rel="noreferrer" className="underline hover:text-ink-text-2">Terms</a> and{" "}
+                  <a href="/privacy" target="_blank" rel="noreferrer" className="underline hover:text-ink-text-2">Privacy Policy</a>.
                 </p>
-                <button onClick={resetAndClose} className="w-full text-xs text-slate-500 hover:text-slate-300">
+                <button onClick={resetAndClose} className="w-full text-xs text-ink-text-3 hover:text-ink-text-2">
                   Not now
                 </button>
               </motion.div>
@@ -180,22 +180,22 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
 
             {step === "email" && (
               <motion.div key="email" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-ink-text-3">
                   We'll email a 6-digit code to confirm it's you — this also lets you restore your subscription on any other device later.
                 </p>
-                <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700/30 rounded-xl px-3 py-2.5">
-                  <Mail className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                <div className="flex items-center gap-2 bg-ink-surface-2/50 border border-ink-border/60 rounded-xl px-3 py-2.5">
+                  <Mail className="w-4 h-4 text-ink-text-3 flex-shrink-0" />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="w-full bg-transparent text-sm text-white placeholder:text-slate-600 outline-none"
+                    className="w-full bg-transparent text-sm text-ink-text placeholder:text-ink-text-3 outline-none"
                     aria-label="Email address"
                   />
                 </div>
                 <div>
-                  <label htmlFor="birth-year" className="text-xs text-slate-500">Birth year</label>
+                  <label htmlFor="birth-year" className="text-xs text-ink-text-3">Birth year</label>
                   <input
                     id="birth-year"
                     type="text"
@@ -203,29 +203,29 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
                     value={birthYear}
                     onChange={(e) => setBirthYear(e.target.value.replace(/\D/g, "").slice(0, 4))}
                     placeholder="e.g. 1998"
-                    className="mt-1 w-full bg-slate-800/50 border border-slate-700/30 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 outline-none"
+                    className="mt-1 w-full bg-ink-surface-2/50 border border-ink-border/60 rounded-xl px-3 py-2.5 text-sm text-ink-text placeholder:text-ink-text-3 outline-none"
                   />
-                  <p className="mt-1 text-[11px] text-slate-600">You must be at least 13 to create an account.</p>
+                  <p className="mt-1 text-[11px] text-ink-text-3">You must be at least 13 to create an account.</p>
                 </div>
-                <label className="flex items-start gap-2.5 text-xs text-slate-400 cursor-pointer">
+                <label className="flex items-start gap-2.5 text-xs text-ink-text-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={agreedToTerms}
                     onChange={(e) => setAgreedToTerms(e.target.checked)}
-                    className="mt-0.5 w-4 h-4 flex-shrink-0 accent-emerald-500"
+                    className="mt-0.5 w-4 h-4 flex-shrink-0 accent-ink-accent"
                   />
                   <span>
                     I agree to the{" "}
-                    <a href="/terms" target="_blank" rel="noreferrer" className="underline hover:text-slate-200">Terms of Service</a>{" "}
+                    <a href="/terms" target="_blank" rel="noreferrer" className="underline hover:text-ink-text">Terms of Service</a>{" "}
                     and{" "}
-                    <a href="/privacy" target="_blank" rel="noreferrer" className="underline hover:text-slate-200">Privacy Policy</a>.
+                    <a href="/privacy" target="_blank" rel="noreferrer" className="underline hover:text-ink-text">Privacy Policy</a>.
                   </span>
                 </label>
-                {errorMessage && <p className="text-xs text-orange-400">{errorMessage}</p>}
+                {errorMessage && <p className="text-xs text-ink-danger">{errorMessage}</p>}
                 <button
                   onClick={handleSendCode}
                   disabled={busy || !email.trim() || !birthYear.trim() || !agreedToTerms}
-                  className="w-full py-2.5 rounded-xl bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-400 disabled:opacity-50 transition-colors text-sm flex items-center justify-center gap-2"
+                  className="w-full py-2.5 rounded-xl bg-ink-accent text-ink-bg font-medium hover:brightness-110 disabled:opacity-50 transition-colors text-sm flex items-center justify-center gap-2"
                 >
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send code"}
                 </button>
@@ -234,24 +234,24 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
 
             {step === "code" && (
               <motion.div key="code" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
-                <p className="text-xs text-slate-500">Enter the 6-digit code sent to {email}.</p>
+                <p className="text-xs text-ink-text-3">Enter the 6-digit code sent to {email}.</p>
                 <input
                   type="text"
                   inputMode="numeric"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   placeholder="123456"
-                  className="w-full text-center tracking-[0.3em] bg-slate-800/50 border border-slate-700/30 rounded-xl px-3 py-2.5 text-lg text-white placeholder:text-slate-600 outline-none"
+                  className="w-full text-center tracking-[0.3em] bg-ink-surface-2/50 border border-ink-border/60 rounded-xl px-3 py-2.5 text-lg text-ink-text placeholder:text-ink-text-3 outline-none"
                 />
-                {errorMessage && <p className="text-xs text-orange-400">{errorMessage}</p>}
+                {errorMessage && <p className="text-xs text-ink-danger">{errorMessage}</p>}
                 <button
                   onClick={handleVerifyCode}
                   disabled={busy || !code.trim()}
-                  className="w-full py-2.5 rounded-xl bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-400 disabled:opacity-50 transition-colors text-sm flex items-center justify-center gap-2"
+                  className="w-full py-2.5 rounded-xl bg-ink-accent text-ink-bg font-medium hover:brightness-110 disabled:opacity-50 transition-colors text-sm flex items-center justify-center gap-2"
                 >
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Verify & continue"}
                 </button>
-                <button onClick={handleSendCode} disabled={busy} className="w-full text-xs text-slate-500 hover:text-slate-300">
+                <button onClick={handleSendCode} disabled={busy} className="w-full text-xs text-ink-text-3 hover:text-ink-text-2">
                   Resend code
                 </button>
               </motion.div>
@@ -262,32 +262,32 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
                 {/* Conspicuous auto-renewal disclosure at the point of
                     purchase — the exact recurring charge, that it renews
                     until cancelled, and how to cancel. */}
-                <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-3.5 space-y-1.5">
+                <div className="bg-ink-surface-2/50 border border-ink-border/60 rounded-xl p-3.5 space-y-1.5">
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-xs text-slate-400">{selectedPlan.label} plan</span>
-                    <span className="text-lg font-semibold text-white">{selectedPlan.price}</span>
+                    <span className="text-xs text-ink-text-2">{selectedPlan.label} plan</span>
+                    <span className="text-lg font-semibold text-ink-text">{selectedPlan.price}</span>
                   </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    You'll be charged <span className="text-white font-medium">${selectedPlan.amount.toFixed(2)}</span>{" "}
+                  <p className="text-xs text-ink-text-2 leading-relaxed">
+                    You'll be charged <span className="text-ink-text font-medium">${selectedPlan.amount.toFixed(2)}</span>{" "}
                     {plan === "yearly" ? "per year" : "per month"}, and it{" "}
-                    <span className="text-white font-medium">automatically renews</span> at that price each{" "}
+                    <span className="text-ink-text font-medium">automatically renews</span> at that price each{" "}
                     {plan === "yearly" ? "year" : "month"} until you cancel.
                   </p>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Cancel anytime in <span className="text-slate-300">Settings → Manage subscription</span> (Stripe's
+                  <p className="text-xs text-ink-text-3 leading-relaxed">
+                    Cancel anytime in <span className="text-ink-text-2">Settings → Manage subscription</span> (Stripe's
                     billing portal); you keep access until the end of the period you've paid for.
                   </p>
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-ink-text-3">
                   Payment happens on Stripe's secure checkout page — your card details never touch this app.
                   You'll be brought back here when you're done.
                 </p>
-                <label className="flex items-start gap-2.5 text-xs text-slate-400 cursor-pointer">
+                <label className="flex items-start gap-2.5 text-xs text-ink-text-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={immediateDeliveryConsent}
                     onChange={(e) => setImmediateDeliveryConsent(e.target.checked)}
-                    className="mt-0.5 w-4 h-4 flex-shrink-0 accent-emerald-500"
+                    className="mt-0.5 w-4 h-4 flex-shrink-0 accent-ink-accent"
                   />
                   <span>
                     I expressly consent to the immediate delivery of the premium features, and I
@@ -298,7 +298,7 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
                 <button
                   onClick={handleGoToCheckout}
                   disabled={busy || !immediateDeliveryConsent}
-                  className="w-full py-3 rounded-xl bg-emerald-500 text-slate-900 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-emerald-400 disabled:opacity-50 transition-colors shadow-lg shadow-emerald-500/20"
+                  className="w-full py-3 rounded-xl bg-ink-accent text-ink-bg font-semibold text-sm flex items-center justify-center gap-2 hover:brightness-110 disabled:opacity-50 transition-colors shadow-ink"
                 >
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : (
                     <>
@@ -307,8 +307,8 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
                     </>
                   )}
                 </button>
-                {errorMessage && <p className="text-xs text-orange-400">{errorMessage}</p>}
-                <button onClick={resetAndClose} className="w-full text-xs text-slate-500 hover:text-slate-300">
+                {errorMessage && <p className="text-xs text-ink-danger">{errorMessage}</p>}
+                <button onClick={resetAndClose} className="w-full text-xs text-ink-text-3 hover:text-ink-text-2">
                   Not now
                 </button>
               </motion.div>
@@ -316,11 +316,11 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
 
             {step === "restored" && (
               <motion.div key="restored" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-3 py-6 text-center">
-                <CheckCircle2 className="w-10 h-10 text-emerald-400" />
-                <p className="text-sm text-slate-300">Your subscription is active — everything is unlocked on this device.</p>
+                <CheckCircle2 className="w-10 h-10 text-ink-success" />
+                <p className="text-sm text-ink-text-2">Your subscription is active — everything is unlocked on this device.</p>
                 <button
                   onClick={resetAndClose}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 font-medium hover:bg-emerald-500/30 transition-colors text-sm"
+                  className="px-5 py-2.5 rounded-xl bg-ink-success/20 text-ink-success font-medium hover:bg-ink-success/30 transition-colors text-sm"
                 >
                   Continue
                 </button>
@@ -329,9 +329,9 @@ export default function UpgradeModal({ open, onClose, featureLabel }) {
 
             {step === "error" && (
               <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-3 py-6 text-center">
-                <AlertTriangle className="w-8 h-8 text-orange-400" />
-                <p className="text-sm text-slate-300">{errorMessage}</p>
-                <button onClick={() => setStep("plan")} className="px-5 py-2.5 rounded-xl bg-slate-700/50 text-slate-300 font-medium hover:bg-slate-700 transition-colors text-sm">
+                <AlertTriangle className="w-8 h-8 text-ink-danger" />
+                <p className="text-sm text-ink-text-2">{errorMessage}</p>
+                <button onClick={() => setStep("plan")} className="px-5 py-2.5 rounded-xl bg-ink-surface-2/50 text-ink-text-2 font-medium hover:bg-ink-surface-2 transition-colors text-sm">
                   Try again
                 </button>
               </motion.div>

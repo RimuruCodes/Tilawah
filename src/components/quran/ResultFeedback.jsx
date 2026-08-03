@@ -24,8 +24,8 @@ export default function ResultFeedback({ surahNumber, surahName, ayahNumbers, sc
 
   if (state === "saved") {
     return (
-      <div className="flex items-center gap-2 text-xs text-slate-500 px-1">
-        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+      <div className="flex items-center gap-2 text-xs text-ink-text-3 px-1">
+        <CheckCircle2 className="w-3.5 h-3.5 text-ink-accent" />
         Noted — saved on this device. You can export feedback reports from Settings.
       </div>
     );
@@ -35,7 +35,7 @@ export default function ResultFeedback({ surahNumber, surahName, ayahNumbers, sc
     return (
       <button
         onClick={() => setState("picking")}
-        className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2 px-1"
+        className="flex items-center gap-1.5 text-xs text-ink-text-3 hover:text-ink-text-2 underline underline-offset-2 px-1"
       >
         <Flag className="w-3 h-3" />
         This result seems off
@@ -44,17 +44,17 @@ export default function ResultFeedback({ surahNumber, surahName, ayahNumbers, sc
   }
 
   return (
-    <div className="bg-slate-800/30 rounded-xl p-3 border border-slate-700/30 space-y-2">
-      <p className="text-xs text-slate-400">Which part felt wrong? Saved only on this device — no audio, nothing uploaded.</p>
+    <div className="bg-ink-surface-2/30 rounded-xl p-3 border border-ink-border/60 space-y-2">
+      <p className="text-xs text-ink-text-2">Which part felt wrong? Saved only on this device — no audio, nothing uploaded.</p>
       <div className="space-y-1 max-h-40 overflow-y-auto">
         {options.map((o) => (
-          <label key={o.id} className="flex items-start gap-2 text-xs text-slate-300 cursor-pointer py-0.5">
+          <label key={o.id} className="flex items-start gap-2 text-xs text-ink-text-2 cursor-pointer py-0.5">
             <input
               type="radio"
               name="feedback-flag"
               checked={selectedId === o.id}
               onChange={() => setSelectedId(o.id)}
-              className="mt-0.5 accent-emerald-500"
+              className="mt-0.5 accent-ink-accent"
             />
             <span>{o.label}</span>
           </label>
@@ -66,18 +66,18 @@ export default function ResultFeedback({ surahNumber, surahName, ayahNumbers, sc
         placeholder="Optional: what did you expect instead?"
         rows={2}
         maxLength={500}
-        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-slate-600 resize-none"
+        className="w-full bg-ink-bg border border-ink-border rounded-lg px-2.5 py-1.5 text-xs text-ink-text placeholder:text-ink-text-3 resize-none"
       />
       <div className="flex gap-2">
         <button
           onClick={handleSubmit}
-          className="flex-1 py-1.5 rounded-lg bg-slate-700 text-slate-200 text-xs font-medium hover:bg-slate-600 transition-colors"
+          className="flex-1 py-1.5 rounded-lg bg-ink-surface-2 text-ink-text-2 text-xs font-medium hover:brightness-110 transition-colors"
         >
           Save report
         </button>
         <button
           onClick={() => setState("idle")}
-          className="px-3 py-1.5 rounded-lg text-slate-500 text-xs hover:text-slate-300"
+          className="px-3 py-1.5 rounded-lg text-ink-text-3 text-xs hover:text-ink-text-2"
         >
           Cancel
         </button>

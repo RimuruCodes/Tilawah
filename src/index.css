@@ -78,6 +78,97 @@
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
+
+  /* "Paper & Ink" semantic theme tokens (Phase 1: architecture only --
+     nothing reads these yet; Phase 3+ migrates real components onto them).
+     Deliberately separate from the --background/--primary/etc. variables
+     above, which shadcn/ui primitives already consume directly -- see
+     tailwind.config.js's `ink` color block for why these don't reuse those
+     names. Default (no data-theme attribute, or data-theme="dark") is the
+     app's actual current dark palette, derived from the real Tailwind
+     slate/emerald/amber/red values already used throughout every
+     component today -- switching to dark explicitly must look pixel-
+     identical to what every existing user already sees. The
+     data-theme="light" block below holds the actual Paper & Ink palette
+     (warm cream/ink, see the design spec this was built from). ThemeContext
+     sets data-theme on <html>; see src/lib/ThemeContext.jsx. */
+  :root,
+  :root[data-theme="dark"] {
+    --ink-bg-primary: 229 84% 5%;             /* #020617 (slate-950) */
+    --ink-bg-surface: 222 47% 11%;             /* #0f172a (slate-900) */
+    --ink-bg-surface-secondary: 217 33% 17%;   /* #1e293b (slate-800) */
+    --ink-text-primary: 0 0% 100%;             /* #ffffff */
+    --ink-text-secondary: 213 27% 84%;         /* #cbd5e1 (slate-300) */
+    --ink-text-tertiary: 215 16% 47%;          /* #64748b (slate-500) */
+    --ink-border: 215 25% 27%;                 /* #334155 (slate-700) */
+    --ink-accent-primary: 158 64% 52%;         /* #34d399 (emerald-400) */
+    --ink-accent-primary-soft: 159 53% 11%;    /* approximates the existing bg-emerald-500/10 badge look over a dark surface */
+    --ink-accent-gold: 43 96% 56%;             /* #fbbf24 (amber-400) */
+    --ink-success: 158 64% 52%;                /* same as accent-primary */
+    --ink-warning: 43 96% 56%;                  /* #fbbf24 (amber-400) */
+    --ink-danger: 0 91% 71%;                    /* #f87171 (red-400) */
+    --ink-shadow: rgba(0, 0, 0, 0.4);           /* plain dark elevation -- the emerald glow shadows stay separate, unchanged */
+
+    /* Per-Tajweed-rule categorical colors (SurahReader filter chips,
+       Progress chart lines) -- see tailwind.config.js's `rule` block for
+       why this is separate from the ink-* semantic accents above. These
+       are the original hardcoded Tailwind -400 values, unchanged. */
+    --rule-qalqalah: 198 93% 60%;                /* #38bdf8 (sky-400) */
+    --rule-ghunnah: 270 95% 75%;                 /* #c084fc (purple-400) */
+    --rule-iqlab: 329 86% 70%;                   /* #f472b6 (pink-400) */
+    --rule-idgham: 27 96% 61%;                   /* #fb923c (orange-400) */
+    --rule-ikhfa: 188 86% 53%;                   /* #22d3ee (cyan-400) */
+  }
+
+  :root[data-theme="light"] {
+    /* Paper & Ink: warm cream paper + ink-black text, restrained accent --
+       not an inverted dark theme. Values as specified; only ever adjusted
+       from here if a real contrast-ratio check (Phase 5) fails one. */
+    --ink-bg-primary: 43 58% 95%;               /* #FAF6EC */
+    --ink-bg-surface: 45 80% 98%;                /* #FEFCF6 */
+    --ink-bg-surface-secondary: 44 45% 90%;      /* #F1EBDA */
+    --ink-text-primary: 30 16% 12%;              /* #241F1A */
+    --ink-text-secondary: 30 11% 38%;            /* #6B6055 */
+    /* Was 35 11% 56% (#9C9284) per the original spec — measured contrast
+       against this theme's own backgrounds (2.61-3.03:1) failed WCAG AA
+       (needs 4.5:1 for real body/caption text, which is most of what this
+       token renders) even worse than dark theme's already-borderline
+       tertiary (3.79-4.27:1). Darkened to the nearest value that clears
+       AA on bg-primary/bg-surface and lands within a hair of it on
+       bg-surface-secondary (4.26:1) — same hue/saturation, so it reads as
+       the same muted warm gray, just legible. */
+    --ink-text-tertiary: 35 11% 42%;             /* #776D5F */
+    --ink-border: 42 34% 83%;                    /* #E2D9C4 */
+    --ink-accent-primary: 127 27% 25%;           /* #2F5233 */
+    --ink-accent-primary-soft: 111 17% 92%;      /* #E8EEE7 */
+    /* Was 39 47% 45% (#A8823C) per the original spec — measured 2.94-3.42:1
+       against this theme's own backgrounds (fails WCAG AA's 4.5:1), and it's
+       used as real text in several places (ComparePlayback's "Reciter"
+       label, SupportModal's "Sadaqah Jariyah" span, the "Recordings Today"
+       stat tile). Darkened to the nearest value clearing 4.5:1 on all three
+       backgrounds with real margin (4.72:1 on the tightest one,
+       bg-surface-secondary) rather than landing right on the line — same
+       hue/saturation, so it's still the same muted gold, just legible
+       everywhere it's actually used as text. */
+    --ink-accent-gold: 39 47% 34%;               /* #7F632E */
+    --ink-success: 127 27% 25%;                  /* same as accent-primary */
+    --ink-warning: 35 67% 35%;                   /* #96631E */
+    --ink-danger: 6 47% 37%;                     /* #8C3B32 */
+    --ink-shadow: rgba(36, 31, 26, 0.08);         /* soft and warm, not a colored glow */
+
+    /* Per-Tajweed-rule categorical colors, measured replacements -- the
+       dark theme's -400 shades measured 1.6-2.6:1 against these cream
+       backgrounds (fails WCAG's 4.5:1 badly), so this is not the same hex
+       reused. Each is a darker, more saturated shade of the same hue
+       family (Tailwind's -700 tier) chosen to clear 4.5:1 against
+       bg-primary/bg-surface, and land within a hair of it on
+       bg-surface-secondary. */
+    --rule-qalqalah: 201 96% 32%;                 /* #0369a1 (sky-700) */
+    --rule-ghunnah: 272 72% 47%;                  /* #7e22ce (purple-700) */
+    --rule-iqlab: 335 78% 42%;                    /* #be185d (pink-700) */
+    --rule-idgham: 17 88% 40%;                    /* #c2410c (orange-700) */
+    --rule-ikhfa: 193 82% 31%;                    /* #0e7490 (cyan-700) */
+  }
 }
 
 

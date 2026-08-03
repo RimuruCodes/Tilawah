@@ -78,9 +78,9 @@ export default function TutorialModal({ open, onClose, userId }) {
 
   return (
     <Dialog open={open} onOpenChange={finish}>
-      <DialogContent className="bg-slate-900 border-slate-700/50 max-w-md p-0 overflow-hidden">
+      <DialogContent className="bg-ink-surface border-ink-border max-w-md p-0 overflow-hidden">
         <div className="p-6 space-y-5">
-          <button onClick={finish} aria-label="Close tutorial" className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors">
+          <button onClick={finish} aria-label="Close tutorial" className="absolute top-4 right-4 p-1.5 rounded-lg text-ink-text-3 hover:text-ink-text hover:bg-ink-surface-2 transition-colors">
             <X className="w-4 h-4" />
           </button>
 
@@ -93,17 +93,17 @@ export default function TutorialModal({ open, onClose, userId }) {
               transition={{ duration: 0.2 }}
               className="space-y-4"
             >
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                <slide.icon className="w-6 h-6 text-emerald-400" />
+              <div className="w-12 h-12 rounded-xl bg-ink-accent-soft border border-ink-accent/20 flex items-center justify-center">
+                <slide.icon className="w-6 h-6 text-ink-accent" />
               </div>
-              <h3 className="text-lg font-semibold text-white">{slide.title}</h3>
-              <p className="text-sm text-slate-400 leading-relaxed">{slide.body}</p>
+              <h3 className="text-lg font-semibold text-ink-text">{slide.title}</h3>
+              <p className="text-sm text-ink-text-2 leading-relaxed">{slide.body}</p>
               {slide.list && (
                 <div className="space-y-1.5 pt-1">
                   {slide.list.map((item) => (
-                    <div key={item.label} className="flex items-start gap-2 bg-slate-800/40 rounded-lg p-2.5">
-                      <span className="text-xs font-semibold text-emerald-400 w-16 flex-shrink-0">{item.label}</span>
-                      <span className="text-xs text-slate-400">{item.desc}</span>
+                    <div key={item.label} className="flex items-start gap-2 bg-ink-surface-2/40 rounded-lg p-2.5">
+                      <span className="text-xs font-semibold text-ink-accent w-16 flex-shrink-0">{item.label}</span>
+                      <span className="text-xs text-ink-text-2">{item.desc}</span>
                     </div>
                   ))}
                 </div>
@@ -116,17 +116,17 @@ export default function TutorialModal({ open, onClose, userId }) {
                       onClick={() => pickComfort(level.id)}
                       className={`w-full text-left p-3 rounded-xl border transition-all ${
                         comfort === level.id
-                          ? "bg-emerald-500/10 border-emerald-500/40"
-                          : "bg-slate-800/40 border-slate-700/30 hover:border-slate-600/40"
+                          ? "bg-ink-accent-soft border-ink-accent/40"
+                          : "bg-ink-surface-2/40 border-ink-border/60 hover:border-ink-border"
                       }`}
                     >
-                      <p className="text-sm font-medium text-white">{level.label}</p>
-                      <p className="text-xs text-slate-500">{level.description}</p>
+                      <p className="text-sm font-medium text-ink-text">{level.label}</p>
+                      <p className="text-xs text-ink-text-3">{level.description}</p>
                     </button>
                   ))}
                   {comfort === "beginner" && (
-                    <p className="text-[11px] text-slate-500">
-                      Tip: in the reader, open an ayah's <span className="text-emerald-400">Words</span> panel for
+                    <p className="text-[11px] text-ink-text-3">
+                      Tip: in the reader, open an ayah's <span className="text-ink-accent">Words</span> panel for
                       per-word meanings and transliteration — and a quick mic calibration in Settings makes your
                       first scores more reliable.
                     </p>
@@ -139,14 +139,14 @@ export default function TutorialModal({ open, onClose, userId }) {
           <div className="flex items-center justify-between pt-2">
             <div className="flex gap-1.5">
               {SLIDES.map((_, i) => (
-                <span key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${i === step ? "bg-emerald-400" : "bg-slate-700"}`} />
+                <span key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${i === step ? "bg-ink-accent" : "bg-ink-border"}`} />
               ))}
             </div>
             <div className="flex gap-2">
               {step > 0 && (
                 <button
                   onClick={() => setStep((s) => s - 1)}
-                  className="px-3 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-medium hover:bg-slate-700 transition-colors flex items-center gap-1"
+                  className="px-3 py-2 rounded-xl bg-ink-surface-2 text-ink-text-2 text-sm font-medium hover:brightness-110 transition-colors flex items-center gap-1"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   Back
@@ -154,7 +154,7 @@ export default function TutorialModal({ open, onClose, userId }) {
               )}
               <button
                 onClick={() => (isLast ? finish() : setStep((s) => s + 1))}
-                className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-900 text-sm font-medium hover:bg-emerald-400 transition-colors flex items-center gap-1"
+                className="px-4 py-2 rounded-xl bg-ink-accent text-ink-bg text-sm font-medium hover:brightness-110 transition-colors flex items-center gap-1"
               >
                 {isLast ? "Got it" : "Next"}
                 {!isLast && <ArrowRight className="w-3.5 h-3.5" />}

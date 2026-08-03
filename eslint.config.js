@@ -5,6 +5,21 @@ import pluginReactHooks from "eslint-plugin-react-hooks";
 import pluginUnusedImports from "eslint-plugin-unused-imports";
 
 export default [
+  // Global ignores (no "files" key, so this applies repo-wide): generated
+  // native-project scaffolding and build output, never hand-written source.
+  // Without this, ESLint's default file discovery still picks these up and
+  // chokes on generated files that reference rules/plugins (e.g. TS-only
+  // rules) this config never loads.
+  {
+    ignores: [
+      "android/**",
+      "ios/**",
+      "dist/**",
+      "dist-*/**",
+      "**/build/**",
+      ".wrangler/**",
+    ],
+  },
   {
     files: [
       "src/components/**/*.{js,mjs,cjs,jsx}",

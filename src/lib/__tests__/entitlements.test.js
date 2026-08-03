@@ -63,6 +63,10 @@ describe("canAccessFeature", () => {
     expect(canAccessFeature(GATED_FEATURES.TAJWEED_TRENDS, null, NOW)).toBe(false);
   });
 
+  it("offline reciter packs require a subscription to START a new download", () => {
+    expect(canAccessFeature(GATED_FEATURES.OFFLINE_RECITER_PACKS, null, NOW)).toBe(false);
+  });
+
   it("throws on an unknown feature key rather than silently granting/denying access", () => {
     expect(() => canAccessFeature("someTypoedFeature", active, NOW)).toThrow(/Unknown gated feature/);
   });

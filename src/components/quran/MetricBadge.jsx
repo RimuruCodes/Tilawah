@@ -11,11 +11,11 @@ export default function MetricBadge({ label, value }) {
   if (value == null) return null;
   return (
     <div
-      className="bg-slate-800/50 rounded-lg p-2 border border-slate-700/30 cursor-help"
+      className="bg-ink-surface-2/50 rounded-lg p-2 border border-ink-border/60 cursor-help"
       title={EXPLANATIONS[label] || label}
     >
-      <div className="text-sm font-semibold text-white">{value}</div>
-      <div className="text-[10px] text-slate-500">{label}</div>
+      <div className="text-sm font-semibold text-ink-text">{value}</div>
+      <div className="text-[10px] text-ink-text-3">{label}</div>
     </div>
   );
 }

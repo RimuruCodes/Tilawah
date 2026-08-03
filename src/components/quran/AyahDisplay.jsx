@@ -4,10 +4,12 @@ import { Eye, EyeOff, CheckCircle2, Circle, Mic } from "lucide-react";
 import AyahInsights from "@/components/quran/AyahInsights";
 import { splitAyahIntoWords, wordLetterClusters } from "@/lib/tajweedRules";
 
+// Same semantic score tiers as RecordingModal/ContinuousRecitation's
+// getScoreColor — success/warning/danger are theme-aware tokens already.
 function lastScoreColor(score) {
-  if (score >= 90) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
-  if (score >= 75) return "text-amber-400 bg-amber-500/10 border-amber-500/20";
-  return "text-orange-400 bg-orange-500/10 border-orange-500/20";
+  if (score >= 90) return "text-ink-success bg-ink-success/10 border-ink-success/20";
+  if (score >= 75) return "text-ink-warning bg-ink-warning/10 border-ink-warning/20";
+  return "text-ink-danger bg-ink-danger/10 border-ink-danger/20";
 }
 
 // Below this, a word's timing is a shaky/estimated match rather than a
@@ -34,17 +36,17 @@ function AyahDisplay({
   const [revealed, setRevealed] = useState(!hideMode);
 
   const statusColor = {
-    memorized: "border-emerald-500/40 bg-emerald-500/5",
-    learning: "border-amber-500/30 bg-amber-500/5",
-    needs_review: "border-orange-500/30 bg-orange-500/5",
-    not_started: "border-slate-700/30 bg-transparent"
+    memorized: "border-ink-success/40 bg-ink-success/5",
+    learning: "border-ink-warning/30 bg-ink-warning/5",
+    needs_review: "border-ink-danger/30 bg-ink-danger/5",
+    not_started: "border-ink-border/60 bg-transparent"
   };
 
   const statusIcon = {
-    memorized: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,
-    learning: <Circle className="w-4 h-4 text-amber-400" />,
-    needs_review: <Circle className="w-4 h-4 text-orange-400" />,
-    not_started: <Circle className="w-4 h-4 text-slate-600" />
+    memorized: <CheckCircle2 className="w-4 h-4 text-ink-success" />,
+    learning: <Circle className="w-4 h-4 text-ink-warning" />,
+    needs_review: <Circle className="w-4 h-4 text-ink-danger" />,
+    not_started: <Circle className="w-4 h-4 text-ink-text-3" />
   };
 
   const status = memorizationStatus || "not_started";
@@ -54,12 +56,12 @@ function AyahDisplay({
       layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`group relative rounded-2xl border p-6 transition-all duration-500 ${statusColor[status]} ${isHighlighted ? 'ring-2 ring-emerald-400/50 shadow-lg shadow-emerald-500/10' : ''}`}
+      className={`group relative rounded-2xl border p-6 transition-all duration-500 ${statusColor[status]} ${isHighlighted ? 'ring-2 ring-ink-accent/50 shadow-ink' : ''}`}
     >
       <div className="flex items-start gap-4">
         <div className="flex flex-col items-center gap-2 flex-shrink-0 pt-2">
-          <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center">
-            <span className="text-xs font-mono text-slate-400">{ayah.number}</span>
+          <div className="w-8 h-8 rounded-lg bg-ink-surface-2 border border-ink-border flex items-center justify-center">
+            <span className="text-xs font-mono text-ink-text-2">{ayah.number}</span>
           </div>
           {statusIcon[status]}
           {lastScore != null && (
@@ -82,10 +84,10 @@ function AyahDisplay({
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onClick={() => setRevealed(true)}
-                  className="w-full py-8 rounded-xl border-2 border-dashed border-slate-600/50 bg-slate-800/30 flex items-center justify-center gap-3 hover:border-emerald-500/30 transition-colors"
+                  className="w-full py-8 rounded-xl border-2 border-dashed border-ink-border bg-ink-surface-2/30 flex items-center justify-center gap-3 hover:border-ink-accent/30 transition-colors"
                 >
-                  <Eye className="w-5 h-5 text-slate-500" />
-                  <span className="text-slate-500 text-sm">Tap to reveal — test your memory</span>
+                  <Eye className="w-5 h-5 text-ink-text-3" />
+                  <span className="text-ink-text-3 text-sm">Tap to reveal — test your memory</span>
                 </motion.button>
               ) : (
                 <motion.p
@@ -93,7 +95,7 @@ function AyahDisplay({
                   initial={{ opacity: 0, filter: "blur(8px)" }}
                   animate={{ opacity: 1, filter: "blur(0px)" }}
                   transition={{ duration: 0.5 }}
-                  className={`font-arabic leading-loose text-right tracking-wide transition-colors duration-300 ${isHighlighted ? 'text-emerald-300' : 'text-white/90'}`}
+                  className={`font-arabic leading-loose text-right tracking-wide transition-colors duration-300 ${isHighlighted ? 'text-ink-accent' : 'text-ink-text/90'}`}
                   style={{ fontFamily: "var(--font-arabic)", lineHeight: "2.8", fontSize: `${(1.75 * arabicScale).toFixed(3)}rem` }}
                 >
                   {/* Follow-along highlighting: each word is its own span so
@@ -120,8 +122,8 @@ function AyahDisplay({
                     const active = highlightedWordIndex === i;
                     const lowConfidence = active && highlightedWordConfidence != null && highlightedWordConfidence < LOW_CONFIDENCE_THRESHOLD;
                     const highlightClass = lowConfidence
-                      ? "text-amber-300/90 border-b-2 border-dashed border-amber-400/60 px-0.5"
-                      : "bg-emerald-500/20 text-emerald-300 px-0.5";
+                      ? "text-ink-warning/90 border-b-2 border-dashed border-ink-warning/60 px-0.5"
+                      : "bg-ink-accent/20 text-ink-accent px-0.5";
                     const highlightTitle = lowConfidence ? "Estimated timing — lower confidence" : undefined;
 
                     if (active && highlightedCharIndex != null) {
@@ -164,7 +166,7 @@ function AyahDisplay({
               <button
                 onClick={() => setRevealed(false)}
                 aria-label="Hide the Arabic text again"
-                className="absolute top-2 left-2 p-1.5 rounded-lg bg-slate-800/80 text-slate-400 hover:text-white transition-colors"
+                className="absolute top-2 left-2 p-1.5 rounded-lg bg-ink-surface-2/80 text-ink-text-2 hover:text-ink-text transition-colors"
               >
                 <EyeOff className="w-4 h-4" />
               </button>
@@ -175,7 +177,7 @@ function AyahDisplay({
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-slate-400 text-sm leading-relaxed border-t border-slate-700/30 pt-3 italic"
+              className="text-ink-text-2 text-sm leading-relaxed border-t border-ink-border/60 pt-3 italic"
             >
               {ayah.translation}
             </motion.p>
@@ -191,7 +193,7 @@ function AyahDisplay({
         <div className="flex flex-col gap-2 flex-shrink-0 opacity-100 transition-opacity">
           <button
             onClick={() => onRecordClick?.(ayah)}
-            className="p-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+            className="p-2 rounded-xl bg-ink-danger/10 text-ink-danger hover:bg-ink-danger/20 transition-colors"
             title="Record your recitation"
             aria-label={`Record your recitation of ayah ${ayah.number}`}
           >

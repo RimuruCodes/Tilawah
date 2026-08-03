@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { Capacitor } from '@capacitor/core'
 import App from '@/App.jsx'
 import '@/index.css'
 import { registerSW } from 'virtual:pwa-register'
@@ -32,27 +33,38 @@ initLifecycleDebug()
 // an in-progress recitation analysis. Instead, surface a toast and let the
 // person update when they choose; otherwise the new version applies on the
 // next natural visit.
-const updateSW = registerSW({
-  immediate: true,
-  onNeedRefresh() {
-    recordLifecycleEvent('sw-update-detected', 'new version waiting; prompting (no auto reload)')
-    toast({
-      title: 'Update available',
-      description: 'A new version of Quran Companion is ready.',
-      action: (
-        <ToastAction altText="Reload to update" onClick={() => updateSW(true)}>
-          Reload
-        </ToastAction>
-      ),
-    })
-  },
-  onRegisteredSW(swUrl) {
-    recordLifecycleEvent('sw-registered', swUrl)
-  },
-  onRegisterError(err) {
-    recordLifecycleEvent('sw-register-error', String(err?.message || err))
-  },
-})
+//
+// Skipped entirely inside the native (Capacitor) wrapper: there's nothing
+// for it to cache offline there (the whole app shell already ships bundled
+// in the native package, synced via `cap sync` at build time, not fetched
+// over the network), and registering one is actively harmful, not just
+// redundant — Capacitor's own native-plugin bridge can fail to inject when
+// a page is served from under an active service worker (documented,
+// ionic-team/capacitor#5278 and related discussions). The registration
+// call itself is skipped, not just left inert, so this risk never applies.
+if (!Capacitor.isNativePlatform()) {
+  const updateSW = registerSW({
+    immediate: true,
+    onNeedRefresh() {
+      recordLifecycleEvent('sw-update-detected', 'new version waiting; prompting (no auto reload)')
+      toast({
+        title: 'Update available',
+        description: 'A new version of Quran Companion is ready.',
+        action: (
+          <ToastAction altText="Reload to update" onClick={() => updateSW(true)}>
+            Reload
+          </ToastAction>
+        ),
+      })
+    },
+    onRegisteredSW(swUrl) {
+      recordLifecycleEvent('sw-registered', swUrl)
+    },
+    onRegisterError(err) {
+      recordLifecycleEvent('sw-register-error', String(err?.message || err))
+    },
+  })
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <App />
