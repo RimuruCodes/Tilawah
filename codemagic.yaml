@@ -1,0 +1,92 @@
+definitions:
+  ios_env: &ios_env
+    vars:
+      XCODE_PROJECT: "App.xcodeproj"
+      XCODE_SCHEME: "App"
+    xcode: latest
+    node: latest
+
+workflows:
+  ios-workflow:
+    name: Quran Companion — iOS
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    # Requires two things set up once in the Codemagic dashboard (Team
+    # settings), neither of which lives in this repo:
+    #  1. An App Store Connect API key integration, named "codemagic" here
+    #     (Team settings > Integrations > App Store Connect). Rename the
+    #     "app_store_connect: codemagic" line below to match if you name it
+    #     differently.
+    #  2. iOS code signing: either let Codemagic auto-manage signing via the
+    #     same App Store Connect integration, or upload a distribution
+    #     certificate + provisioning profile under Team settings > Code
+    #     signing identities. `xcode-project use-profiles` below assumes
+    #     the automatic route.
+    integrations:
+      app_store_connect: codemagic
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.tilawah.quran
+      <<: *ios_env
+      vars:
+        XCODE_PROJECT: "App.xcodeproj"
+        XCODE_SCHEME: "App"
+        # Set once the app record exists in App Store Connect (Phase 2) —
+        # Codemagic can't publish without it. Find it under App Store
+        # Connect > App Information > Apple ID (a numeric ID, not the
+        # bundle identifier).
+        APP_STORE_APP_ID: 0 # TODO: replace once the App Store Connect app record exists
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm ci
+      - name: Build the web app
+        script: |
+          npm run build
+      - name: Sync Capacitor (copies dist/ into ios/App, updates plugins)
+        script: |
+          npx cap sync ios
+      # No `pod install` step: this project's Capacitor 8 iOS platform uses
+      # Swift Package Manager (ios/App/CapApp-SPM), not CocoaPods — SPM
+      # dependencies resolve automatically when Xcode builds the project,
+      # no separate install step needed. Confirmed by the presence of
+      # CapApp-SPM/Package.swift and the absence of a Podfile in ios/App —
+      # don't add a pod install step back in without re-checking that.
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
+      - name: Increment build number
+        script: |
+          cd $CM_BUILD_DIR/ios/App
+          agvtool new-version -all $BUILD_NUMBER
+      - name: Build ipa for distribution
+        script: |
+          cd $CM_BUILD_DIR/ios/App
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      email:
+        recipients:
+          - alaminoyeyemi64@gmail.com
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        auth: integration
+        # Starts conservative: only TestFlight, not a live App Store
+        # submission. Flip submit_to_app_store to true once you've
+        # actually tested a TestFlight build on a device.
+        submit_to_testflight: true
+        submit_to_app_store: false
