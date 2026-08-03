@@ -514,7 +514,14 @@ export default function ContinuousRecitation({ open, onClose, ayahs, surahName, 
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="bg-ink-surface border-ink-border max-w-lg max-h-[85vh] overflow-y-auto p-0">
+      <DialogContent
+        className="bg-ink-surface border-ink-border max-w-lg max-h-[85vh] overflow-y-auto p-0"
+        // See the matching comment in RecordingModal.jsx: the reader's own
+        // "All Surahs" back button sits behind this modal's full-screen
+        // overlay, and Radix's default outside-click-dismiss silently ate
+        // the first tap meant for that button instead of navigating.
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
         <CelebrationOverlay
           show={!!celebration}
           title={celebration?.title}

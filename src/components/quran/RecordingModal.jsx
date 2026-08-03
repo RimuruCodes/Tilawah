@@ -496,7 +496,19 @@ export default function RecordingModal({ open, onClose, ayah, surahName, surahNu
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="bg-ink-surface border-ink-border max-w-lg max-h-[85vh] overflow-y-auto p-0">
+      <DialogContent
+        className="bg-ink-surface border-ink-border max-w-lg max-h-[85vh] overflow-y-auto p-0"
+        // The reader's own "All Surahs" back button sits behind this
+        // modal's full-screen overlay -- a tap there is an outside-click
+        // by Radix's definition, and its default behavior is to dismiss
+        // the dialog. That silently ate the tap intended for the button
+        // underneath (closing the result screen instead of navigating),
+        // so the FIRST tap looked like nothing happened and a second tap
+        // was needed to actually go back. Require an explicit Try
+        // Again/Done/X action instead -- after that, the very next tap on
+        // anything behind it (like "All Surahs") works immediately.
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
         <CelebrationOverlay
           show={!!celebration}
           title={celebration?.title}
