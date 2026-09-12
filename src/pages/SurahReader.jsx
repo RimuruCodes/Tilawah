@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { defaultShowTranslation } from "@/lib/arabicComfort";
 import { getArabicTextScale } from "@/lib/arabicTextSize";
@@ -75,6 +75,12 @@ export default function SurahReader() {
   const [practiceRuleFilter, setPracticeRuleFilter] = useState(getDefaultPracticeFocusRule());
   const [upgradeFeature, setUpgradeFeature] = useState(null);
   const { subscription } = useSubscription();
+
+  const audioPlayerRef = useRef(null);
+  
+  const handlePlayAyah = useCallback((ayahNumber) => {
+    audioPlayerRef.current?.playAyah(ayahNumber);
+  }, []);
 
   // Per-ayah "last score" badges in the reader, so someone can see how a
   // specific ayah's practice is trending without opening the Progress page.
@@ -298,6 +304,7 @@ export default function SurahReader() {
         {/* Audio Player */}
         <div className="sticky top-[calc(1rem+env(safe-area-inset-top))] z-30">
           <AudioPlayer
+            ref={audioPlayerRef}
             surahNumber={surahNumber}
             ayahs={ayahs}
             onAyahHighlight={handleAyahHighlight}
@@ -366,6 +373,7 @@ export default function SurahReader() {
                   showTranslation={showTranslation}
                   hideMode={hideMode}
                   onRecordClick={handleRecordClick}
+                  onPlayClick={handlePlayAyah}
                 />
               </div>
             ))}

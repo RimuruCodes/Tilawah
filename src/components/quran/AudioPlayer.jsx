@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, RotateCcw, Captions } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
@@ -26,6 +27,7 @@ import { getOfflineAudioBlob } from "@/lib/offlinePacks";
 const IS_RISKY_ENGINE = Capacitor.isNativePlatform() || isIosWebKit();
 
 export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWordHighlight, selectedReciter, onReciterChange }) {
+const AudioPlayer = forwardRef(function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWordHighlight, selectedReciter, onReciterChange }, ref) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentAyahIndex, setCurrentAyahIndex] = useState(0);
   const [volume, setVolume] = useState(80);
@@ -254,6 +256,16 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
       .catch(() => setIsPlaying(false));
   }, []);
 
+  useImperativeHandle(ref, () => ({
+    playAyah: (ayahNumber) => {
+      const idx = ayahsRef.current?.findIndex(a => a.number === ayahNumber);
+      if (idx !== undefined && idx >= 0) {
+        loadAyah(idx);
+        setTimeout(safePlay, 300);
+      }
+    }
+  }), [loadAyah, safePlay]);
+
   const togglePlay = () => {
     if (!audioRef.current?.src || audioRef.current.src === window.location.href) {
       loadAyah(0);
@@ -407,3 +419,6 @@ export default function AudioPlayer({ surahNumber, ayahs, onAyahHighlight, onWor
     </div>
   );
 }
+});
+
+export default AudioPlayer;

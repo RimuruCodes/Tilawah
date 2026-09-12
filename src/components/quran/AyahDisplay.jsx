@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, CheckCircle2, Circle, Mic } from "lucide-react";
+import { Eye, EyeOff, CheckCircle2, Circle, Mic, Play } from "lucide-react";
 import AyahInsights from "@/components/quran/AyahInsights";
 import { splitAyahIntoWords, wordLetterClusters } from "@/lib/tajweedRules";
 
@@ -29,6 +30,7 @@ function AyahDisplay({
   memorizationStatus,
   showTranslation,
   onRecordClick,
+  onPlayClick,
   hideMode,
   lastScore,
   arabicScale = 1
@@ -191,6 +193,14 @@ function AyahDisplay({
         </div>
 
         <div className="flex flex-col gap-2 flex-shrink-0 opacity-100 transition-opacity">
+          <button
+            onClick={() => onPlayClick?.(ayah.number)}
+            className="p-2 rounded-xl bg-ink-accent/10 text-ink-accent hover:bg-ink-accent/20 transition-colors"
+            title="Play this ayah"
+            aria-label={`Play ayah ${ayah.number}`}
+          >
+            <Play className="w-4 h-4 ml-0.5" />
+          </button>
           <button
             onClick={() => onRecordClick?.(ayah)}
             className="p-2 rounded-xl bg-ink-danger/10 text-ink-danger hover:bg-ink-danger/20 transition-colors"
