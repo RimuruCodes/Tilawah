@@ -1,4 +1,3 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, RotateCcw, Captions } from "lucide-react";

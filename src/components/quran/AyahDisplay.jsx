@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Eye, EyeOff, CheckCircle2, Circle, Mic } from "lucide-react";
 import { Eye, EyeOff, CheckCircle2, Circle, Mic, Play } from "lucide-react";
 import AyahInsights from "@/components/quran/AyahInsights";
 import { splitAyahIntoWords, wordLetterClusters } from "@/lib/tajweedRules";
