@@ -417,7 +417,6 @@ const AudioPlayer = forwardRef(function AudioPlayer({ surahNumber, ayahs, onAyah
       </div>
     </div>
   );
-}
 });
 
 export default AudioPlayer;
